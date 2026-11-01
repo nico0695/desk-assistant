@@ -26,12 +26,15 @@ static void signal_transfer_done(void *unused)
     portYIELD_FROM_ISR(task_woken);
 }
 
-/* Each started transfer gives the semaphore once and LVGL waits once before reusing a buffer. */
+/*
+ * Each started transfer gives the semaphore once and LVGL waits once before reusing a buffer.
+ * The buffer is never released while the DMA may still read it, so a stuck transfer keeps waiting.
+ */
 static void wait_for_transfer(lv_display_t *unused)
 {
     (void)unused;
-    if (xSemaphoreTake(transfer_done, pdMS_TO_TICKS(FLUSH_TIMEOUT_MS)) != pdTRUE) {
-        ESP_LOGW(TAG, "panel transfer timed out");
+    while (xSemaphoreTake(transfer_done, pdMS_TO_TICKS(FLUSH_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "panel transfer still in progress");
     }
 }
 

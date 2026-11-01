@@ -62,8 +62,8 @@ static void run(void *unused)
     const esp_err_t error = ui_display_port_init(notify_touch_from_isr, NULL);
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "display port failed: %s", esp_err_to_name(error));
-        ui_task = NULL;
-        vTaskDelete(NULL);
+        /* Stay suspended so notifications from other tasks still target a valid task. */
+        vTaskSuspend(NULL);
     }
     ui_theme_init();
     show_latest_battery();
