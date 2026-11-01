@@ -24,7 +24,7 @@ idf.py -B build-app -D SDKCONFIG="$PWD/build-app/sdkconfig" \
 tools/test.sh
 ```
 
-Runs the host tests. It does not need the ESP-IDF environment exported.
+Runs the host tests with CMake, Ninja and the host C compiler. It does not need the ESP-IDF environment exported: Unity is taken from `IDF_PATH`, or from `~/esp/esp-idf-v5.5.2` when it is not set.
 
 ## Flash
 
