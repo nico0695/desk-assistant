@@ -7,7 +7,7 @@
 | 0 | Scaffold | Done (validated 2026-11-01) |
 | 1 | Board and base UI | Done (validated 2026-11-01) |
 | 2 | Storage and settings | Done (validated 2026-11-01) |
-| 3 | Wi-Fi and provisioning | Next |
+| 3 | Wi-Fi and provisioning | Closed, waiting for user validation |
 | 4 | Bridge base | Pending |
 | 5a | Recording: local capture | Pending |
 | 5b | Recording: upload and result | Pending |
@@ -20,7 +20,7 @@
 ## Active stage: 3 — Wi-Fi and provisioning
 
 - **Goal:** connectivity configured from the phone and over USB.
-- **Progress:** not started; the stage spec comes first.
+- **Progress:** implementation and reviews done (steps 1–7, stage-close 4R, fixes). Waiting for the user's smoke test; the guide is in the stage document. Nothing was tested with a phone, real networks or touches yet.
 
 ## Closed stages
 
@@ -74,3 +74,14 @@ Each checkpoint records one entry per image:
   - Memory: internal heap free 344976 B, largest block 327680 B at boot. Minimum free stack after the smoke test: `ui` 1576 B of 6144, `storage` 1376 B of 3072, `battery` 1392 B. LVGL pool peak 15.5 KB of 64 KB.
   - Not run: a failed save or load on the device (covered by host tests and the preview); volume has no audible effect until stage 6.
 
+### Stage 3 — 2026-11-01
+
+- **Revision:** `01ff8b4`, integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `9e475848807c26665ead68ee434a52f2565a50b87e333399035b578b77f9bd12` (the boot log prints its first 9 digits). Application image 1348048 bytes, 68% of the 4 MB app partition free.
+- **build_verified:** yes. Clean build from the committed revision with the documented command; host tests 16/16; `dependencies.lock` unchanged. CI on the previous revision (`d632159`) passed; the run on `01ff8b4` was still in progress when this entry was written.
+- **hardware_verified:** partial.
+  - Unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`. Flashed with verified hashes; boot log shows app version `01ff8b4` and the ELF digits above.
+  - Observed on this image: boot with one saved test network (fake credentials): scan hears 11–18 networks, tries network 0, disconnects with reason 201 (AP not found), new round every ~30 s; no SSID, password or URL in the log.
+  - Memory at boot with Wi-Fi started: internal heap free 184936 B, minimum 184524 B, largest block 167936 B. Minimum free stack: `ui` 4144 of 8192 B at the Settings screen, `sys_evt` 4004 B at boot (2452 B of 4096 after several rounds on an earlier image), `usb_provision` 3108 of 3584 B, `storage` 2756 B.
+  - Verified on earlier images only, not repeated on this one: USB provisioning (`configure_bridge` and `configure` answer `ok`, invalid URL, malformed JSON, a 3100-byte line and an idle partial line are rejected, values survive a reset, nothing from the request in the log) at `122fc98`; the setup access point and the HTTP server starting without errors, with about 20 KB less heap (minimum 165 KB) and `httpd` at 3476 of 4096 B before any request, with a temporary build that opened the setup at boot (`76903d3`, not kept).
+  - Not run: the phone flow (QR, form, save), a real connection to a network, two networks, wrong password, hidden network, outage recovery, on-screen taps (Settings → Wi-Fi, forget, add, cancel, back), the live screen timeout change after `configure`, boot without saved networks (the setup opening by itself) and an HTTP request to the form. They are the user's smoke test.
