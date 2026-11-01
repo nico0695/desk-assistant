@@ -19,6 +19,7 @@ static SemaphoreHandle_t transfer_done;
 static uint32_t last_touch_warning_ms;
 static bool touch_warning_logged;
 static touch_gate_t touch_gate;
+static bool last_touch_read_valid;
 
 static void signal_transfer_done(void *unused)
 {
@@ -71,6 +72,7 @@ static void read_touch(lv_indev_t *unused, lv_indev_data_t *data)
     (void)unused;
     board_touch_sample_t sample;
     const esp_err_t error = board_touch_read(&sample);
+    last_touch_read_valid = error == ESP_OK;
     if (error != ESP_OK) {
         warn_touch_error(error);
     }
@@ -127,7 +129,8 @@ void ui_display_port_read_touch(void)
 
 bool ui_display_port_hidden_press_held(void)
 {
-    return touch_gate_held(&touch_gate) && touch_gate_blocked(&touch_gate);
+    /* After a failed read the release can only come with the next interrupt, so polling stops. */
+    return last_touch_read_valid && touch_gate_held(&touch_gate) && touch_gate_blocked(&touch_gate);
 }
 
 bool ui_display_port_take_touch_activity(void)

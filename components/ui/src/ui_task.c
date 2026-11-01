@@ -19,9 +19,9 @@
 #define UI_TASK_NAME "ui"
 #define US_PER_MS 1000
 #define MS_PER_SECOND 1000U
-#define PANEL_RETRY_DELAY_MS 1000U
 #define HIDDEN_TOUCH_POLL_MS 33U
-#define NO_DEADLINE UINT64_MAX
+/* Deadlines share the screen state's sentinel so they can be compared directly. */
+#define NO_DEADLINE SCREEN_POWER_NO_DEADLINE
 
 enum {
     EVENT_TOUCH = 1U << 0,
@@ -35,7 +35,6 @@ static portMUX_TYPE battery_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_battery_t latest_battery;
 
 static screen_power_t screen;
-static uint64_t panel_retry_at_ms;
 static board_key_filter_t key_filter;
 static uint64_t key_settle_at_ms = NO_DEADLINE;
 
@@ -86,18 +85,13 @@ static void apply_screen_action(screen_action_t action, const screen_power_t *pr
     if (action == SCREEN_ACTION_NONE) {
         return;
     }
-    if (now_ms < panel_retry_at_ms) {
-        screen_power_reject_action(&screen, previous);
-        return;
-    }
     if (action == SCREEN_ACTION_SLEEP) {
         ui_display_port_set_input_enabled(false);
     }
     const esp_err_t error = board_display_set_on(action == SCREEN_ACTION_WAKE);
     if (error != ESP_OK) {
         ESP_LOGW(TAG, "panel %s failed: %s", action == SCREEN_ACTION_WAKE ? "on" : "off", esp_err_to_name(error));
-        screen_power_reject_action(&screen, previous);
-        panel_retry_at_ms = now_ms + PANEL_RETRY_DELAY_MS;
+        screen_power_reject_action(&screen, previous, now_ms);
     }
     ui_display_port_set_input_enabled(!screen.asleep);
 }
@@ -139,9 +133,6 @@ static void report_diagnostics(uint64_t now_ms)
 static uint64_t next_deadline_ms(uint32_t next_lvgl_timer_ms, uint64_t now_ms)
 {
     uint64_t deadline = screen_power_next_deadline_ms(&screen);
-    if (deadline != NO_DEADLINE && deadline < panel_retry_at_ms) {
-        deadline = panel_retry_at_ms;
-    }
     if (next_lvgl_timer_ms != LV_NO_TIMER_READY && now_ms + next_lvgl_timer_ms < deadline) {
         deadline = now_ms + next_lvgl_timer_ms;
     }
@@ -175,8 +166,8 @@ static esp_err_t start_ui(void)
     lv_init();
     lv_tick_set_cb(lvgl_tick_ms);
     ESP_RETURN_ON_ERROR(ui_display_port_init(notify_touch_from_isr, NULL), TAG, "display port");
-    board_key_filter_init(&key_filter, board_key_pressed(), (uint32_t)uptime_ms());
     ESP_RETURN_ON_ERROR(board_key_init(notify_key_from_isr, NULL), TAG, "key");
+    board_key_filter_init(&key_filter, board_key_pressed(), (uint32_t)uptime_ms());
     screen_power_init(&screen, SCREEN_POWER_DEFAULT_TIMEOUT_S, uptime_ms());
     ui_theme_init();
     show_latest_battery();
@@ -190,6 +181,8 @@ static void run(void *unused)
     const esp_err_t error = start_ui();
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "start failed: %s", esp_err_to_name(error));
+        /* Do not leave an unrendered panel lit; it fails harmlessly if the panel never started. */
+        (void)board_display_set_on(false);
         /* Stay suspended so notifications from other tasks still target a valid task. */
         vTaskSuspend(NULL);
     }

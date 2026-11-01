@@ -54,18 +54,24 @@ static void test_always_on_never_times_out_but_key_still_toggles(void)
     TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, UINT64_MAX, SCREEN_EVENT_KEY));
 }
 
-static void test_rejected_wake_is_retried_without_a_new_event(void)
+#define RETRY_MS SCREEN_POWER_RETRY_DELAY_MS
+
+static void test_rejected_wake_is_retried_after_the_delay_without_a_new_event(void)
 {
     const uint32_t causes[] = {SCREEN_EVENT_TOUCH, SCREEN_EVENT_KEY};
     for (size_t i = 0; i < sizeof(causes) / sizeof(causes[0]); ++i) {
         screen_power_init(&state, SCREEN_POWER_DEFAULT_TIMEOUT_S, 0);
         TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, TIMEOUT_MS, 0));
         const screen_power_t previous = state;
-        TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, TIMEOUT_MS + 1000, causes[i]));
-        screen_power_reject_action(&state, &previous);
+        const uint64_t rejected_at = TIMEOUT_MS + 1000;
+        TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, rejected_at, causes[i]));
+        screen_power_reject_action(&state, &previous, rejected_at);
         TEST_ASSERT_TRUE(state.asleep && state.wake_pending);
-        TEST_ASSERT_EQUAL_UINT64(state.last_activity_ms, screen_power_next_deadline_ms(&state));
-        TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, TIMEOUT_MS + 2000, 0));
+        TEST_ASSERT_EQUAL_UINT64(rejected_at + RETRY_MS, screen_power_next_deadline_ms(&state));
+
+        TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, rejected_at + RETRY_MS - 1, causes[i]));
+        TEST_ASSERT_TRUE(state.asleep && state.wake_pending);
+        TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, rejected_at + RETRY_MS, 0));
         TEST_ASSERT_FALSE(state.asleep || state.wake_pending);
     }
 }
@@ -75,32 +81,39 @@ static void test_rejected_manual_sleep_is_retried_until_cancelled(void)
     screen_power_init(&state, SCREEN_POWER_DEFAULT_TIMEOUT_S, 0);
     screen_power_t previous = state;
     TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 100, SCREEN_EVENT_KEY));
-    screen_power_reject_action(&state, &previous);
+    screen_power_reject_action(&state, &previous, 100);
     TEST_ASSERT_TRUE(!state.asleep && state.sleep_pending);
 
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 100 + RETRY_MS - 1, 0));
     previous = state;
-    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 110, 0));
-    screen_power_reject_action(&state, &previous);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 100 + RETRY_MS, 0));
+    screen_power_reject_action(&state, &previous, 100 + RETRY_MS);
     TEST_ASSERT_TRUE(state.sleep_pending);
 
-    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 120, SCREEN_EVENT_KEY));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 200 + RETRY_MS, SCREEN_EVENT_KEY));
     TEST_ASSERT_FALSE(state.asleep || state.sleep_pending);
+}
 
-    previous = state;
-    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 130, SCREEN_EVENT_KEY));
-    screen_power_reject_action(&state, &previous);
+static void test_touch_cancels_a_pending_manual_sleep(void)
+{
+    screen_power_init(&state, SCREEN_POWER_DEFAULT_TIMEOUT_S, 0);
+    const screen_power_t previous = state;
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 100, SCREEN_EVENT_KEY));
+    screen_power_reject_action(&state, &previous, 100);
     TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 140, SCREEN_EVENT_TOUCH));
     TEST_ASSERT_FALSE(state.sleep_pending);
 }
 
-static void test_rejected_timeout_sleep_retries_from_the_timeout(void)
+static void test_rejected_timeout_sleep_waits_for_the_delay(void)
 {
     screen_power_init(&state, SCREEN_POWER_DEFAULT_TIMEOUT_S, 0);
     const screen_power_t previous = state;
     TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, TIMEOUT_MS, 0));
-    screen_power_reject_action(&state, &previous);
+    screen_power_reject_action(&state, &previous, TIMEOUT_MS);
     TEST_ASSERT_FALSE(state.asleep || state.sleep_pending);
-    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, TIMEOUT_MS + 1000, 0));
+    TEST_ASSERT_EQUAL_UINT64(TIMEOUT_MS + RETRY_MS, screen_power_next_deadline_ms(&state));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, TIMEOUT_MS + RETRY_MS - 1, 0));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, TIMEOUT_MS + RETRY_MS, 0));
 }
 
 static void test_deadline_follows_the_last_activity(void)
@@ -133,9 +146,10 @@ int main(void)
     RUN_TEST(test_touch_wakes_and_restarts_the_timeout);
     RUN_TEST(test_key_toggles_the_panel);
     RUN_TEST(test_always_on_never_times_out_but_key_still_toggles);
-    RUN_TEST(test_rejected_wake_is_retried_without_a_new_event);
+    RUN_TEST(test_rejected_wake_is_retried_after_the_delay_without_a_new_event);
     RUN_TEST(test_rejected_manual_sleep_is_retried_until_cancelled);
-    RUN_TEST(test_rejected_timeout_sleep_retries_from_the_timeout);
+    RUN_TEST(test_touch_cancels_a_pending_manual_sleep);
+    RUN_TEST(test_rejected_timeout_sleep_waits_for_the_delay);
     RUN_TEST(test_deadline_follows_the_last_activity);
     RUN_TEST(test_stale_and_large_timestamps_do_not_wrap);
     return UNITY_END();
