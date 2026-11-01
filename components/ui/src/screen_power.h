@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SCREEN_POWER_DEFAULT_TIMEOUT_S 30U
 #define SCREEN_POWER_ALWAYS_ON 0U
 #define SCREEN_POWER_NO_DEADLINE UINT64_MAX
 /* After the panel rejects a command, no new action is proposed before this delay. */

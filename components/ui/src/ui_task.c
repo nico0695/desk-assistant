@@ -23,6 +23,8 @@
 /* Deadlines share the screen state's sentinel so they can be compared directly. */
 #define NO_DEADLINE SCREEN_POWER_NO_DEADLINE
 
+_Static_assert(SETTINGS_SCREEN_TIMEOUT_ALWAYS_ON_S == SCREEN_POWER_ALWAYS_ON, "always-on encodings differ");
+
 enum {
     EVENT_TOUCH = 1U << 0,
     EVENT_BATTERY = 1U << 1,
@@ -34,6 +36,7 @@ static TaskHandle_t ui_task;
 static portMUX_TYPE battery_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_battery_t latest_battery;
 
+static settings_loaded_t initial_settings;
 static screen_power_t screen;
 static board_key_filter_t key_filter;
 static uint64_t key_settle_at_ms = NO_DEADLINE;
@@ -165,10 +168,10 @@ static esp_err_t start_ui(void)
 {
     lv_init();
     lv_tick_set_cb(lvgl_tick_ms);
-    ESP_RETURN_ON_ERROR(ui_display_port_init(notify_touch_from_isr, NULL), TAG, "display port");
+    ESP_RETURN_ON_ERROR(ui_display_port_init(notify_touch_from_isr, NULL, initial_settings.values[SETTINGS_BRIGHTNESS]), TAG, "display port");
     ESP_RETURN_ON_ERROR(board_key_init(notify_key_from_isr, NULL), TAG, "key");
     board_key_filter_init(&key_filter, board_key_pressed(), (uint32_t)uptime_ms());
-    screen_power_init(&screen, SCREEN_POWER_DEFAULT_TIMEOUT_S, uptime_ms());
+    screen_power_init(&screen, initial_settings.values[SETTINGS_SCREEN_TIMEOUT], uptime_ms());
     ui_theme_init();
     show_latest_battery();
     ui_navigation_start();
@@ -220,9 +223,10 @@ static void run(void *unused)
     }
 }
 
-esp_err_t ui_start(void)
+esp_err_t ui_start(const settings_loaded_t *settings)
 {
     ESP_RETURN_ON_FALSE(ui_task == NULL, ESP_ERR_INVALID_STATE, TAG, "already started");
+    initial_settings = *settings;
     const BaseType_t created =
         xTaskCreate(run, UI_TASK_NAME, CONFIG_UI_TASK_STACK_SIZE, NULL, CONFIG_UI_TASK_PRIORITY, &ui_task);
     ESP_RETURN_ON_FALSE(created == pdPASS, ESP_ERR_NO_MEM, TAG, "task");

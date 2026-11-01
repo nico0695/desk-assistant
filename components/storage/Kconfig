@@ -1,0 +1,20 @@
+menu "Desk Assistant storage"
+
+    config STORAGE_TASK_STACK_SIZE
+        int "Storage task stack size (bytes)"
+        range 2048 8192
+        default 3072
+
+    config STORAGE_TASK_PRIORITY
+        int "Storage task priority"
+        range 1 10
+        default 3
+        help
+            Below the UI task, so a flash commit never delays drawing or input handling.
+
+    config STORAGE_QUEUE_LENGTH
+        int "Pending write requests"
+        range 1 16
+        default 4
+
+endmenu

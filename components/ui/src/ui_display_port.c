@@ -112,13 +112,13 @@ static esp_err_t register_touch(board_isr_cb_t on_touch_interrupt, void *context
     return board_touch_init(on_touch_interrupt, context);
 }
 
-esp_err_t ui_display_port_init(board_isr_cb_t on_touch_interrupt, void *context)
+esp_err_t ui_display_port_init(board_isr_cb_t on_touch_interrupt, void *context, uint8_t brightness_percent)
 {
     ESP_RETURN_ON_FALSE(display == NULL, ESP_ERR_INVALID_STATE, TAG, "already initialized");
     transfer_done = xSemaphoreCreateBinary();
     ESP_RETURN_ON_FALSE(transfer_done != NULL, ESP_ERR_NO_MEM, TAG, "transfer semaphore");
     ESP_RETURN_ON_ERROR(register_display(), TAG, "display");
-    ESP_RETURN_ON_ERROR(board_display_set_brightness(UI_DISPLAY_DEFAULT_BRIGHTNESS_PERCENT), TAG, "brightness");
+    ESP_RETURN_ON_ERROR(board_display_set_brightness(brightness_percent), TAG, "brightness");
     return register_touch(on_touch_interrupt, context);
 }
 

@@ -13,7 +13,7 @@ idf_component_register(SRCS "src/ui_task.c"
                             "src/fonts/ui_font_latin1_28.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
-                       REQUIRES esp_common
+                       REQUIRES esp_common settings
                        PRIV_REQUIRES board diagnostics esp_timer freertos log lvgl__lvgl)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
