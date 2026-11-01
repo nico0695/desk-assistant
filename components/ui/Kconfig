@@ -1,0 +1,13 @@
+menu "Desk Assistant UI"
+
+    config UI_TASK_STACK_SIZE
+        int "UI task stack size (bytes)"
+        range 4096 16384
+        default 6144
+
+    config UI_TASK_PRIORITY
+        int "UI task priority"
+        range 1 20
+        default 4
+
+endmenu

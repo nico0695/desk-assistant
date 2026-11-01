@@ -3,17 +3,14 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "memory_report.h"
+#include "ui.h"
 
 static const char *TAG = "main";
 
-static void log_battery(board_battery_reading_t reading, void *unused)
+static void show_battery(board_battery_reading_t reading, void *unused)
 {
     (void)unused;
-    if (reading.known) {
-        ESP_LOGI(TAG, "battery %u%%", (unsigned)reading.percent);
-    } else {
-        ESP_LOGI(TAG, "battery unknown");
-    }
+    ui_show_battery(reading.known, reading.percent);
 }
 
 void app_main(void)
@@ -23,7 +20,8 @@ void app_main(void)
     if (board_error != ESP_OK) {
         ESP_LOGE(TAG, "board init failed: %s", esp_err_to_name(board_error));
     } else {
-        ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(log_battery, NULL));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(ui_start());
+        ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(show_battery, NULL));
     }
     memory_report_log("boot");
 }

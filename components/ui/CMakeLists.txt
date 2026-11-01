@@ -1,4 +1,6 @@
-idf_component_register(SRCS "src/ui_theme.c"
+idf_component_register(SRCS "src/ui_task.c"
+                            "src/ui_display_port.c"
+                            "src/ui_theme.c"
                             "src/ui_widgets.c"
                             "src/ui_status_bar.c"
                             "src/ui_section.c"
@@ -7,7 +9,10 @@ idf_component_register(SRCS "src/ui_theme.c"
                             "src/fonts/ui_font_latin1_20.c"
                             "src/fonts/ui_font_latin1_24.c"
                             "src/fonts/ui_font_latin1_28.c"
+                       INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
-                       PRIV_REQUIRES board lvgl__lvgl)
+                       REQUIRES esp_common
+                       PRIV_REQUIRES board diagnostics esp_timer freertos log lvgl__lvgl)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
+

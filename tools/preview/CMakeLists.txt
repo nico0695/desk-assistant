@@ -26,8 +26,16 @@ add_compile_definitions(
     LV_USE_LODEPNG=1)
 add_subdirectory(${LVGL_DIR} lvgl)
 
-file(GLOB UI_SOURCES CONFIGURE_DEPENDS ${UI_DIR}/src/*.c ${UI_DIR}/src/fonts/*.c)
-add_executable(ui_preview preview.c ${UI_SOURCES} ${REPO_ROOT}/components/board/src/display_geometry.c)
+# Screens and theme only; the UI task and the display port need the device.
+set(UI_SOURCES
+    ${UI_DIR}/src/ui_theme.c
+    ${UI_DIR}/src/ui_widgets.c
+    ${UI_DIR}/src/ui_status_bar.c
+    ${UI_DIR}/src/ui_section.c
+    ${UI_DIR}/src/ui_home.c
+    ${UI_DIR}/src/ui_navigation.c)
+file(GLOB FONT_SOURCES CONFIGURE_DEPENDS ${UI_DIR}/src/fonts/*.c)
+add_executable(ui_preview preview.c ${UI_SOURCES} ${FONT_SOURCES} ${REPO_ROOT}/components/board/src/display_geometry.c)
 target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${LVGL_DIR}/src/libs/lodepng)
 target_compile_options(ui_preview PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(ui_preview PRIVATE lvgl m)

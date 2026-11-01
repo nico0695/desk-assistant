@@ -25,7 +25,7 @@
   - [x] 1. Pure board logic with host tests.
   - [x] 2. UI base on the host with PNG preview (design review pending).
   - [x] 3. Board drivers.
-  - [ ] 4. UI on the board.
+  - [x] 4. UI on the board (boots clean; image, touch and navigation pending the smoke test).
   - [ ] 5. Screen power, KEY and wake gesture.
   - [ ] 6. Stage review and checkpoint.
 
