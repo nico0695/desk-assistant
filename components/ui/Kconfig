@@ -10,4 +10,13 @@ menu "Desk Assistant UI"
         range 1 20
         default 4
 
+    config UI_DIAGNOSTICS_PERIOD_S
+        int "UI diagnostics period (seconds)"
+        depends on DESK_MEMORY_DIAGNOSTICS
+        range 10 3600
+        default 60
+        help
+            Period of the UI report: task wakeups since the previous report, LVGL pool
+            usage and the memory checkpoint.
+
 endmenu

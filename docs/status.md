@@ -26,7 +26,7 @@
   - [x] 2. UI base on the host with PNG preview (design review pending).
   - [x] 3. Board drivers.
   - [x] 4. UI on the board (boots clean; image, touch and navigation pending the smoke test).
-  - [ ] 5. Screen power, KEY and wake gesture.
+  - [x] 5. Screen power, KEY and wake gesture (timeout and idle verified; KEY and touch pending the smoke test).
   - [ ] 6. Stage review and checkpoint.
 
 ## Closed stages

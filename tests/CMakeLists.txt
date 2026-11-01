@@ -18,10 +18,13 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/board/src/display_geometry.c
     ${COMPONENTS_DIR}/board/src/display_brightness.c
     ${COMPONENTS_DIR}/board/src/touch_decode.c
-    ${COMPONENTS_DIR}/board/src/key_filter.c)
+    ${COMPONENTS_DIR}/board/src/key_filter.c
+    ${COMPONENTS_DIR}/ui/src/screen_power.c
+    ${COMPONENTS_DIR}/ui/src/touch_gate.c)
 set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/board/include
-    ${COMPONENTS_DIR}/board/src)
+    ${COMPONENTS_DIR}/board/src
+    ${COMPONENTS_DIR}/ui/src)
 
 enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.c)

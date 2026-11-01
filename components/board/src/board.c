@@ -29,6 +29,8 @@ esp_err_t board_init(void)
         .flags.enable_internal_pullup = true,
     };
     ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_config, &shared_bus), TAG, "I2C bus");
+    /* A reset in the middle of a transaction can leave a device holding SDA low; clock it free first. */
+    ESP_RETURN_ON_ERROR(i2c_master_bus_reset(shared_bus), TAG, "I2C bus clear");
     ESP_RETURN_ON_ERROR(gpio_install_isr_service(0), TAG, "GPIO interrupts");
     return board_power_init();
 }

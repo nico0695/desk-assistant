@@ -1,11 +1,15 @@
 #include "ui.h"
 
+#include "board_display.h"
+#include "board_key.h"
+#include "board_key_filter.h"
 #include "esp_check.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "memory_report.h"
+#include "screen_power.h"
 #include "sdkconfig.h"
 #include "ui_display_port.h"
 #include "ui_navigation.h"
@@ -14,10 +18,15 @@
 
 #define UI_TASK_NAME "ui"
 #define US_PER_MS 1000
+#define MS_PER_SECOND 1000U
+#define PANEL_RETRY_DELAY_MS 1000U
+#define HIDDEN_TOUCH_POLL_MS 33U
+#define NO_DEADLINE UINT64_MAX
 
 enum {
     EVENT_TOUCH = 1U << 0,
     EVENT_BATTERY = 1U << 1,
+    EVENT_KEY = 1U << 2,
 };
 
 static const char *TAG = "ui";
@@ -25,25 +34,43 @@ static TaskHandle_t ui_task;
 static portMUX_TYPE battery_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_battery_t latest_battery;
 
-static uint32_t elapsed_ms(void)
+static screen_power_t screen;
+static uint64_t panel_retry_at_ms;
+static board_key_filter_t key_filter;
+static uint64_t key_settle_at_ms = NO_DEADLINE;
+
+#if CONFIG_DESK_MEMORY_DIAGNOSTICS
+static uint32_t wakeups_since_report;
+static uint64_t next_report_at_ms;
+#endif
+
+static uint64_t uptime_ms(void)
 {
-    return (uint32_t)(esp_timer_get_time() / US_PER_MS);
+    return (uint64_t)esp_timer_get_time() / US_PER_MS;
+}
+
+static uint32_t lvgl_tick_ms(void)
+{
+    return (uint32_t)uptime_ms();
+}
+
+static void notify_from_isr(uint32_t event)
+{
+    BaseType_t task_woken = pdFALSE;
+    xTaskNotifyFromISR(ui_task, event, eSetBits, &task_woken);
+    portYIELD_FROM_ISR(task_woken);
 }
 
 static void notify_touch_from_isr(void *unused)
 {
     (void)unused;
-    BaseType_t task_woken = pdFALSE;
-    xTaskNotifyFromISR(ui_task, EVENT_TOUCH, eSetBits, &task_woken);
-    portYIELD_FROM_ISR(task_woken);
+    notify_from_isr(EVENT_TOUCH);
 }
 
-static TickType_t ticks_until(uint32_t next_timer_ms)
+static void notify_key_from_isr(void *unused)
 {
-    if (next_timer_ms == LV_NO_TIMER_READY) {
-        return portMAX_DELAY;
-    }
-    return (TickType_t)((next_timer_ms + portTICK_PERIOD_MS - 1) / portTICK_PERIOD_MS);
+    (void)unused;
+    notify_from_isr(EVENT_KEY);
 }
 
 static void show_latest_battery(void)
@@ -54,32 +81,149 @@ static void show_latest_battery(void)
     ui_status_bar_set_battery(battery);
 }
 
-static void run(void *unused)
+static void apply_screen_action(screen_action_t action, const screen_power_t *previous, uint64_t now_ms)
 {
-    (void)unused;
-    lv_init();
-    lv_tick_set_cb(elapsed_ms);
-    const esp_err_t error = ui_display_port_init(notify_touch_from_isr, NULL);
-    if (error != ESP_OK) {
-        ESP_LOGE(TAG, "display port failed: %s", esp_err_to_name(error));
-        /* Stay suspended so notifications from other tasks still target a valid task. */
-        vTaskSuspend(NULL);
+    if (action == SCREEN_ACTION_NONE) {
+        return;
     }
+    if (now_ms < panel_retry_at_ms) {
+        screen_power_reject_action(&screen, previous);
+        return;
+    }
+    if (action == SCREEN_ACTION_SLEEP) {
+        ui_display_port_set_input_enabled(false);
+    }
+    const esp_err_t error = board_display_set_on(action == SCREEN_ACTION_WAKE);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "panel %s failed: %s", action == SCREEN_ACTION_WAKE ? "on" : "off", esp_err_to_name(error));
+        screen_power_reject_action(&screen, previous);
+        panel_retry_at_ms = now_ms + PANEL_RETRY_DELAY_MS;
+    }
+    ui_display_port_set_input_enabled(!screen.asleep);
+}
+
+static void update_screen(uint64_t now_ms, uint32_t screen_events)
+{
+    const screen_power_t previous = screen;
+    const screen_action_t action = screen_power_update(&screen, now_ms, screen_events);
+    apply_screen_action(action, &previous, now_ms);
+}
+
+/* Returns true once per debounced press; schedules a recheck while the level is still settling. */
+static bool take_key_press(uint64_t now_ms)
+{
+    const bool pressed = board_key_filter_update(&key_filter, board_key_pressed(), (uint32_t)now_ms);
+    const bool settling = key_filter.candidate_pressed != key_filter.stable_pressed;
+    key_settle_at_ms = settling ? now_ms + BOARD_KEY_DEBOUNCE_MS : NO_DEADLINE;
+    return pressed;
+}
+
+#if CONFIG_DESK_MEMORY_DIAGNOSTICS
+static void report_diagnostics(uint64_t now_ms)
+{
+    if (now_ms < next_report_at_ms) {
+        return;
+    }
+    lv_mem_monitor_t pool;
+    lv_mem_monitor(&pool);
+    ESP_LOGI(TAG, "wakeups=%u panel=%s lvgl_pool used=%u max=%u free_biggest=%u frag=%u%%",
+             (unsigned)wakeups_since_report, screen.asleep ? "off" : "on",
+             (unsigned)(pool.total_size - pool.free_size), (unsigned)pool.max_used, (unsigned)pool.free_biggest_size,
+             (unsigned)pool.frag_pct);
+    memory_report_log("ui");
+    wakeups_since_report = 0;
+    next_report_at_ms = now_ms + (uint64_t)CONFIG_UI_DIAGNOSTICS_PERIOD_S * MS_PER_SECOND;
+}
+#endif
+
+static uint64_t next_deadline_ms(uint32_t next_lvgl_timer_ms, uint64_t now_ms)
+{
+    uint64_t deadline = screen_power_next_deadline_ms(&screen);
+    if (deadline != NO_DEADLINE && deadline < panel_retry_at_ms) {
+        deadline = panel_retry_at_ms;
+    }
+    if (next_lvgl_timer_ms != LV_NO_TIMER_READY && now_ms + next_lvgl_timer_ms < deadline) {
+        deadline = now_ms + next_lvgl_timer_ms;
+    }
+    if (key_settle_at_ms < deadline) {
+        deadline = key_settle_at_ms;
+    }
+    if (ui_display_port_hidden_press_held() && now_ms + HIDDEN_TOUCH_POLL_MS < deadline) {
+        deadline = now_ms + HIDDEN_TOUCH_POLL_MS;
+    }
+#if CONFIG_DESK_MEMORY_DIAGNOSTICS
+    if (next_report_at_ms < deadline) {
+        deadline = next_report_at_ms;
+    }
+#endif
+    return deadline;
+}
+
+static TickType_t ticks_until(uint64_t deadline_ms, uint64_t now_ms)
+{
+    if (deadline_ms == NO_DEADLINE) {
+        return portMAX_DELAY;
+    }
+    if (deadline_ms <= now_ms) {
+        return 0;
+    }
+    return (TickType_t)((deadline_ms - now_ms + portTICK_PERIOD_MS - 1) / portTICK_PERIOD_MS);
+}
+
+static esp_err_t start_ui(void)
+{
+    lv_init();
+    lv_tick_set_cb(lvgl_tick_ms);
+    ESP_RETURN_ON_ERROR(ui_display_port_init(notify_touch_from_isr, NULL), TAG, "display port");
+    board_key_filter_init(&key_filter, board_key_pressed(), (uint32_t)uptime_ms());
+    ESP_RETURN_ON_ERROR(board_key_init(notify_key_from_isr, NULL), TAG, "key");
+    screen_power_init(&screen, SCREEN_POWER_DEFAULT_TIMEOUT_S, uptime_ms());
     ui_theme_init();
     show_latest_battery();
     ui_navigation_start();
+    return ESP_OK;
+}
+
+static void run(void *unused)
+{
+    (void)unused;
+    const esp_err_t error = start_ui();
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "start failed: %s", esp_err_to_name(error));
+        /* Stay suspended so notifications from other tasks still target a valid task. */
+        vTaskSuspend(NULL);
+    }
     memory_report_log("ui ready");
 
     for (;;) {
-        const uint32_t next_timer_ms = lv_timer_handler();
+        /* With the panel off nothing is rendered; touch and KEY still run to wake it. */
+        const uint32_t next_lvgl_timer_ms = screen.asleep ? LV_NO_TIMER_READY : lv_timer_handler();
+        uint64_t now_ms = uptime_ms();
         uint32_t events = 0;
-        xTaskNotifyWait(0, UINT32_MAX, &events, ticks_until(next_timer_ms));
-        if (events & EVENT_TOUCH) {
+        xTaskNotifyWait(0, UINT32_MAX, &events, ticks_until(next_deadline_ms(next_lvgl_timer_ms, now_ms), now_ms));
+        now_ms = uptime_ms();
+#if CONFIG_DESK_MEMORY_DIAGNOSTICS
+        wakeups_since_report++;
+#endif
+
+        /* LVGL polls only presses it can see; a hidden press is read here until its release. */
+        if ((events & EVENT_TOUCH) || ui_display_port_hidden_press_held()) {
             ui_display_port_read_touch();
         }
         if (events & EVENT_BATTERY) {
             show_latest_battery();
         }
+        uint32_t screen_events = 0;
+        if (ui_display_port_take_touch_activity()) {
+            screen_events |= SCREEN_EVENT_TOUCH;
+        }
+        if (((events & EVENT_KEY) || now_ms >= key_settle_at_ms) && take_key_press(now_ms)) {
+            screen_events |= SCREEN_EVENT_KEY;
+        }
+        update_screen(now_ms, screen_events);
+#if CONFIG_DESK_MEMORY_DIAGNOSTICS
+        report_diagnostics(now_ms);
+#endif
     }
 }
 

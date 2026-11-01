@@ -6,6 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "lvgl.h"
+#include "touch_gate.h"
 
 #define FLUSH_TIMEOUT_MS 100
 #define TOUCH_WARNING_INTERVAL_MS 1000
@@ -17,6 +18,7 @@ static lv_indev_t *touch_input;
 static SemaphoreHandle_t transfer_done;
 static uint32_t last_touch_warning_ms;
 static bool touch_warning_logged;
+static touch_gate_t touch_gate;
 
 static void signal_transfer_done(void *unused)
 {
@@ -72,7 +74,12 @@ static void read_touch(lv_indev_t *unused, lv_indev_data_t *data)
     if (error != ESP_OK) {
         warn_touch_error(error);
     }
-    data->state = sample.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    const bool visible_press = touch_gate_sample(&touch_gate, error == ESP_OK, sample.pressed);
+    if (touch_gate_blocked(&touch_gate)) {
+        /* A hidden or uncertain release must cancel the active widget, never click it. */
+        lv_indev_wait_release(touch_input);
+    }
+    data->state = visible_press ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
     data->point.x = sample.x;
     data->point.y = sample.y;
 }
@@ -99,6 +106,7 @@ static esp_err_t register_touch(board_isr_cb_t on_touch_interrupt, void *context
     lv_indev_set_display(touch_input, display);
     lv_indev_set_read_cb(touch_input, read_touch);
     lv_indev_set_mode(touch_input, LV_INDEV_MODE_EVENT);
+    touch_gate_init(&touch_gate);
     return board_touch_init(on_touch_interrupt, context);
 }
 
@@ -108,10 +116,26 @@ esp_err_t ui_display_port_init(board_isr_cb_t on_touch_interrupt, void *context)
     transfer_done = xSemaphoreCreateBinary();
     ESP_RETURN_ON_FALSE(transfer_done != NULL, ESP_ERR_NO_MEM, TAG, "transfer semaphore");
     ESP_RETURN_ON_ERROR(register_display(), TAG, "display");
+    ESP_RETURN_ON_ERROR(board_display_set_brightness(UI_DISPLAY_DEFAULT_BRIGHTNESS_PERCENT), TAG, "brightness");
     return register_touch(on_touch_interrupt, context);
 }
 
 void ui_display_port_read_touch(void)
 {
     lv_indev_read(touch_input);
+}
+
+bool ui_display_port_hidden_press_held(void)
+{
+    return touch_gate_held(&touch_gate) && touch_gate_blocked(&touch_gate);
+}
+
+bool ui_display_port_take_touch_activity(void)
+{
+    return touch_gate_take_activity(&touch_gate);
+}
+
+void ui_display_port_set_input_enabled(bool enabled)
+{
+    touch_gate_set_enabled(&touch_gate, enabled);
 }
