@@ -22,7 +22,7 @@ esp_err_t board_display_init(board_isr_cb_t on_transfer_done, void *context, boa
 /*
  * Starts an asynchronous transfer of an area aligned with board_display_align_area.
  * Pixels are RGB565 and are byte-swapped in place for the panel; the buffer stays busy until on_transfer_done.
- * On error no transfer is started and on_transfer_done is not called.
+ * On error no transfer is started, on_transfer_done is not called and the pixels may already be swapped.
  */
 esp_err_t board_display_draw(int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint8_t *pixels);
 

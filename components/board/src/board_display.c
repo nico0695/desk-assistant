@@ -155,14 +155,14 @@ esp_err_t board_display_init(board_isr_cb_t on_transfer_done, void *context, boa
         .flags.quad_mode = true,
     };
 
+    ESP_RETURN_ON_ERROR(allocate_buffers(buffers), TAG, "draw buffers");
     esp_err_t error = spi_bus_initialize(PANEL_SPI_HOST, &bus, SPI_DMA_CH_AUTO);
-    ESP_RETURN_ON_ERROR(error, TAG, "SPI bus");
-    error = esp_lcd_new_panel_io_spi(PANEL_SPI_HOST, &io, &panel_io);
+    const bool bus_ready = error == ESP_OK;
     if (error == ESP_OK) {
-        error = run_init_sequence();
+        error = esp_lcd_new_panel_io_spi(PANEL_SPI_HOST, &io, &panel_io);
     }
     if (error == ESP_OK) {
-        error = allocate_buffers(buffers);
+        error = run_init_sequence();
     }
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "init failed: %s", esp_err_to_name(error));
@@ -170,7 +170,12 @@ esp_err_t board_display_init(board_isr_cb_t on_transfer_done, void *context, boa
             esp_lcd_panel_io_del(panel_io);
             panel_io = NULL;
         }
-        spi_bus_free(PANEL_SPI_HOST);
+        if (bus_ready) {
+            spi_bus_free(PANEL_SPI_HOST);
+        }
+        heap_caps_free(buffers->first);
+        heap_caps_free(buffers->second);
+        *buffers = (board_display_buffers_t){0};
     }
     return error;
 }

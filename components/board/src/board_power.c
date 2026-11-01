@@ -63,12 +63,17 @@ static esp_err_t pulse_panel_reset(void)
     ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO3_VOLTAGE, ALDO3_VOLTAGE_MASK, ALDO3_VOLTAGE_3300MV), TAG,
                         "ALDO3 voltage");
     const uint8_t reset_levels[] = {LDO_ALDO3_ENABLE_MASK, 0, LDO_ALDO3_ENABLE_MASK};
-    for (size_t i = 0; i < sizeof(reset_levels); ++i) {
-        ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO3_ENABLE_MASK, reset_levels[i]), TAG,
-                            "ALDO3 enable");
+    esp_err_t error = ESP_OK;
+    for (size_t i = 0; error == ESP_OK && i < sizeof(reset_levels); ++i) {
+        error = update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO3_ENABLE_MASK, reset_levels[i]);
         vTaskDelay(pdMS_TO_TICKS(PMIC_ALDO3_RESET_STEP_MS));
     }
-    return ESP_OK;
+    if (error != ESP_OK) {
+        /* Never leave the panel held in reset after a failed pulse. */
+        (void)update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO3_ENABLE_MASK, LDO_ALDO3_ENABLE_MASK);
+        ESP_LOGE(TAG, "ALDO3 reset pulse: %s", esp_err_to_name(error));
+    }
+    return error;
 }
 
 esp_err_t board_power_init(void)

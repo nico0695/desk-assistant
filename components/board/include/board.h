@@ -6,7 +6,8 @@
 typedef void (*board_isr_cb_t)(void *context);
 
 /*
- * Creates the shared I2C bus, checks the PMIC identity and resets the panel through it.
- * Call once at boot, before any other board function. No PMIC register is written when the identity is wrong.
+ * Creates the shared I2C bus, installs the GPIO interrupt service used by KEY and touch, checks the PMIC identity
+ * and resets the panel through it. Call once at boot, before any other board function.
+ * No PMIC register is written when the identity is wrong.
  */
 esp_err_t board_init(void);

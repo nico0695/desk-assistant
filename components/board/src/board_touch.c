@@ -9,6 +9,7 @@
 
 #include "board_bus.h"
 #include "driver/gpio.h"
+#include "esp_rom_sys.h"
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -22,7 +23,7 @@
 #define TOUCH_RESET_LOW_MS 10
 #define TOUCH_RESET_SETTLE_MS 50
 /* The controller needs a pause between selecting the data register and reading it. */
-#define TOUCH_READ_SETTLE_MS 2
+#define TOUCH_READ_SETTLE_US 2000
 
 static const uint8_t DATA_REGISTER[] = {0xd0, 0x00};
 
@@ -30,10 +31,10 @@ static const char *TAG = "board_touch";
 static i2c_master_dev_handle_t touch_device;
 static board_touch_sample_t last_sample;
 
-static TickType_t at_least_one_tick(uint32_t milliseconds)
+/* vTaskDelay(n) can return up to one tick early, so add a tick to guarantee the minimum. */
+static void wait_at_least_ms(uint32_t milliseconds)
 {
-    const TickType_t ticks = pdMS_TO_TICKS(milliseconds);
-    return ticks > 0 ? ticks : 1;
+    vTaskDelay(pdMS_TO_TICKS(milliseconds) + 1);
 }
 
 static esp_err_t reset_controller(void)
@@ -44,9 +45,9 @@ static esp_err_t reset_controller(void)
     };
     ESP_RETURN_ON_ERROR(gpio_config(&reset), TAG, "reset GPIO");
     ESP_RETURN_ON_ERROR(gpio_set_level(TOUCH_RESET_GPIO, 0), TAG, "reset low");
-    vTaskDelay(at_least_one_tick(TOUCH_RESET_LOW_MS));
+    wait_at_least_ms(TOUCH_RESET_LOW_MS);
     ESP_RETURN_ON_ERROR(gpio_set_level(TOUCH_RESET_GPIO, 1), TAG, "reset high");
-    vTaskDelay(at_least_one_tick(TOUCH_RESET_SETTLE_MS));
+    wait_at_least_ms(TOUCH_RESET_SETTLE_MS);
     return ESP_OK;
 }
 
@@ -71,10 +72,23 @@ esp_err_t board_touch_init(board_isr_cb_t on_interrupt, void *context)
         .scl_speed_hz = TOUCH_SCL_SPEED_HZ,
     };
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(board_bus(), &device, &touch_device), TAG, "add device");
-    ESP_RETURN_ON_ERROR(reset_controller(), TAG, "reset");
-    ESP_RETURN_ON_ERROR(i2c_master_probe(board_bus(), TOUCH_ADDRESS, TOUCH_I2C_TIMEOUT_MS), TAG, "probe");
+    esp_err_t error = reset_controller();
+    if (error == ESP_OK) {
+        error = i2c_master_probe(board_bus(), TOUCH_ADDRESS, TOUCH_I2C_TIMEOUT_MS);
+    }
+    if (error == ESP_OK) {
+        error = enable_interrupt(on_interrupt, context);
+    }
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "init failed: %s", esp_err_to_name(error));
+        i2c_master_bus_rm_device(touch_device);
+        touch_device = NULL;
+        gpio_reset_pin(TOUCH_RESET_GPIO);
+        gpio_reset_pin(TOUCH_INTERRUPT_GPIO);
+        return error;
+    }
     last_sample = (board_touch_sample_t){0};
-    return enable_interrupt(on_interrupt, context);
+    return ESP_OK;
 }
 
 esp_err_t board_touch_read(board_touch_sample_t *sample)
@@ -85,7 +99,7 @@ esp_err_t board_touch_read(board_touch_sample_t *sample)
     uint8_t packet[TOUCH_PACKET_LENGTH];
     esp_err_t error = i2c_master_transmit(touch_device, DATA_REGISTER, sizeof(DATA_REGISTER), TOUCH_I2C_TIMEOUT_MS);
     if (error == ESP_OK) {
-        vTaskDelay(at_least_one_tick(TOUCH_READ_SETTLE_MS));
+        esp_rom_delay_us(TOUCH_READ_SETTLE_US);
         error = i2c_master_receive(touch_device, packet, sizeof(packet), TOUCH_I2C_TIMEOUT_MS);
     }
     if (error == ESP_OK && !touch_decode(packet, sizeof(packet), &last_sample)) {
