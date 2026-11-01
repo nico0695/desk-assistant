@@ -78,7 +78,7 @@ Each checkpoint records one entry per image:
 
 - **Revision:** `01ff8b4`, integrated profile (`sdkconfig.defaults`).
 - **ELF SHA-256:** `9e475848807c26665ead68ee434a52f2565a50b87e333399035b578b77f9bd12` (the boot log prints its first 9 digits). Application image 1348048 bytes, 68% of the 4 MB app partition free.
-- **build_verified:** yes. Clean build from the committed revision with the documented command; host tests 16/16; `dependencies.lock` unchanged. CI on the previous revision (`d632159`) passed; the run on `01ff8b4` was still in progress when this entry was written.
+- **build_verified:** yes. Clean build from the committed revision with the documented command; host tests 16/16; `dependencies.lock` unchanged. CI run on the same revision (`01ff8b4`) passed: host tests, build, lock unchanged.
 - **hardware_verified:** partial.
   - Unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`. Flashed with verified hashes; boot log shows app version `01ff8b4` and the ELF digits above.
   - Observed on this image: boot with one saved test network (fake credentials): scan hears 11–18 networks, tries network 0, disconnects with reason 201 (AP not found), new round every ~30 s; no SSID, password or URL in the log.
