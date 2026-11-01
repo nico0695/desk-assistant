@@ -4,6 +4,7 @@
 
 #include "ui_home.h"
 #include "ui_section.h"
+#include "ui_settings_control.h"
 
 static void replace_active_screen(lv_obj_t *screen)
 {
@@ -19,9 +20,12 @@ static void request_home(lv_event_t *event)
     lv_async_call(show_home, NULL);
 }
 
-static void show_section(void *section)
+static void show_section(void *section_data)
 {
-    replace_active_screen(ui_section_screen_create((ui_section_t)(uintptr_t)section, request_home));
+    const ui_section_t section = (ui_section_t)(uintptr_t)section_data;
+    lv_obj_t *screen = section == UI_SECTION_SETTINGS ? ui_settings_control_create_screen(request_home)
+                                                      : ui_section_screen_create(section, request_home);
+    replace_active_screen(screen);
 }
 
 static void request_section(ui_section_t section)

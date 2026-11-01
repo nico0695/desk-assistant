@@ -33,7 +33,6 @@ set(UI_SOURCES
     ${UI_DIR}/src/ui_status_bar.c
     ${UI_DIR}/src/ui_section.c
     ${UI_DIR}/src/ui_home.c
-    ${UI_DIR}/src/ui_navigation.c
     ${UI_DIR}/src/ui_settings.c
     ${REPO_ROOT}/components/features/settings/src/settings_values.c
     ${REPO_ROOT}/components/features/settings/src/settings_row.c)

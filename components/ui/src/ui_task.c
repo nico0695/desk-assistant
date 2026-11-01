@@ -13,6 +13,7 @@
 #include "sdkconfig.h"
 #include "ui_display_port.h"
 #include "ui_navigation.h"
+#include "ui_settings_control.h"
 #include "ui_status_bar.h"
 #include "ui_theme.h"
 
@@ -29,6 +30,7 @@ enum {
     EVENT_TOUCH = 1U << 0,
     EVENT_BATTERY = 1U << 1,
     EVENT_KEY = 1U << 2,
+    EVENT_SETTINGS_SAVED = 1U << 3,
 };
 
 static const char *TAG = "ui";
@@ -90,6 +92,8 @@ static void apply_screen_action(screen_action_t action, const screen_power_t *pr
     }
     if (action == SCREEN_ACTION_SLEEP) {
         ui_display_port_set_input_enabled(false);
+        /* A gesture cut by the panel going off ends like a release. */
+        ui_settings_control_end_gesture();
     }
     const esp_err_t error = board_display_set_on(action == SCREEN_ACTION_WAKE);
     if (error != ESP_OK) {
@@ -98,6 +102,21 @@ static void apply_screen_action(screen_action_t action, const screen_power_t *pr
     }
     ui_display_port_set_input_enabled(!screen.asleep);
 }
+
+static void apply_screen_timeout(uint8_t seconds)
+{
+    screen_power_set_timeout(&screen, seconds, uptime_ms());
+}
+
+static void notify_settings_saved(void)
+{
+    xTaskNotify(ui_task, EVENT_SETTINGS_SAVED, eSetBits);
+}
+
+static const ui_settings_control_hooks_t SETTINGS_HOOKS = {
+    .apply_timeout = apply_screen_timeout,
+    .notify_saved = notify_settings_saved,
+};
 
 static void update_screen(uint64_t now_ms, uint32_t screen_events)
 {
@@ -173,6 +192,7 @@ static esp_err_t start_ui(void)
     board_key_filter_init(&key_filter, board_key_pressed(), (uint32_t)uptime_ms());
     screen_power_init(&screen, initial_settings.values[SETTINGS_SCREEN_TIMEOUT], uptime_ms());
     ui_theme_init();
+    ui_settings_control_init(&initial_settings, &SETTINGS_HOOKS);
     show_latest_battery();
     ui_navigation_start();
     return ESP_OK;
@@ -208,6 +228,9 @@ static void run(void *unused)
         }
         if (events & EVENT_BATTERY) {
             show_latest_battery();
+        }
+        if (events & EVENT_SETTINGS_SAVED) {
+            ui_settings_control_take_saved();
         }
         uint32_t screen_events = 0;
         if (ui_display_port_take_touch_activity()) {
