@@ -11,9 +11,17 @@ endif()
 add_library(unity STATIC ${UNITY_DIR}/unity.c)
 target_include_directories(unity PUBLIC ${UNITY_DIR})
 
-# Pure modules built for the host: one source and include directory per module.
-set(HOST_MODULE_SOURCES)
-set(HOST_MODULE_INCLUDE_DIRS)
+set(COMPONENTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../components)
+
+# Pure modules built for the host.
+set(HOST_MODULE_SOURCES
+    ${COMPONENTS_DIR}/board/src/display_geometry.c
+    ${COMPONENTS_DIR}/board/src/display_brightness.c
+    ${COMPONENTS_DIR}/board/src/touch_decode.c
+    ${COMPONENTS_DIR}/board/src/key_filter.c)
+set(HOST_MODULE_INCLUDE_DIRS
+    ${COMPONENTS_DIR}/board/include
+    ${COMPONENTS_DIR}/board/src)
 
 enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.c)

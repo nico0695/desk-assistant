@@ -5,7 +5,7 @@
 | Stage | Scope | Status |
 |---|---|---|
 | 0 | Scaffold | Done (validated 2026-11-01) |
-| 1 | Board and base UI | Next |
+| 1 | Board and base UI | In progress |
 | 2 | Storage and settings | Pending |
 | 3 | Wi-Fi and provisioning | Pending |
 | 4 | Bridge base | Pending |
@@ -20,7 +20,14 @@
 ## Active stage: 1 — Board and base UI
 
 - **Goal:** interaction hardware working and a reusable visual base.
-- **Progress:** not started; the stage spec comes first.
+- **Decisions:** V4 look with larger type (20/24/28 px) and 72 px buttons; icons with labels; Latin-1 fallback fonts regenerated; one UI task that owns LVGL and sleeps when idle; touch by interrupt; no physical power measurement (idle checked in software); panel off with display OFF, no sleep-in.
+- **Progress:**
+  - [x] 1. Pure board logic with host tests.
+  - [ ] 2. UI base on the host with PNG preview (design review).
+  - [ ] 3. Board drivers.
+  - [ ] 4. UI on the board.
+  - [ ] 5. Screen power, KEY and wake gesture.
+  - [ ] 6. Stage review and checkpoint.
 
 ## Closed stages
 
