@@ -20,7 +20,7 @@
 ## Active stage: 2 — Storage and settings
 
 - **Goal:** reliable persistence and the complete Settings screen.
-- **Progress:** not started; the stage spec comes first.
+- **Progress:** spec, design and plan approved. Steps 1–4 committed and reviewed (setting values and row state, NVS storage with a write worker, Settings view and preview, Settings control). Board validation pending: the unit was not connected.
 
 ## Closed stages
 
