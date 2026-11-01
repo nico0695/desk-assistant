@@ -13,6 +13,9 @@
 
 static const char *TAG = "memory";
 
+/* Room for tasks created between counting and listing them. */
+static const UBaseType_t TASK_LIST_SPARE_SLOTS = 4;
+
 static void log_heap(const char *checkpoint)
 {
     ESP_LOGI(TAG, "[%s] heap free=%u min=%u largest=%u", checkpoint,
@@ -23,7 +26,7 @@ static void log_heap(const char *checkpoint)
 
 static void log_task_stacks(const char *checkpoint)
 {
-    UBaseType_t task_capacity = uxTaskGetNumberOfTasks();
+    UBaseType_t task_capacity = uxTaskGetNumberOfTasks() + TASK_LIST_SPARE_SLOTS;
     TaskStatus_t *tasks = malloc(task_capacity * sizeof(*tasks));
     if (tasks == NULL) {
         ESP_LOGW(TAG, "[%s] no memory to list task stacks", checkpoint);
@@ -31,6 +34,9 @@ static void log_task_stacks(const char *checkpoint)
     }
 
     UBaseType_t task_count = uxTaskGetSystemState(tasks, task_capacity, NULL);
+    if (task_count == 0) {
+        ESP_LOGW(TAG, "[%s] task list changed while reading stacks", checkpoint);
+    }
     for (UBaseType_t i = 0; i < task_count; i++) {
         ESP_LOGI(TAG, "[%s] stack %s free_min=%u", checkpoint, tasks[i].pcTaskName,
                  (unsigned)tasks[i].usStackHighWaterMark);

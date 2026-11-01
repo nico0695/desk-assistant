@@ -18,7 +18,7 @@ Desk Assistant is ESP32-C6 firmware for a voice and notification terminal that w
 
 ## Architecture
 
-- `main/` only boots and composes. Features live in `components/features/<name>/`; `ui`, `bridge`, `storage`, `connectivity` and `board` are one component each.
+- `main/` only boots and composes. Features live in `components/features/<name>/`; `ui`, `bridge`, `storage`, `connectivity`, `board` and the shared `diagnostics` are one component each.
 - Each component declares the minimum `REQUIRES`. Public headers go in `include/`, private code in `src/`. No dependency cycles and no global header.
 - Create a component or folder only when it has code. A component does not imply a task; no resident task per feature.
 - State transitions do not depend on LVGL, NVS, HTTP or task creation, and are tested on the host.
