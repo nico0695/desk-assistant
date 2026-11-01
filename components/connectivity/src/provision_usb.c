@@ -18,6 +18,7 @@
 #define MICROSECONDS_PER_MILLISECOND 1000
 
 static const char *TAG = "usb_provision";
+_Static_assert(PROVISION_PROTOCOL_VERSION == 1U, "the replies below carry version 1");
 static const char REPLY_OK[] = "{\"v\":1,\"ok\":true}\n";
 static const char REPLY_ERROR[] = "{\"v\":1,\"ok\":false,\"error\":\"invalid configuration or storage failure\"}\n";
 

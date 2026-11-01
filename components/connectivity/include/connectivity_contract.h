@@ -18,6 +18,7 @@
 
 /* Setup access point. */
 #define SETUP_AP_SSID_PREFIX "Desk-Assistant-"
+/* The prefix with its terminator, plus the four hexadecimal digits of the MAC (setup_credentials.c). */
 #define SETUP_AP_SSID_SIZE (sizeof(SETUP_AP_SSID_PREFIX) + 4U)
 #define SETUP_AP_PASSWORD_LENGTH 8U
 #define SETUP_AP_PASSWORD_SIZE (SETUP_AP_PASSWORD_LENGTH + 1U)

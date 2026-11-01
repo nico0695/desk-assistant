@@ -58,7 +58,7 @@ static void store_save_result(esp_err_t result, uint32_t save_sequence, void *co
     taskENTER_CRITICAL(&results_lock);
     latest_results[id] = (save_result_t){.received = true, .ok = result == ESP_OK, .save_sequence = save_sequence};
     taskEXIT_CRITICAL(&results_lock);
-    hooks.notify_saved();
+    hooks.notify_changed();
 }
 
 static void run_effect(settings_row_t *row, settings_row_effect_t effect)

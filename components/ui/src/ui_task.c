@@ -117,7 +117,7 @@ static void notify_settings_changed(void)
 
 static const ui_settings_control_hooks_t SETTINGS_HOOKS = {
     .apply_timeout = apply_screen_timeout,
-    .notify_saved = notify_settings_changed,
+    .notify_changed = notify_settings_changed,
 };
 
 static void update_screen(uint64_t now_ms, uint32_t screen_events)

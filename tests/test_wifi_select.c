@@ -156,6 +156,22 @@ static void test_a_late_scan_result_does_not_replace_a_link_or_a_preferred_netwo
     expect_action(&state, 20, WIFI_SELECT_WAIT);
 }
 
+static void test_the_state_shown_follows_the_selection(void)
+{
+    wifi_select_t state;
+    wifi_select_reset(&state, 0);
+    TEST_ASSERT_EQUAL(CONNECTIVITY_NO_NETWORKS, wifi_select_state(&state, 0));
+    TEST_ASSERT_EQUAL(CONNECTIVITY_OFFLINE, wifi_select_state(&state, 2));
+    expect_action(&state, 0, WIFI_SELECT_SCAN);
+    TEST_ASSERT_EQUAL(CONNECTIVITY_SEARCHING, wifi_select_state(&state, 2));
+    wifi_select_connected(&state, 1);
+    TEST_ASSERT_EQUAL(CONNECTIVITY_CONNECTED, wifi_select_state(&state, 2));
+    /* A connected index outside the list shows no link. */
+    TEST_ASSERT_EQUAL(CONNECTIVITY_OFFLINE, wifi_select_state(&state, 1));
+    wifi_select_disconnected(&state, 1, 1000);
+    TEST_ASSERT_EQUAL(CONNECTIVITY_SEARCHING, wifi_select_state(&state, 2));
+}
+
 static void test_a_stopped_selection_stays_idle_until_reset(void)
 {
     wifi_select_t state;
@@ -283,6 +299,7 @@ int main(void)
     RUN_TEST(test_an_exhausted_round_waits_30_seconds_before_scanning);
     RUN_TEST(test_a_stable_link_is_kept_until_it_is_lost);
     RUN_TEST(test_a_late_scan_result_does_not_replace_a_link_or_a_preferred_network);
+    RUN_TEST(test_the_state_shown_follows_the_selection);
     RUN_TEST(test_a_stopped_selection_stays_idle_until_reset);
     RUN_TEST(test_an_ip_counts_only_during_an_attempt);
     RUN_TEST(test_a_lost_link_retries_every_5_seconds_for_30_then_scans);

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #define PAGE_TITLE "Desk Assistant"
-#define PAGE_FORM_ACTION "/save"
+#define PAGE_FORM_ACTION "/config"
 #define PAGE_FORM_HELP "Choose the Wi-Fi network this device should join."
 #define PAGE_SAVED_MESSAGE "Saved. The device is trying to connect. You can close this page."
 #define PAGE_REPLACED_PREFIX "It replaced the oldest saved network: "

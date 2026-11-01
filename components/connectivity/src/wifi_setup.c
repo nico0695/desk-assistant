@@ -177,13 +177,13 @@ static esp_err_t start_server(void)
     config.max_open_sockets = HTTPD_MAX_OPEN_SOCKETS;
     config.lru_purge_enable = true;
     const httpd_uri_t form_uri = {.uri = "/", .method = HTTP_GET, .handler = handle_form};
-    const httpd_uri_t save_uri = {.uri = "/save", .method = HTTP_POST, .handler = handle_save};
+    const httpd_uri_t config_uri = {.uri = "/config", .method = HTTP_POST, .handler = handle_save};
     esp_err_t error = httpd_start(&server, &config);
     if (error == ESP_OK) {
         error = httpd_register_uri_handler(server, &form_uri);
     }
     if (error == ESP_OK) {
-        error = httpd_register_uri_handler(server, &save_uri);
+        error = httpd_register_uri_handler(server, &config_uri);
     }
     if (error != ESP_OK && server != NULL) {
         httpd_stop(server);

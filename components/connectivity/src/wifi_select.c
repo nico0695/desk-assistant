@@ -69,6 +69,13 @@ void wifi_select_set_paused(wifi_select_t *state, bool paused, uint64_t now_ms)
     }
 }
 
+void wifi_select_best_clear(int16_t best[WIFI_LIST_CAPACITY])
+{
+    for (unsigned i = 0; i < WIFI_LIST_CAPACITY; ++i) {
+        best[i] = WIFI_SELECT_UNSEEN;
+    }
+}
+
 void wifi_select_note(const wifi_list_t *list, const char *ssid, int rssi, int16_t best[WIFI_LIST_CAPACITY])
 {
     const int index = wifi_list_find(list, ssid);
@@ -173,6 +180,7 @@ wifi_select_action_t wifi_select_step(wifi_select_t *state, uint64_t now_ms, uin
         start_attempt(state, *index, now_ms);
         return WIFI_SELECT_CONNECT;
     }
+    /* The round, or the preferred network, ran out: scan again, after the wait only if it was a full round. */
     if (state->count > 0) {
         request_scan(state, now_ms + (state->full_round ? WIFI_SELECT_ROUND_WAIT_MS : 0U));
     }
@@ -196,4 +204,15 @@ uint64_t wifi_select_wake_ms(const wifi_select_t *state)
         return state->retry_ms < state->lost_end_ms ? state->retry_ms : state->lost_end_ms;
     }
     return scan_allowed(state) ? state->scan_ms : WIFI_SELECT_NO_WAKE;
+}
+
+connectivity_state_t wifi_select_state(const wifi_select_t *state, uint8_t saved_count)
+{
+    if (saved_count == 0U) {
+        return CONNECTIVITY_NO_NETWORKS;
+    }
+    if (state->linked && state->target >= 0 && state->target < saved_count) {
+        return CONNECTIVITY_CONNECTED;
+    }
+    return state->attempting || state->scanning || state->lost ? CONNECTIVITY_SEARCHING : CONNECTIVITY_OFFLINE;
 }

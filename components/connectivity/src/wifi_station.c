@@ -66,9 +66,7 @@ static void start_scan(void)
         /* A failed scan tries every saved network in saved order. */
         ESP_LOGW(TAG, "scan not started: %s", esp_err_to_name(error));
         int16_t best[WIFI_LIST_CAPACITY];
-        for (unsigned i = 0; i < WIFI_LIST_CAPACITY; ++i) {
-            best[i] = WIFI_SELECT_UNSEEN;
-        }
+        wifi_select_best_clear(best);
         wifi_select_round(&selection, network_store_count(), best);
     }
 }
@@ -97,6 +95,7 @@ static void start_attempt(uint8_t index)
 static void drive(void)
 {
     esp_timer_stop(deadline_timer);
+    const bool attempt_pending = selection.attempting;
     for (;;) {
         uint8_t index;
         const wifi_select_action_t action = wifi_select_step(&selection, uptime_ms(), &index);
@@ -109,24 +108,16 @@ static void drive(void)
             start_attempt(index);
         }
     }
+    /* An attempt that ran out of its time ends there: a late IP would find nobody waiting for it. */
+    if (attempt_pending && !selection.attempting) {
+        esp_wifi_disconnect();
+    }
     const uint64_t wake_ms = wifi_select_wake_ms(&selection);
     if (wake_ms != WIFI_SELECT_NO_WAKE) {
         const uint64_t now_ms = uptime_ms();
         const uint64_t delay_ms = wake_ms > now_ms ? wake_ms - now_ms : 0U;
         esp_timer_start_once(deadline_timer, delay_ms * MICROSECONDS_PER_MILLISECOND);
     }
-}
-
-static connectivity_state_t current_state(uint8_t saved_count)
-{
-    if (saved_count == 0U) {
-        return CONNECTIVITY_NO_NETWORKS;
-    }
-    if (selection.linked && selection.target >= 0 && selection.target < saved_count) {
-        return CONNECTIVITY_CONNECTED;
-    }
-    return selection.attempting || selection.scanning || selection.lost ? CONNECTIVITY_SEARCHING
-                                                                           : CONNECTIVITY_OFFLINE;
 }
 
 /* Tells the UI what changed since the last view; an unchanged view wakes nobody. */
@@ -137,7 +128,7 @@ static void publish_view(void)
     network_store_fill_view(&view);
     wifi_setup_fill_view(&view);
     view.setup_password_rejected = view.setup_active && password_rejected;
-    view.state = current_state(view.saved_count);
+    view.state = wifi_select_state(&selection, view.saved_count);
     if (view.state == CONNECTIVITY_CONNECTED) {
         view.connected_index = (uint8_t)selection.target;
     }
@@ -209,9 +200,7 @@ static void forget_network(const char *ssid)
 static void take_scan_results(void)
 {
     int16_t best[WIFI_LIST_CAPACITY];
-    for (unsigned i = 0; i < WIFI_LIST_CAPACITY; ++i) {
-        best[i] = WIFI_SELECT_UNSEEN;
-    }
+    wifi_select_best_clear(best);
     wifi_ap_record_t record;
     unsigned seen = 0;
     while (esp_wifi_scan_get_ap_record(&record) == ESP_OK) {

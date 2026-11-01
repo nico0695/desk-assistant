@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "connectivity_view.h"
 #include "wifi_list.h"
 
 /*
@@ -53,7 +54,10 @@ void wifi_select_prefer(wifi_select_t *state, uint8_t index);
  */
 void wifi_select_set_paused(wifi_select_t *state, bool paused, uint64_t now_ms);
 
-/* Strongest RSSI per saved network; call once per scanned record. best starts at WIFI_SELECT_UNSEEN. */
+/* Marks every saved network as not seen; the starting point of a scan result and the result of a failed scan. */
+void wifi_select_best_clear(int16_t best[WIFI_LIST_CAPACITY]);
+
+/* Strongest RSSI per saved network; call once per scanned record. best starts cleared. */
 void wifi_select_note(const wifi_list_t *list, const char *ssid, int rssi, int16_t best[WIFI_LIST_CAPACITY]);
 
 /*
@@ -86,3 +90,9 @@ wifi_select_action_t wifi_select_step(wifi_select_t *state, uint64_t now_ms, uin
  * event (scan done, connected, disconnected, setup closed) can change the decision.
  */
 uint64_t wifi_select_wake_ms(const wifi_select_t *state);
+
+/*
+ * What the user is told: no saved networks, connected (a link to a saved network), searching (scanning, trying, or
+ * recovering a lost link) or offline (waiting for the next round).
+ */
+connectivity_state_t wifi_select_state(const wifi_select_t *state, uint8_t saved_count);

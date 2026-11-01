@@ -13,6 +13,7 @@ static void test_the_form_carries_the_nonce_and_the_field_names_of_the_parser(vo
     const int length = setup_page_form(page, sizeof(page), "abc123");
     TEST_ASSERT_GREATER_THAN(0, length);
     TEST_ASSERT_EQUAL((int)strlen(page), length);
+    TEST_ASSERT_NOT_NULL(strstr(page, "action=\"/config\""));
     TEST_ASSERT_NOT_NULL(strstr(page, "name=\"nonce\" value=\"abc123\""));
     TEST_ASSERT_NOT_NULL(strstr(page, "name=\"ssid\""));
     TEST_ASSERT_NOT_NULL(strstr(page, "name=\"password\""));

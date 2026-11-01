@@ -9,7 +9,7 @@ typedef struct {
     /* Applies a new screen timeout to the screen state. */
     void (*apply_timeout)(uint8_t seconds);
     /* Wakes the UI task from another task; it then calls ui_settings_control_take_changes. */
-    void (*notify_saved)(void);
+    void (*notify_changed)(void);
 } ui_settings_control_hooks_t;
 
 /* Owns the Settings rows for the UI task. Call once from the UI task with the settings loaded at boot. */
