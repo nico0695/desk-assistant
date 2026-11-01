@@ -1,0 +1,17 @@
+#pragma once
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "lvgl.h"
+
+typedef struct {
+    bool known;
+    uint8_t percent;
+} ui_battery_t;
+
+/* Adds the bar to the top of a screen. Only the bar of the active screen is updated. */
+lv_obj_t *ui_status_bar_create(lv_obj_t *screen, const char *title);
+
+/* Shows the reading on the current bar and keeps it for bars created later. */
+void ui_status_bar_set_battery(ui_battery_t battery);

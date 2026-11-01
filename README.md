@@ -26,6 +26,16 @@ tools/test.sh
 
 Runs the host tests with CMake, Ninja and the host C compiler. It does not need the ESP-IDF environment exported: Unity is taken from `IDF_PATH`, or from `~/esp/esp-idf-v5.5.2` when it is not set.
 
+## UI preview
+
+```sh
+tools/preview.sh
+```
+
+Renders the screens to PNG in `build-preview/screens/` with the pinned LVGL on the host. It needs `managed_components/`, created by the first build.
+
+The Latin-1 fallback fonts are generated C files. Regenerate them with `tools/generate_fonts.py` (Pillow 11.3.0 and FreeType 2.13.3), or verify them with `--check`.
+
 ## Flash
 
 ```sh
