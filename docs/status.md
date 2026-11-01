@@ -4,8 +4,8 @@
 
 | Stage | Scope | Status |
 |---|---|---|
-| 0 | Scaffold | Awaiting validation |
-| 1 | Board and base UI | Pending |
+| 0 | Scaffold | Done (validated 2026-11-01) |
+| 1 | Board and base UI | Next |
 | 2 | Storage and settings | Pending |
 | 3 | Wi-Fi and provisioning | Pending |
 | 4 | Bridge base | Pending |
@@ -17,12 +17,14 @@
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 0 — Scaffold
+## Active stage: 1 — Board and base UI
 
-- **Goal:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI.
-- **Progress:** repository conventions; ESP-IDF project, partition table and boot log; memory diagnostics; host test harness; CI. Stage review done; first install on the unit done.
-- **Validation:** waiting for user validation.
-- **Next:** stage 1, board and base UI.
+- **Goal:** interaction hardware working and a reusable visual base.
+- **Progress:** not started; the stage spec comes first.
+
+## Closed stages
+
+- **0 — Scaffold:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI. Validated on `esp32-02` at `3cad47c`.
 
 ## Evidence
 
