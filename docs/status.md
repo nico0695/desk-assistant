@@ -27,7 +27,7 @@
   - [x] 3. Board drivers.
   - [x] 4. UI on the board (boots clean; image, touch and navigation pending the smoke test).
   - [x] 5. Screen power, KEY and wake gesture (timeout and idle verified; KEY and touch pending the smoke test).
-  - [ ] 6. Stage review and checkpoint.
+  - [x] 6. Stage review and fixes; checkpoint waiting for the smoke test and user validation.
 
 ## Closed stages
 
@@ -51,3 +51,14 @@ Each checkpoint records one entry per image:
   - Cases: full flash erase, flash with verified hashes, boot from the new partition table, app version and ELF SHA-256 in the log, memory report.
   - Memory at boot: internal heap free 464936 B, minimum 464936 B, largest block 434176 B. Minimum free stack: `main` 2304 B, `IDLE` 1364 B, `esp_timer` 3868 B.
   - Not run: display, touch, KEY, battery, audio and network; they are not part of this stage.
+
+### Stage 1 — 2026-11-01 (checkpoint, pending validation)
+
+- **Revision:** `448b534`, integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `4c8c3309522b86e0ef9ef030b8f72de427a6885e7f81f41cf49a8b2f3b8a1981`. Application image 566304 bytes, 86% of the 4 MB app partition free.
+- **build_verified:** yes. Local build with the documented command; CI run on the same revision passed.
+- **hardware_verified:** no for this image yet.
+  - Unit `esp32-02`, USB-C data cable. Flash completed with verified hashes.
+  - The boot log could not be read afterwards: the unit enumerates on USB but does not answer serial or esptool. Needs a physical check before the smoke test.
+  - Not run: the whole smoke test (image, colors, touch, wake gesture, KEY, battery, navigation).
+
