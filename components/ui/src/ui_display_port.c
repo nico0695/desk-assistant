@@ -141,4 +141,8 @@ bool ui_display_port_take_touch_activity(void)
 void ui_display_port_set_input_enabled(bool enabled)
 {
     touch_gate_set_enabled(&touch_gate, enabled);
+    if (!enabled) {
+        /* Drops the widget under a held finger without PRESS_LOST, which would move a slider to a hidden point. */
+        lv_indev_reset(touch_input, NULL);
+    }
 }

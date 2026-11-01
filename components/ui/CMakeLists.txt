@@ -16,7 +16,7 @@ idf_component_register(SRCS "src/ui_task.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
                        REQUIRES esp_common settings
-                       PRIV_REQUIRES board diagnostics settings esp_timer freertos log lvgl__lvgl)
+                       PRIV_REQUIRES board diagnostics esp_timer freertos log lvgl__lvgl)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
 

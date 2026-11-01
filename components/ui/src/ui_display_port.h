@@ -20,5 +20,8 @@ bool ui_display_port_hidden_press_held(void);
 /* True when a valid press happened since the last call, including presses hidden from LVGL. */
 bool ui_display_port_take_touch_activity(void);
 
-/* Hides touch from LVGL while the panel is off; a gesture that wakes the panel stays hidden until released. */
+/*
+ * Hides touch from LVGL while the panel is off and drops any widget being pressed; a gesture that wakes the panel
+ * stays hidden until released.
+ */
 void ui_display_port_set_input_enabled(bool enabled);

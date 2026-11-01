@@ -51,6 +51,7 @@ static void test_a_failed_apply_is_not_saved_as_applied(void)
     TEST_ASSERT_TRUE(effect.save);
     TEST_ASSERT_EQUAL_UINT8(50, effect.value);
     TEST_ASSERT_EQUAL_UINT8(50, row.shown);
+    TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_NONE, settings_row_error(&row));
 }
 
 static void test_cancel_mid_drag_restores_and_reapplies_the_confirmed_brightness(void)

@@ -18,7 +18,8 @@ esp_err_t storage_get_u8(const char *name_space, const char *key, uint8_t *value
 
 /*
  * Queues a write and commit and returns at once; on_done runs from the storage task. name_space and key must
- * outlive the request (string literals). Fails without queuing when storage is unavailable or the queue is full.
+ * outlive the request (string literals). Fails without queuing: ESP_ERR_INVALID_STATE when storage is unavailable,
+ * ESP_ERR_NO_MEM when the queue is full.
  */
 esp_err_t storage_set_u8_async(const char *name_space, const char *key, uint8_t value, uint32_t token,
                                storage_done_cb_t on_done, void *context);

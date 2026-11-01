@@ -45,6 +45,10 @@ settings_row_effect_t settings_row_release(settings_row_t *row)
         return NO_EFFECT;
     }
     row->dragging = false;
+    if (applies_while_dragging(row)) {
+        /* The row settles on the value the panel holds, so a failed apply of a later value is no longer current. */
+        row->apply_failed = false;
+    }
     const uint8_t value = applies_while_dragging(row) ? row->applied : row->shown;
     if (value == row->confirmed) {
         row->shown = value;
