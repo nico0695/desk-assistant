@@ -8,7 +8,7 @@ Waveshare ESP32-C6-Touch-AMOLED-2.16: ESP32-C6, 16 MB flash, 480×480 touch AMOL
 
 ## Requirements
 
-- ESP-IDF 5.5.2 exported in the shell (`. $IDF_PATH/export.sh`).
+- ESP-IDF 5.5.2 exported in the shell (`. <esp-idf>/export.sh`).
 - Dependencies are pinned in `dependencies.lock` and fetched on the first build.
 
 ## Build

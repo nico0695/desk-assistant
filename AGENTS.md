@@ -42,7 +42,8 @@ Desk Assistant is ESP32-C6 firmware for a voice and notification terminal that w
 
 - A notification is persisted before its `displayed` ACK. Notification reads use `limit=1`. Close and Next are local.
 - No `has_more`, ACK on dismiss, replay, fallback polling or inferred retries of mutations.
-- One PUT per recording attempt. Results are recovered only by GET; an incomplete upload is classified as `unsent`.
+- One PUT per recording attempt; results are recovered only by GET and the clip is never resent.
+- An incomplete upload is `unsent` only if it fails before the first write of the last audio block; from then on a failure stays uncertain.
 
 ## Stage workflow
 
