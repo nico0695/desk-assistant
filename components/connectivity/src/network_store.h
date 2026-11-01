@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include "esp_err.h"
+#include "esp_wifi_types.h"
 #include "wifi_list.h"
 
 /*
@@ -20,3 +21,14 @@ bool network_store_failed(void);
  * replaced_ssid receives the network dropped from a full list, or an empty string.
  */
 esp_err_t network_store_save(const char *ssid, const char *password, char replaced_ssid[WIFI_SSID_SIZE]);
+
+uint8_t network_store_count(void);
+
+/* Index of the SSID in the saved order, or -1. */
+int network_store_find(const char *ssid);
+
+/* Records one scanned network for wifi_select_round. */
+void network_store_note_scan(const char *ssid, int rssi, int16_t best[WIFI_LIST_CAPACITY]);
+
+/* Fills the station credentials of the network at index; the caller zeroes them after use. False if absent. */
+bool network_store_station_config(uint8_t index, wifi_config_t *config);

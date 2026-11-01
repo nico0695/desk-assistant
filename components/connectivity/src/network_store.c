@@ -7,6 +7,7 @@
 #include "freertos/semphr.h"
 #include "nvs.h"
 #include "storage.h"
+#include "wifi_select.h"
 
 /* A new namespace marks an incompatible record; the old one is left untouched. */
 #define NETWORK_NAMESPACE "wifi_v1"
@@ -62,4 +63,46 @@ esp_err_t network_store_save(const char *ssid, const char *password, char replac
         replaced_ssid[0] = '\0';
     }
     return error;
+}
+
+uint8_t network_store_count(void)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    const uint8_t count = saved.count;
+    xSemaphoreGive(lock);
+    return count;
+}
+
+int network_store_find(const char *ssid)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    const int index = wifi_list_find(&saved, ssid);
+    xSemaphoreGive(lock);
+    return index;
+}
+
+void network_store_note_scan(const char *ssid, int rssi, int16_t best[WIFI_LIST_CAPACITY])
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    wifi_select_note(&saved, ssid, rssi, best);
+    xSemaphoreGive(lock);
+}
+
+bool network_store_station_config(uint8_t index, wifi_config_t *config)
+{
+    memset(config, 0, sizeof(*config));
+    xSemaphoreTake(lock, portMAX_DELAY);
+    const bool found = index < saved.count;
+    if (found) {
+        const wifi_network_t *network = &saved.networks[index];
+        const size_t password_length = strlen(network->password);
+        memcpy(config->sta.ssid, network->ssid, strlen(network->ssid));
+        memcpy(config->sta.password, network->password, password_length);
+        /* An open network is only joined when it was saved without a password. */
+        config->sta.threshold.authmode = password_length == 0 ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+        config->sta.pmf_cfg.capable = true;
+        config->sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+    }
+    xSemaphoreGive(lock);
+    return found;
 }

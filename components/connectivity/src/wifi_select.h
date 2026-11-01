@@ -59,7 +59,13 @@ void wifi_select_note(const wifi_list_t *list, const char *ssid, int rssi, int16
  */
 bool wifi_select_round(wifi_select_t *state, uint8_t saved, const int16_t best[WIFI_LIST_CAPACITY]);
 
-/* The station got an IP on the network at index. A stable link is never changed for a better signal. */
+/* The station got an IP during the attempt in progress; false (ignored) when no attempt is running. */
+bool wifi_select_attempt_succeeded(wifi_select_t *state);
+
+/* True between a SCAN and its round; the caller stops the driver scan before discarding it. */
+bool wifi_select_scan_in_progress(const wifi_select_t *state);
+
+/* The network at index has a link with an IP. A stable link is never changed for a better signal. */
 void wifi_select_connected(wifi_select_t *state, uint8_t index);
 
 /*

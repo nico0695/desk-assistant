@@ -1,5 +1,7 @@
 #include "provision_apply.h"
 
+#include <stdint.h>
+
 #include "bridge_origin.h"
 #include "wifi_list.h"
 
@@ -12,7 +14,7 @@ static bool request_valid(const provision_request_t *request, const provision_ac
         return true;
     }
     return wifi_ssid_valid(request->wifi_ssid) && wifi_password_valid(request->wifi_password) &&
-           actions->timeout_valid(request->screen_timeout_s);
+           request->screen_timeout_s <= UINT8_MAX && actions->timeout_valid(request->screen_timeout_s);
 }
 
 bool provision_apply(const provision_request_t *request, const provision_actions_t *actions)

@@ -110,6 +110,20 @@ void wifi_select_connected(wifi_select_t *state, uint8_t index)
     state->linked = true;
 }
 
+bool wifi_select_attempt_succeeded(wifi_select_t *state)
+{
+    if (!state->attempting || state->target < 0) {
+        return false;
+    }
+    wifi_select_connected(state, (uint8_t)state->target);
+    return true;
+}
+
+bool wifi_select_scan_in_progress(const wifi_select_t *state)
+{
+    return state->scanning;
+}
+
 void wifi_select_disconnected(wifi_select_t *state, int index, uint64_t now_ms)
 {
     if (state->linked) {

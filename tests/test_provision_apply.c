@@ -16,7 +16,8 @@ static void record(char call)
 
 static bool timeout_valid(uint32_t seconds)
 {
-    return seconds == 0 || seconds == 15 || seconds == 30 || seconds == 60;
+    /* Accepts the value that would wrap to 15, so the range check belongs to provision_apply. */
+    return seconds == 0 || seconds == 15 || seconds == 30 || seconds == 60 || seconds == 256 + 15;
 }
 
 static bool save_origin(const char *url, const char *token)

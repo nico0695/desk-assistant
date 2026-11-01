@@ -2,8 +2,10 @@
 
 #include "bridge_origin_store.h"
 #include "esp_check.h"
+#include "esp_log.h"
 #include "network_store.h"
 #include "provision_usb.h"
+#include "wifi_station.h"
 
 static const char *TAG = "connectivity";
 static connectivity_hooks_t hooks;
@@ -21,7 +23,11 @@ static bool store_timeout(uint8_t seconds)
 static bool save_network(const char *ssid, const char *password)
 {
     char replaced_ssid[WIFI_SSID_SIZE];
-    return network_store_save(ssid, password, replaced_ssid) == ESP_OK;
+    if (network_store_save(ssid, password, replaced_ssid) != ESP_OK) {
+        return false;
+    }
+    station_network_saved();
+    return true;
 }
 
 static bool timeout_valid(uint32_t seconds)
@@ -40,6 +46,11 @@ esp_err_t connectivity_start(const connectivity_hooks_t *connectivity_hooks)
 {
     hooks = *connectivity_hooks;
     network_store_load();
+    /* A Wi-Fi failure does not stop provisioning over USB. */
+    const esp_err_t station_error = station_start();
+    if (station_error != ESP_OK) {
+        ESP_LOGE(TAG, "station not started: %s", esp_err_to_name(station_error));
+    }
     ESP_RETURN_ON_ERROR(provision_usb_start(&USB_ACTIONS), TAG, "USB provisioning not started");
     return ESP_OK;
 }
