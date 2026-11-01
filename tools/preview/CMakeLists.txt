@@ -33,9 +33,12 @@ set(UI_SOURCES
     ${UI_DIR}/src/ui_status_bar.c
     ${UI_DIR}/src/ui_section.c
     ${UI_DIR}/src/ui_home.c
-    ${UI_DIR}/src/ui_navigation.c)
+    ${UI_DIR}/src/ui_navigation.c
+    ${UI_DIR}/src/ui_settings.c
+    ${REPO_ROOT}/components/features/settings/src/settings_values.c
+    ${REPO_ROOT}/components/features/settings/src/settings_row.c)
 file(GLOB FONT_SOURCES CONFIGURE_DEPENDS ${UI_DIR}/src/fonts/*.c)
 add_executable(ui_preview preview.c ${UI_SOURCES} ${FONT_SOURCES} ${REPO_ROOT}/components/board/src/display_geometry.c)
-target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${LVGL_DIR}/src/libs/lodepng)
+target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${REPO_ROOT}/components/features/settings/include ${LVGL_DIR}/src/libs/lodepng)
 target_compile_options(ui_preview PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(ui_preview PRIVATE lvgl m)

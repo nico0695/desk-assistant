@@ -30,6 +30,12 @@
 #define UI_STATUS_BAR_SIDE_INSET_PX 40
 #define UI_RECORD_DOT_SIZE_PX 24
 #define UI_WIFI_SLASH_WIDTH_PX 3
+#define UI_ROW_LABEL_GAP_PX 8
+#define UI_SETTINGS_ROW_GAP_PX 12
+#define UI_SLIDER_TRACK_HEIGHT_PX 16
+#define UI_SLIDER_KNOB_SIZE_PX 40
+/* The slider's touch area grows to the button height around the visible track. */
+#define UI_SLIDER_TOUCH_HEIGHT_PX UI_BUTTON_HEIGHT_PX
 
 typedef enum {
     UI_FONT_SECONDARY,
@@ -44,6 +50,9 @@ typedef struct {
     lv_style_t button_primary;
     lv_style_t button_primary_pressed;
     lv_style_t text_secondary;
+    lv_style_t slider_track;
+    lv_style_t slider_indicator;
+    lv_style_t slider_knob;
 } ui_styles_t;
 
 /* Call once from the UI owner after lv_init(). */

@@ -50,6 +50,22 @@ void ui_theme_init(void)
     lv_style_init(&styles.text_secondary);
     lv_style_set_text_color(&styles.text_secondary, lv_color_hex(UI_COLOR_TEXT_SECONDARY));
     lv_style_set_text_font(&styles.text_secondary, &secondary_font);
+
+    lv_style_init(&styles.slider_track);
+    lv_style_set_bg_color(&styles.slider_track, lv_color_hex(UI_COLOR_CONTROL));
+    lv_style_set_bg_opa(&styles.slider_track, LV_OPA_COVER);
+    lv_style_set_radius(&styles.slider_track, LV_RADIUS_CIRCLE);
+
+    lv_style_init(&styles.slider_indicator);
+    lv_style_set_bg_color(&styles.slider_indicator, lv_color_hex(UI_COLOR_PRIMARY_PRESSED));
+    lv_style_set_bg_opa(&styles.slider_indicator, LV_OPA_COVER);
+    lv_style_set_radius(&styles.slider_indicator, LV_RADIUS_CIRCLE);
+
+    lv_style_init(&styles.slider_knob);
+    lv_style_set_bg_color(&styles.slider_knob, lv_color_hex(UI_COLOR_TEXT));
+    lv_style_set_bg_opa(&styles.slider_knob, LV_OPA_COVER);
+    lv_style_set_radius(&styles.slider_knob, LV_RADIUS_CIRCLE);
+    lv_style_set_pad_all(&styles.slider_knob, (UI_SLIDER_KNOB_SIZE_PX - UI_SLIDER_TRACK_HEIGHT_PX) / 2);
 }
 
 const lv_font_t *ui_theme_font(ui_font_role_t role)

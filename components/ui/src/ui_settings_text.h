@@ -1,0 +1,11 @@
+#pragma once
+
+#define UI_TEXT_SETTINGS_SCREEN_OFF "Screen off"
+#define UI_TEXT_SETTINGS_TIMEOUT_FORMAT "%us"
+#define UI_TEXT_SETTINGS_ALWAYS_ON "Always"
+#define UI_TEXT_SETTINGS_VOLUME "Volume"
+#define UI_TEXT_SETTINGS_BRIGHTNESS "Brightness"
+#define UI_TEXT_SETTINGS_PERCENT_FORMAT "%u%%"
+#define UI_TEXT_SETTINGS_LOAD_FAILED "Load failed"
+#define UI_TEXT_SETTINGS_NOT_APPLIED "Not applied"
+#define UI_TEXT_SETTINGS_NOT_SAVED "Not saved"

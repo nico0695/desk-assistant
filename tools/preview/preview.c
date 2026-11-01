@@ -8,6 +8,7 @@
 #include "lvgl.h"
 #include "ui_home.h"
 #include "ui_section.h"
+#include "ui_settings.h"
 #include "ui_status_bar.h"
 #include "ui_theme.h"
 
@@ -99,6 +100,43 @@ static void ignore_back(lv_event_t *event)
     (void)event;
 }
 
+static void ignore_drag(settings_id_t id, uint8_t value)
+{
+    (void)id;
+    (void)value;
+}
+
+static void ignore_release(settings_id_t id)
+{
+    (void)id;
+}
+
+static void ignore_timeout(uint8_t seconds)
+{
+    (void)seconds;
+}
+
+static void ignore_closed(void) {}
+
+static const ui_settings_handlers_t SETTINGS_HANDLERS = {
+    .on_drag = ignore_drag,
+    .on_release = ignore_release,
+    .on_select_timeout = ignore_timeout,
+    .on_closed = ignore_closed,
+    .on_back = ignore_back,
+};
+
+static lv_obj_t *create_settings(uint8_t timeout_s, uint8_t volume, uint8_t brightness, bool with_errors)
+{
+    settings_row_t rows[SETTINGS_COUNT];
+    settings_row_init(&rows[SETTINGS_SCREEN_TIMEOUT], SETTINGS_SCREEN_TIMEOUT, timeout_s, with_errors);
+    settings_row_init(&rows[SETTINGS_VOLUME], SETTINGS_VOLUME, volume, false);
+    settings_row_init(&rows[SETTINGS_BRIGHTNESS], SETTINGS_BRIGHTNESS, brightness, false);
+    rows[SETTINGS_VOLUME].save_failed = with_errors;
+    rows[SETTINGS_BRIGHTNESS].apply_failed = with_errors;
+    return ui_settings_screen_create(rows, &SETTINGS_HANDLERS);
+}
+
 static lv_obj_t *create_latin1_sample(void)
 {
     lv_obj_t *screen = ui_section_screen_create(UI_SECTION_NOTES, ignore_back);
@@ -133,5 +171,20 @@ int main(int argc, char **argv)
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
     capture(display, ui_section_screen_create(UI_SECTION_TASKS, ignore_back), directory, "section");
     capture(display, create_latin1_sample(), directory, "latin1-sample");
+    capture(display,
+            create_settings(SETTINGS_SCREEN_TIMEOUT_DEFAULT_S, SETTINGS_VOLUME_DEFAULT_PERCENT,
+                            SETTINGS_BRIGHTNESS_DEFAULT_PERCENT, false),
+            directory, "settings");
+    capture(display,
+            create_settings(SETTINGS_SCREEN_TIMEOUT_ALWAYS_ON_S, SETTINGS_VOLUME_MIN_PERCENT,
+                            SETTINGS_BRIGHTNESS_MIN_PERCENT, false),
+            directory, "settings-minimum");
+    capture(display,
+            create_settings(15, SETTINGS_VOLUME_MAX_PERCENT, SETTINGS_BRIGHTNESS_MAX_PERCENT, false),
+            directory, "settings-maximum");
+    capture(display,
+            create_settings(SETTINGS_SCREEN_TIMEOUT_DEFAULT_S, SETTINGS_VOLUME_DEFAULT_PERCENT,
+                            SETTINGS_BRIGHTNESS_DEFAULT_PERCENT, true),
+            directory, "settings-errors");
     return EXIT_SUCCESS;
 }
