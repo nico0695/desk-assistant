@@ -6,7 +6,7 @@ void setUp(void) {}
 void tearDown(void) {}
 
 static const char NONCE[] = "0123456789abcdef0123456789abcdef";
-static char body[SETUP_FORM_MAX_BYTES + 2];
+static char body[SETUP_FORM_MAX_BYTES + 1];
 
 static setup_form_result_t parse(const char *text, setup_form_t *form)
 {
@@ -58,11 +58,15 @@ static void test_malformed_bodies_are_rejected(void)
     }
 }
 
-static void test_a_body_over_1024_bytes_is_rejected(void)
+static void test_a_full_1024_byte_body_is_parsed_and_a_longer_one_rejected(void)
 {
     setup_form_t form;
-    memset(body, 'a', SETUP_FORM_MAX_BYTES + 1);
-    body[SETUP_FORM_MAX_BYTES + 1] = '\0';
+    static const char prefix[] = "nonce=0123456789abcdef0123456789abcdef&password=&ssid=";
+    const size_t prefix_length = sizeof(prefix) - 1U;
+    memcpy(body, prefix, prefix_length);
+    memset(body + prefix_length, 's', SETUP_FORM_MAX_BYTES - prefix_length);
+    TEST_ASSERT_EQUAL(SETUP_FORM_OK, setup_form_parse(body, SETUP_FORM_MAX_BYTES, NONCE, &form));
+    TEST_ASSERT_EQUAL_size_t(SETUP_FORM_MAX_BYTES - prefix_length, strlen(form.ssid));
     TEST_ASSERT_EQUAL(SETUP_FORM_MALFORMED, setup_form_parse(body, SETUP_FORM_MAX_BYTES + 1, NONCE, &form));
 }
 
@@ -84,7 +88,7 @@ int main(void)
     RUN_TEST(test_an_empty_password_is_kept_for_open_networks);
     RUN_TEST(test_a_wrong_or_missing_session_nonce_is_stale);
     RUN_TEST(test_malformed_bodies_are_rejected);
-    RUN_TEST(test_a_body_over_1024_bytes_is_rejected);
+    RUN_TEST(test_a_full_1024_byte_body_is_parsed_and_a_longer_one_rejected);
     RUN_TEST(test_peer_must_reach_the_ap_address_from_its_subnet);
     return UNITY_END();
 }

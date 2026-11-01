@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "hex_digit.h"
+
 void provision_line_init(provision_line_t *line, char *buffer)
 {
     line->buffer = buffer;
@@ -12,13 +14,13 @@ void provision_line_clear(provision_line_t *line)
 {
     memset(line->buffer, 0, PROVISION_LINE_MAX_BYTES + 1U);
     line->length = 0;
-    line->too_long = false;
+    line->rejected = false;
     line->last_byte_ms = 0;
 }
 
 void provision_line_expire(provision_line_t *line, uint64_t now_ms)
 {
-    if ((line->length > 0 || line->too_long) && now_ms - line->last_byte_ms >= PROVISION_LINE_IDLE_MS) {
+    if ((line->length > 0 || line->rejected) && now_ms - line->last_byte_ms >= PROVISION_LINE_IDLE_MS) {
         provision_line_clear(line);
     }
 }
@@ -31,19 +33,19 @@ provision_line_status_t provision_line_feed(provision_line_t *line, char byte, u
         return PROVISION_LINE_PENDING;
     }
     if (byte == '\n') {
-        if (line->too_long) {
+        if (line->rejected) {
             provision_line_clear(line);
-            return PROVISION_LINE_TOO_LONG;
+            return PROVISION_LINE_REJECTED;
         }
         line->buffer[line->length] = '\0';
         return PROVISION_LINE_READY;
     }
-    if (line->length == PROVISION_LINE_MAX_BYTES) {
+    if (line->length == PROVISION_LINE_MAX_BYTES || byte == '\0') {
         memset(line->buffer, 0, PROVISION_LINE_MAX_BYTES + 1U);
         line->length = 0;
-        line->too_long = true;
+        line->rejected = true;
     }
-    if (!line->too_long) {
+    if (!line->rejected) {
         line->buffer[line->length++] = byte;
     }
     return PROVISION_LINE_PENDING;
@@ -96,26 +98,12 @@ static void skip_space(char **at)
     }
 }
 
-static int hex_value(char c)
-{
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10;
-    }
-    if (c >= 'A' && c <= 'F') {
-        return c - 'A' + 10;
-    }
-    return -1;
-}
-
 /* Reads the four hex digits after "\u". */
 static bool read_unicode_escape(char **at, uint32_t *code)
 {
     *code = 0;
     for (unsigned i = 0; i < 4U; ++i) {
-        const int digit = hex_value((*at)[i]);
+        const int digit = hex_digit_value((*at)[i]);
         if (digit < 0) {
             return false;
         }
@@ -299,9 +287,13 @@ static bool parse_member(char **at, provision_request_t *request, uint32_t *vers
     case FIELD_BRIDGE_URL:
         request->bridge_url = text;
         break;
-    default:
+    case FIELD_DEVICE_TOKEN:
         request->device_token = text;
         break;
+    case FIELD_VERSION:
+    case FIELD_SCREEN_TIMEOUT:
+    case FIELD_COUNT:
+        return false;
     }
     return true;
 }

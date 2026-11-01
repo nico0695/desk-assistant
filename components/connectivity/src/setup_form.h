@@ -18,7 +18,8 @@ typedef struct {
 } setup_form_t;
 
 /*
- * Decodes an application/x-www-form-urlencoded body of at most SETUP_FORM_MAX_BYTES in place. Requires exactly
+ * Decodes an application/x-www-form-urlencoded body of at most SETUP_FORM_MAX_BYTES in place. The buffer must hold
+ * length + 1 bytes: the last value is terminated at body[length]. Requires exactly
  * the fields nonce, ssid and password, each once, without NUL; then compares the nonce with the session nonce.
  */
 setup_form_result_t setup_form_parse(char *body, size_t length, const char *session_nonce, setup_form_t *form);

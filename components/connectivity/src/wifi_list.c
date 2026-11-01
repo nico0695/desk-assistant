@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "hex_digit.h"
+
 static bool bounded_length(const char *text, size_t capacity, size_t *length)
 {
     if (text == NULL) {
@@ -13,11 +15,6 @@ static bool bounded_length(const char *text, size_t capacity, size_t *length)
     }
     *length = (size_t)(end - text);
     return true;
-}
-
-static bool hex_digit(char c)
-{
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
 bool wifi_ssid_valid(const char *ssid)
@@ -37,7 +34,7 @@ bool wifi_password_valid(const char *password)
     }
     if (length == WIFI_PASSWORD_HEX_KEY_BYTES) {
         for (size_t i = 0; i < length; ++i) {
-            if (!hex_digit(password[i])) {
+            if (hex_digit_value(password[i]) < 0) {
                 return false;
             }
         }

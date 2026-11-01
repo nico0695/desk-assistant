@@ -53,10 +53,19 @@ static void test_a_line_of_3072_bytes_fits_and_a_longer_one_is_rejected_whole(vo
         provision_line_feed(&line, 'x', 0);
     }
     TEST_ASSERT_EACH_EQUAL_CHAR('\0', buffer, sizeof(buffer));
-    TEST_ASSERT_EQUAL(PROVISION_LINE_TOO_LONG, provision_line_feed(&line, '\n', 0));
+    TEST_ASSERT_EQUAL(PROVISION_LINE_REJECTED, provision_line_feed(&line, '\n', 0));
     /* The next line starts clean. */
     TEST_ASSERT_EQUAL(PROVISION_LINE_READY, feed_text("ok\n", 0));
     TEST_ASSERT_EQUAL_STRING("ok", buffer);
+}
+
+static void test_a_nul_byte_rejects_the_whole_line(void)
+{
+    feed_text("{\"v\":1}", 0);
+    provision_line_feed(&line, '\0', 0);
+    feed_text("junk", 0);
+    TEST_ASSERT_EQUAL(PROVISION_LINE_REJECTED, provision_line_feed(&line, '\n', 0));
+    TEST_ASSERT_EACH_EQUAL_CHAR('\0', buffer, sizeof(buffer));
 }
 
 static void test_a_partial_line_idle_for_10_seconds_is_dropped(void)
@@ -165,6 +174,7 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_lf_ends_a_line_and_cr_is_ignored);
     RUN_TEST(test_a_line_of_3072_bytes_fits_and_a_longer_one_is_rejected_whole);
+    RUN_TEST(test_a_nul_byte_rejects_the_whole_line);
     RUN_TEST(test_a_partial_line_idle_for_10_seconds_is_dropped);
     RUN_TEST(test_configure_bridge_needs_exactly_its_fields);
     RUN_TEST(test_configure_needs_exactly_its_fields);

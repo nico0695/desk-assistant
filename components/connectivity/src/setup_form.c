@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "hex_digit.h"
+
 typedef enum {
     FORM_FIELD_NONCE,
     FORM_FIELD_SSID,
@@ -15,20 +17,6 @@ static const char *const FORM_FIELD_NAMES[FORM_FIELD_COUNT] = {
     [FORM_FIELD_PASSWORD] = "password",
 };
 
-static int hex_value(char c)
-{
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10;
-    }
-    if (c >= 'A' && c <= 'F') {
-        return c - 'A' + 10;
-    }
-    return -1;
-}
-
 /* Decodes text[0, length) in place and NUL-terminates it; rejects incomplete escapes and NUL. */
 static bool decode_component(char *text, size_t length)
 {
@@ -41,8 +29,8 @@ static bool decode_component(char *text, size_t length)
             if (i + 2 >= length) {
                 return false;
             }
-            const int high = hex_value(text[i + 1]);
-            const int low = hex_value(text[i + 2]);
+            const int high = hex_digit_value(text[i + 1]);
+            const int low = hex_digit_value(text[i + 2]);
             if (high < 0 || low < 0) {
                 return false;
             }
@@ -89,7 +77,7 @@ setup_form_result_t setup_form_parse(char *body, size_t length, const char *sess
             return SETUP_FORM_MALFORMED;
         }
         const size_t name_length = (size_t)(equals - pair);
-        /* Both parts are decoded in place; the '=' and '&' separators become their terminators. */
+        /* Both parts are decoded in place; '=', '&' and body[length] become their terminators. */
         if (!decode_component(pair, name_length) ||
             !decode_component(equals + 1, pair_length - name_length - 1U)) {
             return SETUP_FORM_MALFORMED;
