@@ -20,9 +20,9 @@
 ## Active stage: 0 — Scaffold
 
 - **Goal:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI.
-- **Progress:** repository conventions; ESP-IDF project, partition table and boot log; memory diagnostics; host test harness.
+- **Progress:** repository conventions; ESP-IDF project, partition table and boot log; memory diagnostics; host test harness; CI.
 - **Validation:** pending.
-- **Next:** CI workflow.
+- **Next:** stage review and first install on the unit.
 
 ## Evidence
 
