@@ -20,9 +20,15 @@ static ui_settings_control_hooks_t hooks;
 static settings_row_t rows[SETTINGS_COUNT];
 static lv_event_cb_t back_handler;
 
-/* Written by the storage task, read by the UI task. Only the latest result of each row matters. */
+typedef struct {
+    bool received;
+    uint8_t value;
+} external_value_t;
+
+/* Written by other tasks, read by the UI task. Only the latest result and external value of each row matter. */
 static portMUX_TYPE results_lock = portMUX_INITIALIZER_UNLOCKED;
 static save_result_t latest_results[SETTINGS_COUNT];
+static external_value_t latest_external[SETTINGS_COUNT];
 
 static bool apply(settings_id_t id, uint8_t value)
 {
@@ -118,19 +124,35 @@ lv_obj_t *ui_settings_control_create_screen(lv_event_cb_t on_back_clicked)
     return ui_settings_screen_create(rows, &HANDLERS);
 }
 
-void ui_settings_control_take_saved(void)
+void ui_settings_control_store_external(settings_id_t id, uint8_t value)
+{
+    if (id >= SETTINGS_COUNT) {
+        return;
+    }
+    taskENTER_CRITICAL(&results_lock);
+    latest_external[id] = (external_value_t){.received = true, .value = value};
+    taskEXIT_CRITICAL(&results_lock);
+}
+
+void ui_settings_control_take_changes(void)
 {
     save_result_t results[SETTINGS_COUNT];
+    external_value_t externals[SETTINGS_COUNT];
     taskENTER_CRITICAL(&results_lock);
     for (unsigned i = 0; i < SETTINGS_COUNT; ++i) {
         results[i] = latest_results[i];
         latest_results[i].received = false;
+        externals[i] = latest_external[i];
+        latest_external[i].received = false;
     }
     taskEXIT_CRITICAL(&results_lock);
 
     for (unsigned i = 0; i < SETTINGS_COUNT; ++i) {
         if (results[i].received) {
             settings_row_save_result(&rows[i], results[i].save_sequence, results[i].ok);
+        }
+        if (externals[i].received) {
+            run_effect(&rows[i], settings_row_external(&rows[i], externals[i].value));
         }
     }
     ui_settings_show(rows);

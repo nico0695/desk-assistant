@@ -116,3 +116,17 @@ settings_row_error_t settings_row_error(const settings_row_t *row)
     }
     return row->load_failed ? SETTINGS_ROW_ERROR_LOAD : SETTINGS_ROW_ERROR_NONE;
 }
+
+settings_row_effect_t settings_row_external(settings_row_t *row, uint8_t value)
+{
+    if (!settings_value_valid(row->id, value)) {
+        return NO_EFFECT;
+    }
+    row->dragging = false;
+    row->confirmed = value;
+    row->shown = value;
+    row->load_failed = false;
+    row->save_failed = false;
+    row->save_sequence++;
+    return (settings_row_effect_t){.apply = true, .value = value};
+}

@@ -29,7 +29,6 @@ static SemaphoreHandle_t nvs_lock;
 static QueueHandle_t write_requests;
 static bool available;
 
-/* Opens the namespace under the NVS lock, applies one write and commits. */
 typedef esp_err_t (*nvs_write_t)(nvs_handle_t handle, const char *key, const void *data, size_t size);
 
 static esp_err_t set_u8_entry(nvs_handle_t handle, const char *key, const void *data, size_t size)
@@ -43,6 +42,7 @@ static esp_err_t set_blob_entry(nvs_handle_t handle, const char *key, const void
     return nvs_set_blob(handle, key, data, size);
 }
 
+/* Opens the namespace under the NVS lock, applies one write and commits. */
 static esp_err_t write_entry(const char *name_space, const char *key, nvs_write_t write, const void *data,
                              size_t size)
 {

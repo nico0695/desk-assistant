@@ -1,4 +1,4 @@
 idf_component_register(SRCS "main.c"
-                       PRIV_REQUIRES board diagnostics esp_system log settings storage ui)
+                       PRIV_REQUIRES board bridge connectivity diagnostics esp_system log nvs_flash settings storage ui)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

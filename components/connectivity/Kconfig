@@ -1,0 +1,20 @@
+menu "Desk Assistant connectivity"
+
+    config CONNECTIVITY_USB_TASK_STACK_SIZE
+        int "USB provisioning task stack size (bytes)"
+        range 2048 8192
+        default 3584
+
+    config CONNECTIVITY_USB_TASK_PRIORITY
+        int "USB provisioning task priority"
+        range 1 10
+        default 2
+        help
+            Below the UI and storage tasks; a request is applied with synchronous NVS writes.
+
+    config CONNECTIVITY_USB_RX_BUFFER_SIZE
+        int "USB Serial/JTAG receive buffer (bytes)"
+        range 256 4096
+        default 1024
+
+endmenu

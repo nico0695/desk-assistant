@@ -161,6 +161,24 @@ static void test_cancel_after_a_failed_apply_clears_the_error_when_the_panel_kep
     TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_NONE, settings_row_error(&row));
 }
 
+static void test_an_external_value_is_confirmed_and_makes_a_pending_save_stale(void)
+{
+    settings_row_init(&row, SETTINGS_SCREEN_TIMEOUT, 30, true);
+    const settings_row_effect_t selected = settings_row_select(&row, 15);
+    const settings_row_effect_t external = settings_row_external(&row, 60);
+    TEST_ASSERT_TRUE(external.apply);
+    TEST_ASSERT_FALSE(external.save);
+    TEST_ASSERT_EQUAL_UINT8(60, external.value);
+    settings_row_apply_result(&row, 60, true);
+    TEST_ASSERT_EQUAL_UINT8(60, row.confirmed);
+    TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_NONE, settings_row_error(&row));
+    /* The UI save that was still in flight fails late: it no longer describes the row. */
+    settings_row_save_result(&row, selected.save_sequence, false);
+    TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_NONE, settings_row_error(&row));
+    TEST_ASSERT_FALSE(settings_row_external(&row, 45).apply);
+    TEST_ASSERT_EQUAL_UINT8(60, row.confirmed);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -177,5 +195,6 @@ int main(void)
     RUN_TEST(test_a_save_result_does_not_hide_a_current_apply_failure);
     RUN_TEST(test_returning_to_the_applied_brightness_clears_the_apply_error);
     RUN_TEST(test_cancel_after_a_failed_apply_clears_the_error_when_the_panel_kept_the_confirmed_value);
+    RUN_TEST(test_an_external_value_is_confirmed_and_makes_a_pending_save_stale);
     return UNITY_END();
 }

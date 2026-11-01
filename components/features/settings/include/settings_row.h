@@ -49,6 +49,12 @@ settings_row_effect_t settings_row_cancel(settings_row_t *row);
 /* A single choice (screen timeout): confirms, applies and saves at once. */
 settings_row_effect_t settings_row_select(settings_row_t *row, uint8_t value);
 
+/*
+ * A value saved outside Settings (USB provisioning): confirmed, shown and saved, with earlier errors cleared and any
+ * save still in flight made stale. Asks to apply it.
+ */
+settings_row_effect_t settings_row_external(settings_row_t *row, uint8_t value);
+
 /* A failed apply is not counted as applied. */
 void settings_row_apply_result(settings_row_t *row, uint8_t value, bool ok);
 

@@ -30,7 +30,7 @@ enum {
     EVENT_TOUCH = 1U << 0,
     EVENT_BATTERY = 1U << 1,
     EVENT_KEY = 1U << 2,
-    EVENT_SETTINGS_SAVED = 1U << 3,
+    EVENT_SETTINGS_CHANGED = 1U << 3,
 };
 
 static const char *TAG = "ui";
@@ -108,14 +108,14 @@ static void apply_screen_timeout(uint8_t seconds)
     screen_power_set_timeout(&screen, seconds, uptime_ms());
 }
 
-static void notify_settings_saved(void)
+static void notify_settings_changed(void)
 {
-    xTaskNotify(ui_task, EVENT_SETTINGS_SAVED, eSetBits);
+    xTaskNotify(ui_task, EVENT_SETTINGS_CHANGED, eSetBits);
 }
 
 static const ui_settings_control_hooks_t SETTINGS_HOOKS = {
     .apply_timeout = apply_screen_timeout,
-    .notify_saved = notify_settings_saved,
+    .notify_saved = notify_settings_changed,
 };
 
 static void update_screen(uint64_t now_ms, uint32_t screen_events)
@@ -229,8 +229,8 @@ static void run(void *unused)
         if (events & EVENT_BATTERY) {
             show_latest_battery();
         }
-        if (events & EVENT_SETTINGS_SAVED) {
-            ui_settings_control_take_saved();
+        if (events & EVENT_SETTINGS_CHANGED) {
+            ui_settings_control_take_changes();
         }
         uint32_t screen_events = 0;
         if (ui_display_port_take_touch_activity()) {
@@ -263,5 +263,13 @@ void ui_show_battery(bool known, uint8_t percent)
     taskEXIT_CRITICAL(&battery_lock);
     if (ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_BATTERY, eSetBits);
+    }
+}
+
+void ui_apply_stored_setting(settings_id_t id, uint8_t value)
+{
+    ui_settings_control_store_external(id, value);
+    if (ui_task != NULL) {
+        xTaskNotify(ui_task, EVENT_SETTINGS_CHANGED, eSetBits);
     }
 }
