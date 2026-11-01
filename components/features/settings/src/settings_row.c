@@ -28,7 +28,12 @@ settings_row_effect_t settings_row_drag(settings_row_t *row, uint8_t value)
     }
     row->dragging = true;
     row->shown = value;
-    if (!applies_while_dragging(row) || value == row->applied) {
+    if (!applies_while_dragging(row)) {
+        return NO_EFFECT;
+    }
+    if (value == row->applied) {
+        /* The panel already shows this value; an earlier failure is no longer current. */
+        row->apply_failed = false;
         return NO_EFFECT;
     }
     return (settings_row_effect_t){.apply = true, .value = value};
@@ -58,7 +63,11 @@ settings_row_effect_t settings_row_cancel(settings_row_t *row)
     }
     row->dragging = false;
     row->shown = row->confirmed;
-    if (!applies_while_dragging(row) || row->applied == row->confirmed) {
+    if (!applies_while_dragging(row)) {
+        return NO_EFFECT;
+    }
+    if (row->applied == row->confirmed) {
+        row->apply_failed = false;
         return NO_EFFECT;
     }
     return (settings_row_effect_t){.apply = true, .value = row->confirmed};

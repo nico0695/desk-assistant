@@ -143,6 +143,23 @@ static void test_a_save_result_does_not_hide_a_current_apply_failure(void)
     TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_APPLY, settings_row_error(&row));
 }
 
+static void test_returning_to_the_applied_brightness_clears_the_apply_error(void)
+{
+    settings_row_init(&row, SETTINGS_BRIGHTNESS, 70, false);
+    drag_and_apply(50, true);
+    drag_and_apply(30, false);
+    TEST_ASSERT_FALSE(settings_row_drag(&row, 50).apply);
+    TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_NONE, settings_row_error(&row));
+}
+
+static void test_cancel_after_a_failed_apply_clears_the_error_when_the_panel_kept_the_confirmed_value(void)
+{
+    settings_row_init(&row, SETTINGS_BRIGHTNESS, 70, false);
+    drag_and_apply(30, false);
+    TEST_ASSERT_FALSE(settings_row_cancel(&row).apply);
+    TEST_ASSERT_EQUAL(SETTINGS_ROW_ERROR_NONE, settings_row_error(&row));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -157,5 +174,7 @@ int main(void)
     RUN_TEST(test_only_the_latest_save_result_counts);
     RUN_TEST(test_a_successful_save_clears_a_load_error);
     RUN_TEST(test_a_save_result_does_not_hide_a_current_apply_failure);
+    RUN_TEST(test_returning_to_the_applied_brightness_clears_the_apply_error);
+    RUN_TEST(test_cancel_after_a_failed_apply_clears_the_error_when_the_panel_kept_the_confirmed_value);
     return UNITY_END();
 }
