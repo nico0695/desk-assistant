@@ -33,6 +33,9 @@ typedef struct {
 /* Panel awake. timeout_s is the inactivity timeout, or SCREEN_POWER_ALWAYS_ON. Times are monotonic. */
 void screen_power_init(screen_power_t *state, uint32_t timeout_s, uint64_t now_ms);
 
+/* Restarts the inactivity timer with a new timeout; always-on also wakes a sleeping panel on the next update. */
+void screen_power_set_timeout(screen_power_t *state, uint32_t timeout_s, uint64_t now_ms);
+
 /*
  * Pass TOUCH while the touch is held, not only on its first sample. KEY is one debounced press and toggles the
  * panel, also with always-on. The caller applies the returned action to the panel.

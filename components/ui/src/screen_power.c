@@ -7,6 +7,17 @@ void screen_power_init(screen_power_t *state, uint32_t timeout_s, uint64_t now_m
     *state = (screen_power_t){.timeout_s = timeout_s, .last_activity_ms = now_ms};
 }
 
+void screen_power_set_timeout(screen_power_t *state, uint32_t timeout_s, uint64_t now_ms)
+{
+    state->timeout_s = timeout_s;
+    if (now_ms > state->last_activity_ms) {
+        state->last_activity_ms = now_ms;
+    }
+    if (timeout_s == SCREEN_POWER_ALWAYS_ON && state->asleep) {
+        state->wake_pending = true;
+    }
+}
+
 static screen_action_t wake_panel(screen_power_t *state, uint64_t now_ms)
 {
     state->asleep = false;
