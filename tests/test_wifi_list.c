@@ -97,6 +97,9 @@ static void test_forget_removes_by_ssid_and_zeroes_the_slot(void)
     TEST_ASSERT_EQUAL_STRING("c", list.networks[0].ssid);
     TEST_ASSERT_EQUAL_STRING("a", list.networks[1].ssid);
     TEST_ASSERT_TRUE(wifi_list_valid(&list));
+    wifi_list_t damaged = list;
+    damaged.count = 200;
+    TEST_ASSERT_FALSE(wifi_list_forget(&damaged, "c"));
     TEST_ASSERT_TRUE(wifi_list_forget(&list, "c"));
     TEST_ASSERT_TRUE(wifi_list_forget(&list, "a"));
     const wifi_list_t empty = {0};

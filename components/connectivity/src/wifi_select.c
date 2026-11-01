@@ -26,15 +26,25 @@ static void start_attempt(wifi_select_t *state, uint8_t index, uint64_t now_ms)
     state->attempt_end_ms = now_ms + WIFI_SELECT_ATTEMPT_MS;
 }
 
+/* A round entry is left and may run now: setup only lets the preferred network through. */
+static bool candidate_ready(const wifi_select_t *state)
+{
+    return state->next < state->count && (!state->paused || state->preferred);
+}
+
+static bool scan_allowed(const wifi_select_t *state)
+{
+    return state->scan_pending && !state->paused;
+}
+
 void wifi_select_reset(wifi_select_t *state, uint64_t now_ms)
 {
     clear_keeping_pause(state);
     request_scan(state, now_ms);
 }
 
-void wifi_select_prefer(wifi_select_t *state, uint8_t index, uint64_t now_ms)
+void wifi_select_prefer(wifi_select_t *state, uint8_t index)
 {
-    (void)now_ms;
     clear_keeping_pause(state);
     state->order[0] = index;
     state->count = 1;
@@ -62,13 +72,16 @@ void wifi_select_note(const wifi_list_t *list, const char *ssid, int rssi, int16
     }
 }
 
-void wifi_select_round(wifi_select_t *state, uint8_t saved, const int16_t best[WIFI_LIST_CAPACITY])
+bool wifi_select_round(wifi_select_t *state, uint8_t saved, const int16_t best[WIFI_LIST_CAPACITY])
 {
+    if (!state->scanning) {
+        return false;
+    }
     if (saved > WIFI_LIST_CAPACITY) {
         saved = WIFI_LIST_CAPACITY;
     }
+    state->scanning = false;
     state->count = state->next = 0;
-    state->scan_pending = false;
     state->full_round = true;
     state->preferred = false;
     for (uint8_t i = 0; i < saved; ++i) {
@@ -87,28 +100,36 @@ void wifi_select_round(wifi_select_t *state, uint8_t saved, const int16_t best[W
             state->order[state->count++] = i;
         }
     }
+    return true;
 }
 
 void wifi_select_connected(wifi_select_t *state, uint8_t index)
 {
     clear_keeping_pause(state);
     state->target = (int8_t)index;
+    state->linked = true;
 }
 
-void wifi_select_disconnected(wifi_select_t *state, bool was_connected, uint64_t now_ms)
+void wifi_select_disconnected(wifi_select_t *state, int index, uint64_t now_ms)
 {
-    if (was_connected && state->target >= 0) {
-        state->attempting = false;
+    if (state->linked) {
+        if (index != state->target && index != WIFI_SELECT_UNKNOWN_NETWORK) {
+            return;
+        }
+        state->linked = false;
         state->lost = true;
         state->lost_end_ms = now_ms + WIFI_SELECT_LOSS_WINDOW_MS;
         state->retry_ms = now_ms;
-    } else if (state->attempting) {
+    } else if (state->attempting && index == state->target) {
         state->attempting = false;
     }
 }
 
 wifi_select_action_t wifi_select_step(wifi_select_t *state, uint64_t now_ms, uint8_t *index)
 {
+    if (state->linked || state->scanning) {
+        return WIFI_SELECT_WAIT;
+    }
     if (state->attempting) {
         if (now_ms < state->attempt_end_ms) {
             return WIFI_SELECT_WAIT;
@@ -128,7 +149,7 @@ wifi_select_action_t wifi_select_step(wifi_select_t *state, uint64_t now_ms, uin
         state->lost = false;
         request_scan(state, now_ms);
     }
-    if (state->next < state->count && (!state->paused || state->preferred)) {
+    if (candidate_ready(state)) {
         *index = state->order[state->next++];
         start_attempt(state, *index, now_ms);
         return WIFI_SELECT_CONNECT;
@@ -136,25 +157,24 @@ wifi_select_action_t wifi_select_step(wifi_select_t *state, uint64_t now_ms, uin
     if (state->count > 0) {
         request_scan(state, now_ms + (state->full_round ? WIFI_SELECT_ROUND_WAIT_MS : 0U));
     }
-    if (state->scan_pending && !state->paused && now_ms >= state->scan_ms) {
+    if (scan_allowed(state) && now_ms >= state->scan_ms) {
+        state->scan_pending = false;
+        state->scanning = true;
         return WIFI_SELECT_SCAN;
     }
     return WIFI_SELECT_WAIT;
 }
 
-uint64_t wifi_select_wake_ms(const wifi_select_t *state, uint64_t now_ms)
+uint64_t wifi_select_wake_ms(const wifi_select_t *state)
 {
+    if (state->linked || state->scanning) {
+        return WIFI_SELECT_NO_WAKE;
+    }
     if (state->attempting) {
         return state->attempt_end_ms;
     }
     if (state->lost) {
         return state->retry_ms < state->lost_end_ms ? state->retry_ms : state->lost_end_ms;
     }
-    if (state->next < state->count && (!state->paused || state->preferred)) {
-        return now_ms;
-    }
-    if (state->scan_pending && !state->paused) {
-        return state->scan_ms;
-    }
-    return WIFI_SELECT_NO_WAKE;
+    return scan_allowed(state) ? state->scan_ms : WIFI_SELECT_NO_WAKE;
 }

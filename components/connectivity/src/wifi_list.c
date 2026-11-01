@@ -128,7 +128,7 @@ wifi_list_save_t wifi_list_save(wifi_list_t *list, const char *ssid, const char 
 bool wifi_list_forget(wifi_list_t *list, const char *ssid)
 {
     const int found = wifi_list_find(list, ssid);
-    if (found < 0) {
+    if (found < 0 || list->count > WIFI_LIST_CAPACITY) {
         return false;
     }
     const unsigned index = (unsigned)found;
