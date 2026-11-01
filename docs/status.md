@@ -4,7 +4,7 @@
 
 | Stage | Scope | Status |
 |---|---|---|
-| 0 | Scaffold | In progress |
+| 0 | Scaffold | Awaiting validation |
 | 1 | Board and base UI | Pending |
 | 2 | Storage and settings | Pending |
 | 3 | Wi-Fi and provisioning | Pending |
@@ -20,9 +20,9 @@
 ## Active stage: 0 — Scaffold
 
 - **Goal:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI.
-- **Progress:** repository conventions; ESP-IDF project, partition table and boot log; memory diagnostics; host test harness; CI.
-- **Validation:** pending.
-- **Next:** stage review and first install on the unit.
+- **Progress:** repository conventions; ESP-IDF project, partition table and boot log; memory diagnostics; host test harness; CI. Stage review done; first install on the unit done.
+- **Validation:** waiting for user validation.
+- **Next:** stage 1, board and base UI.
 
 ## Evidence
 
@@ -31,3 +31,14 @@ Each checkpoint records one entry per image:
 - Date, revision, build profile and ELF SHA-256 of the application (printed at boot).
 - `build_verified`: yes or no, with the command used.
 - `hardware_verified`: yes, no or partial, with unit, power, port, executed cases, observations, failures and cases not run.
+
+### Stage 0 — 2026-11-01
+
+- **Revision:** `3cad47c`, integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `2a098538b64a2814e3094b7354eb3c7c095eaa52ba9e3cc948dfcf6362bc2971`. Application image 143184 bytes, 97% of the 4 MB app partition free.
+- **build_verified:** yes. Local build with the documented command; CI run on the same revision passed (host tests, build, lock unchanged).
+- **hardware_verified:** yes, boot only.
+  - Unit `esp32-02`: ESP32-C6 (QFN40) revision v0.2, 16 MB flash, battery present. USB-C data cable to the development host.
+  - Cases: full flash erase, flash with verified hashes, boot from the new partition table, app version and ELF SHA-256 in the log, memory report.
+  - Memory at boot: internal heap free 464936 B, minimum 464936 B, largest block 434176 B. Minimum free stack: `main` 2304 B, `IDLE` 1364 B, `esp_timer` 3868 B.
+  - Not run: display, touch, KEY, battery, audio and network; they are not part of this stage.
