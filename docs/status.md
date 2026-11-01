@@ -20,7 +20,7 @@
 ## Active stage: 2 — Storage and settings
 
 - **Goal:** reliable persistence and the complete Settings screen.
-- **Progress:** spec, design and plan approved. Steps 1–4 committed and reviewed (setting values and row state, NVS storage with a write worker, Settings view and preview, Settings control). Board validation pending: the unit was not connected.
+- **Progress:** all steps done and the closing 4R review applied. Checkpoint recorded below; waiting for user validation.
 
 ## Closed stages
 
@@ -58,3 +58,18 @@ Each checkpoint records one entry per image:
   - Memory: internal heap free 357848 B, largest block 335872 B after the UI starts. Minimum free stack: `ui` 1976–2100 B of 6144, `battery` 1396 B, `IDLE` 1300 B. LVGL pool peak 9.2 KB of 64 KB without navigation.
   - Idle: 4–5 UI task wakeups per minute with the panel off.
   - During development the unit once stopped answering on USB after a flash until it was reconnected.
+
+### Stage 2 — 2026-11-01
+
+- **Revision:** `aebffa7`, integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `f107a8ca63602839f8b48fd1a003ba27f3d450af1467390c6f891831882b425b`. Application image 594352 bytes, 86% of the 4 MB app partition free.
+- **build_verified:** yes. Local build from the committed revision with the documented command; host tests 8/8; `dependencies.lock` unchanged.
+- **hardware_verified:** yes.
+  - Unit `esp32-02` (ESP32-C6 QFN40 v0.2), battery present, USB-C data cable on `/dev/cu.usbmodem101`. Flashed with verified hashes; boot log shows app version `aebffa7` and the ELF SHA-256 above.
+  - First boot on empty NVS: defaults without load errors.
+  - Smoke test by the user: Settings layout, brightness drag (including 10%), volume 0 and 100, each screen timeout and always-on, panel off with KEY in the middle of a brightness drag, touches during a save. All passed.
+  - Persistence: after a reset the user saw the values set before it. NVS then held 4 entries (3 keys and the namespace) of 2016.
+  - NVS commits: 21 writes, 0.6–12.8 ms each, with no visible effect on touch or drawing.
+  - Memory: internal heap free 344976 B, largest block 327680 B at boot. Minimum free stack after the smoke test: `ui` 1576 B of 6144, `storage` 1376 B of 3072, `battery` 1392 B. LVGL pool peak 15.5 KB of 64 KB.
+  - Not run: a failed save or load on the device (covered by host tests and the preview); volume has no audible effect until stage 6.
+
