@@ -1,0 +1,12 @@
+menu "Desk Assistant diagnostics"
+
+    config DESK_MEMORY_DIAGNOSTICS
+        bool "Log memory and stack usage at checkpoints"
+        default y
+        select FREERTOS_USE_TRACE_FACILITY
+        help
+            Logs the internal heap free size, minimum free size and largest
+            free block, and the minimum free stack of every task, each time a
+            checkpoint is reported.
+
+endmenu
