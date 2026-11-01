@@ -1,0 +1,17 @@
+/build*/
+/managed_components/
+/sdkconfig
+/sdkconfig.old
+.env
+.env.*
+/secrets/
+
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+
+/.local/
+/.agents/
+/.claude/
+/skills-lock.json
