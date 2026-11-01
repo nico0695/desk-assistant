@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include "esp_err.h"
+#include "connectivity_view.h"
 #include "esp_wifi_types.h"
 #include "wifi_list.h"
 
@@ -21,6 +22,12 @@ bool network_store_failed(void);
  * replaced_ssid receives the network dropped from a full list, or an empty string.
  */
 esp_err_t network_store_save(const char *ssid, const char *password, char replaced_ssid[WIFI_SSID_SIZE]);
+
+/* Removes the network by name and persists the list with one write; ESP_ERR_NOT_FOUND if it is not saved. */
+esp_err_t network_store_forget(const char *ssid);
+
+/* Fills the saved SSIDs and the list error of a view; passwords are never copied. */
+void network_store_fill_view(connectivity_view_t *view);
 
 uint8_t network_store_count(void);
 

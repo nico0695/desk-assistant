@@ -17,4 +17,16 @@ menu "Desk Assistant connectivity"
         range 256 4096
         default 1024
 
+    config CONNECTIVITY_HTTPD_STACK_SIZE
+        int "Setup HTTP server task stack size (bytes)"
+        range 3072 8192
+        default 4096
+
+    config CONNECTIVITY_HTTPD_PRIORITY
+        int "Setup HTTP server task priority"
+        range 1 10
+        default 3
+        help
+            Below the UI task; the server only runs while the setup access point is open.
+
 endmenu

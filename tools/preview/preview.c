@@ -125,6 +125,7 @@ static const ui_settings_handlers_t SETTINGS_HANDLERS = {
     .on_select_timeout = ignore_timeout,
     .on_closed = ignore_closed,
     .on_back = ignore_back,
+    .on_wifi = ignore_back,
 };
 
 static void ignore_ssid(const char *ssid)
@@ -175,22 +176,13 @@ static lv_obj_t *create_wifi_with_dialog(const connectivity_view_t *view, ui_wif
     return screen;
 }
 
-static ui_settings_handlers_t settings_handlers_with_wifi(void)
-{
-    ui_settings_handlers_t handlers = SETTINGS_HANDLERS;
-    handlers.on_wifi = ignore_back;
-    return handlers;
-}
-
 static lv_obj_t *create_settings_with_wifi(connectivity_state_t state)
 {
-    static ui_settings_handlers_t handlers;
-    handlers = settings_handlers_with_wifi();
     settings_row_t rows[SETTINGS_COUNT];
     settings_row_init(&rows[SETTINGS_SCREEN_TIMEOUT], SETTINGS_SCREEN_TIMEOUT, SETTINGS_SCREEN_TIMEOUT_DEFAULT_S, false);
     settings_row_init(&rows[SETTINGS_VOLUME], SETTINGS_VOLUME, SETTINGS_VOLUME_DEFAULT_PERCENT, false);
     settings_row_init(&rows[SETTINGS_BRIGHTNESS], SETTINGS_BRIGHTNESS, SETTINGS_BRIGHTNESS_DEFAULT_PERCENT, false);
-    lv_obj_t *screen = ui_settings_screen_create(rows, &handlers);
+    lv_obj_t *screen = ui_settings_screen_create(rows, &SETTINGS_HANDLERS);
     ui_settings_show_wifi(state);
     return screen;
 }

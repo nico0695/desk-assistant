@@ -31,6 +31,7 @@ static esp_err_t store_screen_timeout(uint8_t seconds)
 static const connectivity_hooks_t CONNECTIVITY_HOOKS = {
     .screen_timeout_valid = screen_timeout_valid,
     .store_screen_timeout = store_screen_timeout,
+    .view_changed = ui_show_connectivity,
 };
 
 /* Only whether an origin is usable; the URL and token are never logged. */

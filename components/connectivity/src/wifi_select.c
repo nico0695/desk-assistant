@@ -43,6 +43,11 @@ void wifi_select_reset(wifi_select_t *state, uint64_t now_ms)
     request_scan(state, now_ms);
 }
 
+void wifi_select_stop(wifi_select_t *state)
+{
+    clear_keeping_pause(state);
+}
+
 void wifi_select_prefer(wifi_select_t *state, uint8_t index)
 {
     clear_keeping_pause(state);

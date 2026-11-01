@@ -65,6 +65,34 @@ esp_err_t network_store_save(const char *ssid, const char *password, char replac
     return error;
 }
 
+esp_err_t network_store_forget(const char *ssid)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    staging = saved;
+    esp_err_t error = ESP_ERR_NOT_FOUND;
+    if (wifi_list_forget(&staging, ssid)) {
+        error = storage_set_blob(NETWORK_NAMESPACE, NETWORK_LIST_KEY, &staging, sizeof(staging));
+        if (error == ESP_OK) {
+            saved = staging;
+            load_failed = false;
+        }
+    }
+    memset(&staging, 0, sizeof(staging));
+    xSemaphoreGive(lock);
+    return error;
+}
+
+void network_store_fill_view(connectivity_view_t *view)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    view->saved_count = saved.count;
+    for (unsigned i = 0; i < saved.count; ++i) {
+        memcpy(view->saved[i], saved.networks[i].ssid, sizeof(view->saved[i]));
+    }
+    view->list_failed = load_failed;
+    xSemaphoreGive(lock);
+}
+
 uint8_t network_store_count(void)
 {
     xSemaphoreTake(lock, portMAX_DELAY);

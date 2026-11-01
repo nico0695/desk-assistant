@@ -24,6 +24,8 @@
 #define SETUP_NONCE_LENGTH 32U
 #define SETUP_NONCE_SIZE (SETUP_NONCE_LENGTH + 1U)
 #define SETUP_URL "http://192.168.4.1"
+#define SETUP_AP_CHANNEL 1U
+#define SETUP_AP_MAX_CLIENTS 2U
 
 /* USB provisioning: one JSON line per request over USB Serial/JTAG. */
 #define PROVISION_PROTOCOL_VERSION 1U

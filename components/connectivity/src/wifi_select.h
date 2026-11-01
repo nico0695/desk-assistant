@@ -41,6 +41,9 @@ typedef struct {
 /* Starts over with a scan now: boot or list change without a link. Keeps the setup pause. */
 void wifi_select_reset(wifi_select_t *state, uint64_t now_ms);
 
+/* Goes idle: nothing is scanned or tried until the next reset or prefer (no saved network left). Keeps the setup pause. */
+void wifi_select_stop(wifi_select_t *state);
+
 /* Tries one network first, even during setup (a network just saved); its failure leads to a scan. */
 void wifi_select_prefer(wifi_select_t *state, uint8_t index);
 

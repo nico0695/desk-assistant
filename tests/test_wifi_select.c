@@ -156,6 +156,18 @@ static void test_a_late_scan_result_does_not_replace_a_link_or_a_preferred_netwo
     expect_action(&state, 20, WIFI_SELECT_WAIT);
 }
 
+static void test_a_stopped_selection_stays_idle_until_reset(void)
+{
+    wifi_select_t state;
+    wifi_select_reset(&state, 0);
+    expect_action(&state, 0, WIFI_SELECT_SCAN);
+    wifi_select_stop(&state);
+    expect_action(&state, 100000, WIFI_SELECT_WAIT);
+    TEST_ASSERT_EQUAL_UINT64(WIFI_SELECT_NO_WAKE, wifi_select_wake_ms(&state));
+    wifi_select_reset(&state, 200000);
+    expect_action(&state, 200000, WIFI_SELECT_SCAN);
+}
+
 static void test_an_ip_counts_only_during_an_attempt(void)
 {
     wifi_select_t state;
@@ -271,6 +283,7 @@ int main(void)
     RUN_TEST(test_an_exhausted_round_waits_30_seconds_before_scanning);
     RUN_TEST(test_a_stable_link_is_kept_until_it_is_lost);
     RUN_TEST(test_a_late_scan_result_does_not_replace_a_link_or_a_preferred_network);
+    RUN_TEST(test_a_stopped_selection_stays_idle_until_reset);
     RUN_TEST(test_an_ip_counts_only_during_an_attempt);
     RUN_TEST(test_a_lost_link_retries_every_5_seconds_for_30_then_scans);
     RUN_TEST(test_a_preferred_network_is_tried_first_and_its_failure_scans);

@@ -15,7 +15,7 @@ typedef struct {
 /* Owns the Settings rows for the UI task. Call once from the UI task with the settings loaded at boot. */
 void ui_settings_control_init(const settings_loaded_t *loaded, const ui_settings_control_hooks_t *hooks);
 
-lv_obj_t *ui_settings_control_create_screen(lv_event_cb_t on_back);
+lv_obj_t *ui_settings_control_create_screen(lv_event_cb_t on_back, lv_event_cb_t on_wifi);
 
 /* Keeps a value saved outside Settings for the next ui_settings_control_take_changes. Safe from any task. */
 void ui_settings_control_store_external(settings_id_t id, uint8_t value);

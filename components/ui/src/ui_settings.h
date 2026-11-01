@@ -15,7 +15,7 @@ typedef struct {
     /* The screen is being deleted, possibly mid-drag. */
     void (*on_closed)(void);
     lv_event_cb_t on_back;
-    /* Opens the Wi-Fi screen. NULL leaves the Wi-Fi button out until the screen can be opened. */
+    /* Opens the Wi-Fi screen. */
     lv_event_cb_t on_wifi;
 } ui_settings_handlers_t;
 

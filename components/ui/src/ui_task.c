@@ -16,6 +16,7 @@
 #include "ui_settings_control.h"
 #include "ui_status_bar.h"
 #include "ui_theme.h"
+#include "ui_wifi_control.h"
 
 #define UI_TASK_NAME "ui"
 #define US_PER_MS 1000
@@ -31,6 +32,7 @@ enum {
     EVENT_BATTERY = 1U << 1,
     EVENT_KEY = 1U << 2,
     EVENT_SETTINGS_CHANGED = 1U << 3,
+    EVENT_CONNECTIVITY = 1U << 4,
 };
 
 static const char *TAG = "ui";
@@ -232,6 +234,9 @@ static void run(void *unused)
         if (events & EVENT_SETTINGS_CHANGED) {
             ui_settings_control_take_changes();
         }
+        if (events & EVENT_CONNECTIVITY) {
+            ui_wifi_control_take_view();
+        }
         uint32_t screen_events = 0;
         if (ui_display_port_take_touch_activity()) {
             screen_events |= SCREEN_EVENT_TOUCH;
@@ -271,5 +276,13 @@ void ui_apply_stored_setting(settings_id_t id, uint8_t value)
     ui_settings_control_store_external(id, value);
     if (ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_SETTINGS_CHANGED, eSetBits);
+    }
+}
+
+void ui_show_connectivity(const connectivity_view_t *view)
+{
+    ui_wifi_control_store_view(view);
+    if (ui_task != NULL) {
+        xTaskNotify(ui_task, EVENT_CONNECTIVITY, eSetBits);
     }
 }

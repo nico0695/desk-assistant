@@ -8,6 +8,7 @@
 #include "settings.h"
 #include "settings_row.h"
 #include "ui_settings.h"
+#include "ui_wifi_control.h"
 
 typedef struct {
     bool received;
@@ -19,6 +20,7 @@ static const char *TAG = "ui_settings";
 static ui_settings_control_hooks_t hooks;
 static settings_row_t rows[SETTINGS_COUNT];
 static lv_event_cb_t back_handler;
+static lv_event_cb_t wifi_handler;
 
 typedef struct {
     bool received;
@@ -102,12 +104,18 @@ static void on_back(lv_event_t *event)
     back_handler(event);
 }
 
+static void on_wifi(lv_event_t *event)
+{
+    wifi_handler(event);
+}
+
 static const ui_settings_handlers_t HANDLERS = {
     .on_drag = on_drag,
     .on_release = on_release,
     .on_select_timeout = on_select_timeout,
     .on_closed = on_closed,
     .on_back = on_back,
+    .on_wifi = on_wifi,
 };
 
 void ui_settings_control_init(const settings_loaded_t *loaded, const ui_settings_control_hooks_t *control_hooks)
@@ -118,10 +126,13 @@ void ui_settings_control_init(const settings_loaded_t *loaded, const ui_settings
     }
 }
 
-lv_obj_t *ui_settings_control_create_screen(lv_event_cb_t on_back_clicked)
+lv_obj_t *ui_settings_control_create_screen(lv_event_cb_t on_back_clicked, lv_event_cb_t on_wifi_clicked)
 {
     back_handler = on_back_clicked;
-    return ui_settings_screen_create(rows, &HANDLERS);
+    wifi_handler = on_wifi_clicked;
+    lv_obj_t *screen = ui_settings_screen_create(rows, &HANDLERS);
+    ui_settings_show_wifi(ui_wifi_control_state());
+    return screen;
 }
 
 void ui_settings_control_store_external(settings_id_t id, uint8_t value)

@@ -174,14 +174,11 @@ static void show_row(const settings_row_t *row)
 
 static void create_bottom_buttons(lv_obj_t *screen)
 {
-    const bool with_wifi = handlers->on_wifi != NULL;
     lv_obj_t *back = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_LEFT, UI_TEXT_BACK);
-    lv_obj_set_size(back, with_wifi ? UI_BACK_WITH_ACTION_WIDTH_PX : UI_CONTENT_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
+    lv_obj_set_size(back, UI_BACK_WITH_ACTION_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
     lv_obj_align(back, LV_ALIGN_BOTTOM_LEFT, UI_SCREEN_MARGIN_PX, -UI_SCREEN_MARGIN_PX);
     lv_obj_add_event_cb(back, handlers->on_back, LV_EVENT_CLICKED, NULL);
-    if (!with_wifi) {
-        return;
-    }
+
     lv_obj_t *wifi = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_WIFI, UI_TEXT_WIFI_SHORT_NO_NETWORKS);
     lv_obj_set_size(wifi, UI_CONTENT_WIDTH_PX - UI_GAP_PX - UI_BACK_WITH_ACTION_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
     lv_obj_align(wifi, LV_ALIGN_BOTTOM_RIGHT, -UI_SCREEN_MARGIN_PX, -UI_SCREEN_MARGIN_PX);

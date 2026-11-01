@@ -47,10 +47,25 @@ esp_err_t connectivity_start(const connectivity_hooks_t *connectivity_hooks)
     hooks = *connectivity_hooks;
     network_store_load();
     /* A Wi-Fi failure does not stop provisioning over USB. */
-    const esp_err_t station_error = station_start();
+    const esp_err_t station_error = station_start(hooks.view_changed);
     if (station_error != ESP_OK) {
         ESP_LOGE(TAG, "station not started: %s", esp_err_to_name(station_error));
     }
     ESP_RETURN_ON_ERROR(provision_usb_start(&USB_ACTIONS), TAG, "USB provisioning not started");
     return ESP_OK;
+}
+
+void connectivity_forget(const char *ssid)
+{
+    station_forget(ssid);
+}
+
+void connectivity_open_setup(void)
+{
+    station_open_setup();
+}
+
+void connectivity_cancel_setup(void)
+{
+    station_cancel_setup();
 }
