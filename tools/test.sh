@@ -13,5 +13,5 @@ if [ ! -f "$UNITY_DIR/unity.c" ]; then
 fi
 
 cmake -S "$REPO_ROOT/tests" -B "$BUILD_DIR" -G Ninja -D UNITY_DIR="$UNITY_DIR" > /dev/null
-cmake --build "$BUILD_DIR" > /dev/null
+cmake --build "$BUILD_DIR"
 ctest --test-dir "$BUILD_DIR" --output-on-failure
