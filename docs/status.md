@@ -20,14 +20,14 @@
 ## Active stage: 0 — Scaffold
 
 - **Goal:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI.
-- **Progress:** repository conventions.
+- **Progress:** repository conventions; ESP-IDF project, partition table and boot log.
 - **Validation:** pending.
-- **Next:** ESP-IDF project skeleton.
+- **Next:** memory diagnostics.
 
 ## Evidence
 
 Each checkpoint records one entry per image:
 
-- Date, revision, build profile and SHA-256 of the application image.
+- Date, revision, build profile and ELF SHA-256 of the application (printed at boot).
 - `build_verified`: yes or no, with the command used.
 - `hardware_verified`: yes, no or partial, with unit, power, port, executed cases, observations, failures and cases not run.

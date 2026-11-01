@@ -1,0 +1,4 @@
+# Name,     Type, SubType, Offset,   Size
+nvs,        data, nvs,     0x9000,   0x10000
+factory,    app,  factory, 0x20000,  0x400000
+audio_tmp,  data, 0x40,    0x420000, 0x100000
