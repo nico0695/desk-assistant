@@ -29,19 +29,43 @@ static SemaphoreHandle_t nvs_lock;
 static QueueHandle_t write_requests;
 static bool available;
 
-static esp_err_t write_u8(const write_request_t *request)
+/* Opens the namespace under the NVS lock, applies one write and commits. */
+typedef esp_err_t (*nvs_write_t)(nvs_handle_t handle, const char *key, const void *data, size_t size);
+
+static esp_err_t set_u8_entry(nvs_handle_t handle, const char *key, const void *data, size_t size)
 {
+    (void)size;
+    return nvs_set_u8(handle, key, *(const uint8_t *)data);
+}
+
+static esp_err_t set_blob_entry(nvs_handle_t handle, const char *key, const void *data, size_t size)
+{
+    return nvs_set_blob(handle, key, data, size);
+}
+
+static esp_err_t write_entry(const char *name_space, const char *key, nvs_write_t write, const void *data,
+                             size_t size)
+{
+    const int64_t started_us = esp_timer_get_time();
     nvs_handle_t handle;
     xSemaphoreTake(nvs_lock, portMAX_DELAY);
-    esp_err_t error = nvs_open(request->name_space, NVS_READWRITE, &handle);
+    esp_err_t error = nvs_open(name_space, NVS_READWRITE, &handle);
     if (error == ESP_OK) {
-        error = nvs_set_u8(handle, request->key, request->value);
+        error = write(handle, key, data, size);
         if (error == ESP_OK) {
             error = nvs_commit(handle);
         }
         nvs_close(handle);
     }
     xSemaphoreGive(nvs_lock);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "write %s/%s failed: %s", name_space, key, esp_err_to_name(error));
+    }
+#if CONFIG_DESK_MEMORY_DIAGNOSTICS
+    ESP_LOGI(TAG, "write %s/%s took %lld us", name_space, key, (long long)(esp_timer_get_time() - started_us));
+#else
+    (void)started_us;
+#endif
     return error;
 }
 
@@ -51,17 +75,8 @@ static void run(void *unused)
     write_request_t request;
     for (;;) {
         xQueueReceive(write_requests, &request, portMAX_DELAY);
-        const int64_t started_us = esp_timer_get_time();
-        const esp_err_t error = write_u8(&request);
-        if (error != ESP_OK) {
-            ESP_LOGW(TAG, "write %s/%s failed: %s", request.name_space, request.key, esp_err_to_name(error));
-        }
-#if CONFIG_DESK_MEMORY_DIAGNOSTICS
-        ESP_LOGI(TAG, "write %s/%s took %lld us", request.name_space, request.key,
-                 (long long)(esp_timer_get_time() - started_us));
-#else
-        (void)started_us;
-#endif
+        const esp_err_t error =
+            write_entry(request.name_space, request.key, set_u8_entry, &request.value, sizeof(request.value));
         if (request.on_done != NULL) {
             request.on_done(error, request.token, request.context);
         }
@@ -146,4 +161,43 @@ esp_err_t storage_set_u8_async(const char *name_space, const char *key, uint8_t 
         .context = context,
     };
     return xQueueSend(write_requests, &request, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+esp_err_t storage_set_u8(const char *name_space, const char *key, uint8_t value)
+{
+    if (!available) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return write_entry(name_space, key, set_u8_entry, &value, sizeof(value));
+}
+
+esp_err_t storage_get_blob(const char *name_space, const char *key, void *data, size_t size)
+{
+    if (!available) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    nvs_handle_t handle;
+    size_t stored_size = size;
+    xSemaphoreTake(nvs_lock, portMAX_DELAY);
+    esp_err_t error = nvs_open(name_space, NVS_READONLY, &handle);
+    if (error == ESP_OK) {
+        error = nvs_get_blob(handle, key, data, &stored_size);
+        nvs_close(handle);
+    }
+    xSemaphoreGive(nvs_lock);
+    if (error == ESP_OK && stored_size != size) {
+        error = ESP_ERR_INVALID_SIZE;
+    }
+    if (error == ESP_ERR_NVS_INVALID_LENGTH) {
+        error = ESP_ERR_INVALID_SIZE;
+    }
+    return error;
+}
+
+esp_err_t storage_set_blob(const char *name_space, const char *key, const void *data, size_t size)
+{
+    if (!available) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return write_entry(name_space, key, set_blob_entry, data, size);
 }

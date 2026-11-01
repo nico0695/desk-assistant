@@ -44,3 +44,11 @@ esp_err_t settings_save(settings_id_t id, uint8_t value, uint32_t save_sequence,
     }
     return storage_set_u8_async(SETTINGS_NAMESPACE, KEYS[id], value, save_sequence, on_saved, context);
 }
+
+esp_err_t settings_store(settings_id_t id, uint8_t value)
+{
+    if (id >= SETTINGS_COUNT || !settings_value_valid(id, value)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return storage_set_u8(SETTINGS_NAMESPACE, KEYS[id], value);
+}
