@@ -9,9 +9,7 @@
 #include "ui_home.h"
 #include "ui_section.h"
 #include "ui_status_bar.h"
-#include "ui_text.h"
 #include "ui_theme.h"
-#include "ui_widgets.h"
 
 #define WIDTH BOARD_DISPLAY_WIDTH_PX
 #define HEIGHT BOARD_DISPLAY_HEIGHT_PX
@@ -58,9 +56,10 @@ static void write_png(const char *directory, const char *name)
 {
     for (size_t i = 0; i < (size_t)WIDTH * HEIGHT; ++i) {
         const uint16_t pixel = framebuffer[i];
-        rgb_image[i * 3] = expand_channel(pixel >> 11, 5);
-        rgb_image[i * 3 + 1] = expand_channel((pixel >> 5) & 0x3f, 6);
-        rgb_image[i * 3 + 2] = expand_channel(pixel & 0x1f, 5);
+        uint8_t *rgb = &rgb_image[i * RGB888_BYTES_PER_PIXEL];
+        rgb[0] = expand_channel(pixel >> 11, 5);
+        rgb[1] = expand_channel((pixel >> 5) & 0x3f, 6);
+        rgb[2] = expand_channel(pixel & 0x1f, 5);
     }
 
     char path[512];

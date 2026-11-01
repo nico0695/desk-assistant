@@ -10,8 +10,8 @@ typedef struct {
     uint8_t percent;
 } ui_battery_t;
 
-/* Adds the bar to the top of a screen. Only the bar of the active screen is updated. */
+/* Adds the bar to the top of a screen. The most recently created bar receives updates; create it on the screen about to be loaded. */
 lv_obj_t *ui_status_bar_create(lv_obj_t *screen, const char *title);
 
-/* Shows the reading on the current bar and keeps it for bars created later. */
+/* Shows the reading on the most recent bar and keeps it for bars created later. */
 void ui_status_bar_set_battery(ui_battery_t battery);

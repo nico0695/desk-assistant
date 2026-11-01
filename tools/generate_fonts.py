@@ -29,13 +29,13 @@ FONT_METRICS = {20: (22, 4), 24: (27, 5), 28: (30, 5)}
 CANVAS_SIZE = 64
 CANVAS_ORIGIN_X = 16
 CANVAS_BASELINE_Y = 32
-GRAY_LEVELS_4BPP = 17
+QUANTIZATION_STEP_4BPP = 17  # 255 / 15: 16 gray levels
 ADVANCE_SCALE = 16
 BITMAP_BYTES_PER_ROW = 12
 
 
 def quantize_to_4bpp(value: int) -> int:
-    return ((value + GRAY_LEVELS_4BPP // 2) // GRAY_LEVELS_4BPP) * GRAY_LEVELS_4BPP
+    return ((value + QUANTIZATION_STEP_4BPP // 2) // QUANTIZATION_STEP_4BPP) * QUANTIZATION_STEP_4BPP
 
 
 def render_glyphs(font: ImageFont.FreeTypeFont, line_height: int, base_line: int) -> tuple[bytearray, list[dict]]:
@@ -66,7 +66,7 @@ def render_glyphs(font: ImageFont.FreeTypeFont, line_height: int, base_line: int
             raise ValueError(f"Glyph U+{codepoint:04X} exceeds the line box")
 
         start = len(bitmaps)
-        pixels = [value // GRAY_LEVELS_4BPP for value in canvas.crop(bounds).getdata()]
+        pixels = [value // QUANTIZATION_STEP_4BPP for value in canvas.crop(bounds).getdata()]
         for i in range(0, len(pixels), 2):
             low = pixels[i + 1] if i + 1 < len(pixels) else 0
             bitmaps.append((pixels[i] << 4) | low)
