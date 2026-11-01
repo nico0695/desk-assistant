@@ -14,6 +14,7 @@ Desk Assistant is ESP32-C6 firmware for a voice and notification terminal that w
 - ESP-IDF 5.5.2, target `esp32c6`, LVGL 9.2.2. Versions are pinned in the manifests and `dependencies.lock`; never update them incidentally.
 - Build: `idf.py -B build-app -D SDKCONFIG="$PWD/build-app/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults" build`
 - Host tests: `tools/test.sh`
+- Device log: `tools/device_log.py` resets the device and reads its serial log; it needs the ESP-IDF environment exported.
 - There is one integrated build profile. Add another only for a concrete need, with its own build directory.
 
 ## Architecture
@@ -46,6 +47,8 @@ Desk Assistant is ESP32-C6 firmware for a voice and notification terminal that w
 - An incomplete upload is `unsent` only if it fails before the first write of the last audio block; from then on a failure stays uncertain.
 
 ## Stage workflow
+
+To continue the implementation, use the `stage` skill (`/stage plan|run|close [number]`). It holds the procedure; this section holds the rules it follows.
 
 1. Stage spec with its open definitions closed.
 2. Validated design: the simplest solution that meets the spec.
