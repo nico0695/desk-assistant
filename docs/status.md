@@ -23,8 +23,8 @@
 - **Decisions:** V4 look with larger type (20/24/28 px) and 72 px buttons; icons with labels; Latin-1 fallback fonts regenerated; one UI task that owns LVGL and sleeps when idle; touch by interrupt; no physical power measurement (idle checked in software); panel off with display OFF, no sleep-in.
 - **Progress:**
   - [x] 1. Pure board logic with host tests.
-  - [ ] 2. UI base on the host with PNG preview (design review).
-  - [ ] 3. Board drivers.
+  - [x] 2. UI base on the host with PNG preview (design review pending).
+  - [x] 3. Board drivers.
   - [ ] 4. UI on the board.
   - [ ] 5. Screen power, KEY and wake gesture.
   - [ ] 6. Stage review and checkpoint.

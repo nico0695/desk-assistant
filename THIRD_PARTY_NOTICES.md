@@ -2,13 +2,29 @@
 
 The project is MIT licensed (see `LICENSE`). The pieces below keep their own license and attribution.
 
-## CST9220 touch packet decoding
+## CST9220 touch driver
 
-`components/board/src/touch_decode.*` derives the packet layout from `esp_lcd_touch_cst9217`, modified to validate every packet and map points to the display orientation.
+`components/board/src/touch_decode.*` and `board_touch.c` derive the packet layout and the reset and read sequence from `esp_lcd_touch_cst9217`, modified to validate every packet and map points to the display orientation. The mirror-then-swap order follows `esp_lcd_touch`.
 
 - Authors: Espressif Systems (Shanghai) CO LTD, Waveshare
 - License: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
-- Source: [Waveshare-ESP32-components @ 23a6012](https://github.com/waveshareteam/Waveshare-ESP32-components/tree/23a6012d5e87d27399cf90fb851cab3689e29159/display/touch/esp_lcd_touch_cst9217)
+- Sources: [Waveshare-ESP32-components @ 23a6012](https://github.com/waveshareteam/Waveshare-ESP32-components/tree/23a6012d5e87d27399cf90fb851cab3689e29159/display/touch/esp_lcd_touch_cst9217), [esp-bsp esp_lcd_touch @ f259a6a](https://github.com/espressif/esp-bsp/blob/f259a6abd5808019b1903a422092a4234ca95a51/components/lcd_touch/esp_lcd_touch/esp_lcd_touch.c)
+
+## CO5300 panel driver
+
+`components/board/src/board_display.c` derives the QSPI command and color framing from `esp_lcd_sh8601`, modified for direct use with partial DMA buffers. The panel init values come from the board manufacturer's example.
+
+- Authors: Espressif Systems (Shanghai) CO LTD
+- License: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
+- Sources: [esp-iot-solution esp_lcd_sh8601 @ 4962410](https://github.com/espressif/esp-iot-solution/blob/4962410c80a51cd5822da1d8d2041eb4285265f1/components/display/lcd/esp_lcd_sh8601/esp_lcd_sh8601.c), [Waveshare board example @ 2945437](https://github.com/waveshareteam/ESP32-C6-Touch-AMOLED-2.16/blob/294543798f1a44e2f2c4d2976522323f2beee11d/02_Example/ESP-IDF-v5.5.3/09_LVGL_V9_Test/components/port_bsp/display_bsp.cpp)
+
+## AXP2101 register facts
+
+`components/board/src/board_power.c` uses register addresses and bit meanings consulted in XPowersLib and the X-Powers datasheet. No XPowersLib code is included.
+
+- Author: Lewis He (XPowersLib)
+- License: MIT
+- Source: [XPowersLib](https://github.com/lewisxhe/XPowersLib)
 
 ## Latin-1 fallback fonts
 

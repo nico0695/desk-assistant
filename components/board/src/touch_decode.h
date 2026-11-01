@@ -11,16 +11,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TOUCH_PACKET_LENGTH 10U
+#include "board_touch_sample.h"
 
-typedef struct {
-    bool pressed;
-    uint16_t x;
-    uint16_t y;
-} touch_sample_t;
+#define TOUCH_PACKET_LENGTH 10U
 
 /*
  * Returns false for a malformed packet or out-of-range point; the sample is then released, never pressed.
  * A valid release keeps the last coordinates. Coordinates are mapped to the display orientation.
  */
-bool touch_decode(const uint8_t *packet, size_t length, touch_sample_t *sample);
+bool touch_decode(const uint8_t *packet, size_t length, board_touch_sample_t *sample);

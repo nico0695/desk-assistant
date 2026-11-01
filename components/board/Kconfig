@@ -1,0 +1,33 @@
+menu "Desk Assistant board"
+
+    config BOARD_DISPLAY_BUFFER_ROWS
+        int "Rows per display draw buffer"
+        range 2 480
+        default 10
+        help
+            Height of each partial draw buffer. Must be even so updates stay on the
+            panel's 2x2 grid.
+
+    config BOARD_DISPLAY_BUFFER_COUNT
+        int "Number of display draw buffers"
+        range 1 2
+        default 2
+        help
+            Two buffers let rendering overlap the transfer of the previous one.
+
+    config BOARD_BATTERY_READ_PERIOD_S
+        int "Battery reading period (seconds)"
+        range 5 600
+        default 30
+
+    config BOARD_BATTERY_TASK_STACK_SIZE
+        int "Battery task stack size (bytes)"
+        range 1536 8192
+        default 2048
+
+    config BOARD_BATTERY_TASK_PRIORITY
+        int "Battery task priority"
+        range 1 10
+        default 2
+
+endmenu

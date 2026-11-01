@@ -11,7 +11,7 @@ static const uint16_t PRESS_Y = 100;
 
 static void assert_rejected_and_released(const uint8_t *packet, size_t length)
 {
-    touch_sample_t sample = {.pressed = true, .x = 17, .y = 23};
+    board_touch_sample_t sample = {.pressed = true, .x = 17, .y = 23};
     TEST_ASSERT_FALSE(touch_decode(packet, length, &sample));
     TEST_ASSERT_FALSE(sample.pressed);
     TEST_ASSERT_EQUAL_UINT16(17, sample.x);
@@ -20,7 +20,7 @@ static void assert_rejected_and_released(const uint8_t *packet, size_t length)
 
 static void test_press_maps_to_display_orientation(void)
 {
-    touch_sample_t sample = {0};
+    board_touch_sample_t sample = {0};
     TEST_ASSERT_TRUE(touch_decode(PRESS_PACKET, sizeof(PRESS_PACKET), &sample));
     TEST_ASSERT_TRUE(sample.pressed);
     TEST_ASSERT_EQUAL_UINT16(PRESS_X, sample.x);
@@ -40,7 +40,7 @@ static void test_raw_corners_stay_inside_the_display(void)
         {{0x06, 0x1d, 0x1d, 0xff, 1, 1, 0xab, 0, 0, 0}, 0, 479},
     };
     for (size_t i = 0; i < sizeof(corners) / sizeof(corners[0]); ++i) {
-        touch_sample_t sample = {0};
+        board_touch_sample_t sample = {0};
         TEST_ASSERT_TRUE(touch_decode(corners[i].packet, TOUCH_PACKET_LENGTH, &sample));
         TEST_ASSERT_TRUE(sample.pressed);
         TEST_ASSERT_EQUAL_UINT16(corners[i].x, sample.x);
@@ -74,7 +74,7 @@ static void test_missing_sample_is_rejected(void)
 
 static void test_release_keeps_last_coordinates(void)
 {
-    touch_sample_t sample = {0};
+    board_touch_sample_t sample = {0};
     TEST_ASSERT_TRUE(touch_decode(PRESS_PACKET, sizeof(PRESS_PACKET), &sample));
 
     const uint8_t released[TOUCH_PACKET_LENGTH] = {0x00, 0xff, 0xff, 0xff, 0, 1, 0xab, 0, 0, 0};

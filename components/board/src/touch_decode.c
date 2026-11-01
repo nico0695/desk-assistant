@@ -27,7 +27,7 @@ static uint16_t raw_coordinate(uint8_t high, uint8_t low_nibble)
     return (uint16_t)(((uint16_t)high << 4) | (low_nibble & 0x0fU));
 }
 
-bool touch_decode(const uint8_t *packet, size_t length, touch_sample_t *sample)
+bool touch_decode(const uint8_t *packet, size_t length, board_touch_sample_t *sample)
 {
     if (sample == NULL) {
         return false;
