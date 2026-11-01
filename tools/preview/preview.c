@@ -139,7 +139,6 @@ static const ui_wifi_handlers_t WIFI_HANDLERS = {
     .on_forget = ignore_ssid,
     .on_add = ignore_action,
     .on_cancel_setup = ignore_action,
-    .on_closed = ignore_action,
     .on_back = ignore_back,
 };
 

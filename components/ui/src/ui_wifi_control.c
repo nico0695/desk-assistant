@@ -12,33 +12,15 @@ static connectivity_view_t latest_view;
 static connectivity_view_t applied_view;
 static lv_event_cb_t back_handler;
 
-static void forget(const char *ssid)
-{
-    connectivity_forget(ssid);
-}
-
-static void add_network(void)
-{
-    connectivity_open_setup();
-}
-
-static void cancel_setup(void)
-{
-    connectivity_cancel_setup();
-}
-
-static void closed(void) {}
-
 static void on_back(lv_event_t *event)
 {
     back_handler(event);
 }
 
 static const ui_wifi_handlers_t HANDLERS = {
-    .on_forget = forget,
-    .on_add = add_network,
-    .on_cancel_setup = cancel_setup,
-    .on_closed = closed,
+    .on_forget = connectivity_forget,
+    .on_add = connectivity_open_setup,
+    .on_cancel_setup = connectivity_cancel_setup,
     .on_back = on_back,
 };
 

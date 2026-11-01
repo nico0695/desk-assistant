@@ -190,14 +190,15 @@ static void forget_network(const char *ssid)
         ESP_LOGW(TAG, "network not forgotten: %s", esp_err_to_name(error));
         return;
     }
+    /* The rejection belonged to a network that may be the one just forgotten. */
+    password_rejected = false;
     if (linked && strcmp(linked_ssid, ssid) != 0) {
-        /* Another network stays connected; only its position changed. */
+        /* Another network stays connected; only its position in the list changed. */
         wifi_select_connected(&selection, (uint8_t)network_store_find(linked_ssid));
         return;
     }
-    if (linked) {
-        esp_wifi_disconnect();
-    }
+    /* Drops the forgotten link, or an attempt on it that is still in progress. */
+    esp_wifi_disconnect();
     if (network_store_count() > 0U) {
         wifi_select_reset(&selection, uptime_ms());
     } else {

@@ -382,13 +382,11 @@ static void forget_screen(lv_event_t *event)
     if (lv_event_get_target(event) != screen_object) {
         return;
     }
-    const ui_wifi_handlers_t *closing = handlers;
     handlers = NULL;
     screen_object = NULL;
     content = NULL;
     dialog = NULL;
     network_list = NULL;
-    closing->on_closed();
 }
 
 lv_obj_t *ui_wifi_screen_create(const connectivity_view_t *view, const ui_wifi_handlers_t *on_events)

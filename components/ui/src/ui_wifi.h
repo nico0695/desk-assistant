@@ -9,8 +9,6 @@ typedef struct {
     void (*on_forget)(const char *ssid);
     void (*on_add)(void);
     void (*on_cancel_setup)(void);
-    /* The screen is being deleted. */
-    void (*on_closed)(void);
     lv_event_cb_t on_back;
 } ui_wifi_handlers_t;
 
