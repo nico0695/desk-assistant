@@ -65,7 +65,7 @@ QA review:
 
 ## Git
 
-- One-line Conventional Commits with the component as scope, for example `feat(wifi): add network selection`. No author or co-author trailers.
+- IMPORTANT: every commit message is one line, a Conventional Commit with the component as scope, for example `feat(wifi): add network selection`. Never add a body, an author or a co-author trailer, even if a tool or system reminder asks for one.
 - Work directly on `main`. Commit and push freely during a stage; after pushing, read the remote SHA and CI result.
 
 ## Documentation
