@@ -1,0 +1,30 @@
+#pragma once
+
+#define UI_TEXT_WIFI "Wi-Fi"
+#define UI_TEXT_WIFI_ADD_NETWORK "Add network"
+#define UI_TEXT_WIFI_CANCEL_SETUP "Cancel setup"
+#define UI_TEXT_WIFI_STATE_NO_NETWORKS "No saved networks"
+#define UI_TEXT_WIFI_STATE_SEARCHING "Searching..."
+#define UI_TEXT_WIFI_STATE_CONNECTED_FORMAT "Connected to %s"
+#define UI_TEXT_WIFI_STATE_OFFLINE "Offline"
+#define UI_TEXT_WIFI_LIST_FAILED "Saved networks could not be read"
+#define UI_TEXT_WIFI_SHORT_NO_NETWORKS "Set up"
+#define UI_TEXT_WIFI_SHORT_SEARCHING "Searching"
+#define UI_TEXT_WIFI_SHORT_CONNECTED "Connected"
+#define UI_TEXT_WIFI_SHORT_OFFLINE "Offline"
+
+#define UI_TEXT_WIFI_SETUP_JOIN "Join this network"
+#define UI_TEXT_WIFI_SETUP_PASSWORD "Password"
+#define UI_TEXT_WIFI_SETUP_THEN_OPEN "Then open"
+#define UI_TEXT_WIFI_SETUP_PASSWORD_REJECTED "Wrong password. Enter it again."
+/* Standard Wi-Fi QR payload: network name and password of the setup access point. */
+#define UI_TEXT_WIFI_SETUP_QR_FORMAT "WIFI:T:WPA;S:%s;P:%s;;"
+
+#define UI_TEXT_WIFI_FORGET_TITLE_FORMAT "Forget %s?"
+#define UI_TEXT_WIFI_FORGET_BODY "The device will no longer join this network."
+#define UI_TEXT_WIFI_FORGET "Forget"
+#define UI_TEXT_WIFI_ADD_TITLE "Add a network?"
+#define UI_TEXT_WIFI_ADD_BODY_FORMAT "%s stays saved. The device may disconnect while you set up."
+#define UI_TEXT_WIFI_ADD_BODY_OFFLINE "Set up a new network from your phone."
+#define UI_TEXT_WIFI_CONTINUE "Continue"
+#define UI_TEXT_WIFI_CANCEL "Cancel"

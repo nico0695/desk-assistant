@@ -7,11 +7,13 @@
 #include "ui_text.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_wifi_text.h"
 
 #define VALUE_TEXT_CAPACITY 16
 #define TIMEOUT_BUTTON_WIDTH_PX                                                                                       \
     ((UI_CONTENT_WIDTH_PX - (SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT - 1) * UI_ROW_LABEL_GAP_PX) /                       \
      SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT)
+#define BACK_WITH_WIFI_WIDTH_PX 168
 #define SLIDER_WIDTH_PX (UI_CONTENT_WIDTH_PX - UI_SLIDER_KNOB_SIZE_PX)
 #define SLIDER_TOUCH_MARGIN_PX ((UI_SLIDER_TOUCH_HEIGHT_PX - UI_SLIDER_TRACK_HEIGHT_PX) / 2)
 
@@ -22,8 +24,10 @@ typedef struct {
 
 /* Widgets of the open screen; cleared when it is deleted. */
 static const ui_settings_handlers_t *handlers;
+static lv_obj_t *screen_object;
 static row_widgets_t widgets[SETTINGS_COUNT];
 static lv_obj_t *timeout_buttons[SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT];
+static lv_obj_t *wifi_label;
 static char timeout_texts[SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT][VALUE_TEXT_CAPACITY];
 
 static const char *const ROW_TITLES[SETTINGS_COUNT] = {
@@ -71,15 +75,20 @@ static void dispatch_timeout(lv_event_t *event)
 
 static void forget_screen(lv_event_t *event)
 {
-    (void)event;
+    /* A screen replaced after its successor was created must not clear the successor's state. */
+    if (lv_event_get_target(event) != screen_object) {
+        return;
+    }
     const ui_settings_handlers_t *closing = handlers;
     handlers = NULL;
+    screen_object = NULL;
     for (unsigned i = 0; i < SETTINGS_COUNT; ++i) {
         widgets[i] = (row_widgets_t){0};
     }
     for (unsigned i = 0; i < SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT; ++i) {
         timeout_buttons[i] = NULL;
     }
+    wifi_label = NULL;
     closing->on_closed();
 }
 
@@ -175,10 +184,28 @@ static void show_row(const settings_row_t *row)
     }
 }
 
+static void create_bottom_buttons(lv_obj_t *screen)
+{
+    const bool with_wifi = handlers->on_wifi != NULL;
+    lv_obj_t *back = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_LEFT, UI_TEXT_BACK);
+    lv_obj_set_size(back, with_wifi ? BACK_WITH_WIFI_WIDTH_PX : UI_CONTENT_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
+    lv_obj_align(back, LV_ALIGN_BOTTOM_LEFT, UI_SCREEN_MARGIN_PX, -UI_SCREEN_MARGIN_PX);
+    lv_obj_add_event_cb(back, handlers->on_back, LV_EVENT_CLICKED, NULL);
+    if (!with_wifi) {
+        return;
+    }
+    lv_obj_t *wifi = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_WIFI, UI_TEXT_WIFI_SHORT_NO_NETWORKS);
+    lv_obj_set_size(wifi, UI_CONTENT_WIDTH_PX - UI_GAP_PX - BACK_WITH_WIFI_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
+    lv_obj_align(wifi, LV_ALIGN_BOTTOM_RIGHT, -UI_SCREEN_MARGIN_PX, -UI_SCREEN_MARGIN_PX);
+    lv_obj_add_event_cb(wifi, handlers->on_wifi, LV_EVENT_CLICKED, NULL);
+    wifi_label = lv_obj_get_child(wifi, -1);
+}
+
 lv_obj_t *ui_settings_screen_create(const settings_row_t rows[SETTINGS_COUNT], const ui_settings_handlers_t *on_events)
 {
     handlers = on_events;
     lv_obj_t *screen = ui_screen_create();
+    screen_object = screen;
     ui_status_bar_create(screen, UI_TEXT_SETTINGS);
 
     lv_obj_t *content = create_box(screen, LV_FLEX_FLOW_COLUMN, UI_SETTINGS_ROW_GAP_PX);
@@ -191,10 +218,7 @@ lv_obj_t *ui_settings_screen_create(const settings_row_t rows[SETTINGS_COUNT], c
     create_slider(create_row(content, SETTINGS_BRIGHTNESS), SETTINGS_BRIGHTNESS, SETTINGS_BRIGHTNESS_MIN_PERCENT,
                   SETTINGS_BRIGHTNESS_MAX_PERCENT);
 
-    lv_obj_t *back = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_LEFT, UI_TEXT_BACK);
-    lv_obj_set_size(back, UI_CONTENT_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
-    lv_obj_align(back, LV_ALIGN_BOTTOM_MID, 0, -UI_SCREEN_MARGIN_PX);
-    lv_obj_add_event_cb(back, handlers->on_back, LV_EVENT_CLICKED, NULL);
+    create_bottom_buttons(screen);
 
     lv_obj_add_event_cb(screen, forget_screen, LV_EVENT_DELETE, NULL);
     ui_settings_show(rows);
@@ -208,5 +232,27 @@ void ui_settings_show(const settings_row_t rows[SETTINGS_COUNT])
     }
     for (unsigned i = 0; i < SETTINGS_COUNT; ++i) {
         show_row(&rows[i]);
+    }
+}
+
+void ui_settings_show_wifi(connectivity_state_t state)
+{
+    if (wifi_label == NULL) {
+        return;
+    }
+    switch (state) {
+    case CONNECTIVITY_CONNECTED:
+        lv_label_set_text_static(wifi_label, UI_TEXT_WIFI_SHORT_CONNECTED);
+        break;
+    case CONNECTIVITY_SEARCHING:
+        lv_label_set_text_static(wifi_label, UI_TEXT_WIFI_SHORT_SEARCHING);
+        break;
+    case CONNECTIVITY_OFFLINE:
+        lv_label_set_text_static(wifi_label, UI_TEXT_WIFI_SHORT_OFFLINE);
+        break;
+    case CONNECTIVITY_NO_NETWORKS:
+    default:
+        lv_label_set_text_static(wifi_label, UI_TEXT_WIFI_SHORT_NO_NETWORKS);
+        break;
     }
 }

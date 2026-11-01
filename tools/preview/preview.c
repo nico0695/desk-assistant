@@ -9,6 +9,7 @@
 #include "ui_home.h"
 #include "ui_section.h"
 #include "ui_settings.h"
+#include "ui_wifi.h"
 #include "ui_status_bar.h"
 #include "ui_theme.h"
 
@@ -126,6 +127,74 @@ static const ui_settings_handlers_t SETTINGS_HANDLERS = {
     .on_back = ignore_back,
 };
 
+static void ignore_ssid(const char *ssid)
+{
+    (void)ssid;
+}
+
+static void ignore_action(void) {}
+
+static const ui_wifi_handlers_t WIFI_HANDLERS = {
+    .on_forget = ignore_ssid,
+    .on_add = ignore_action,
+    .on_cancel_setup = ignore_action,
+    .on_closed = ignore_action,
+    .on_back = ignore_back,
+};
+
+static connectivity_view_t sample_view(connectivity_state_t state, unsigned saved_count)
+{
+    static const char *const SSIDS[WIFI_LIST_CAPACITY] = {"Home", "Office 5G", "Casa de Ana", "Cafe Central",
+                                                          "The Smiths' Home Network Upstair"};
+    connectivity_view_t view = {.state = state, .saved_count = (uint8_t)saved_count};
+    for (unsigned i = 0; i < saved_count; ++i) {
+        snprintf(view.saved[i], sizeof(view.saved[i]), "%s", SSIDS[i]);
+    }
+    return view;
+}
+
+static connectivity_view_t sample_setup_view(bool password_rejected)
+{
+    connectivity_view_t view = sample_view(CONNECTIVITY_OFFLINE, 2);
+    view.setup_active = true;
+    view.setup_password_rejected = password_rejected;
+    snprintf(view.setup_ssid, sizeof(view.setup_ssid), "Desk-Assistant-ED28");
+    snprintf(view.setup_password, sizeof(view.setup_password), "k7m2xq9d");
+    return view;
+}
+
+static lv_obj_t *create_wifi(const connectivity_view_t *view)
+{
+    return ui_wifi_screen_create(view, &WIFI_HANDLERS);
+}
+
+static lv_obj_t *create_wifi_with_dialog(const connectivity_view_t *view, ui_wifi_dialog_t kind, const char *ssid)
+{
+    lv_obj_t *screen = create_wifi(view);
+    ui_wifi_open_dialog(kind, ssid);
+    return screen;
+}
+
+static ui_settings_handlers_t settings_handlers_with_wifi(void)
+{
+    ui_settings_handlers_t handlers = SETTINGS_HANDLERS;
+    handlers.on_wifi = ignore_back;
+    return handlers;
+}
+
+static lv_obj_t *create_settings_with_wifi(connectivity_state_t state)
+{
+    static ui_settings_handlers_t handlers;
+    handlers = settings_handlers_with_wifi();
+    settings_row_t rows[SETTINGS_COUNT];
+    settings_row_init(&rows[SETTINGS_SCREEN_TIMEOUT], SETTINGS_SCREEN_TIMEOUT, SETTINGS_SCREEN_TIMEOUT_DEFAULT_S, false);
+    settings_row_init(&rows[SETTINGS_VOLUME], SETTINGS_VOLUME, SETTINGS_VOLUME_DEFAULT_PERCENT, false);
+    settings_row_init(&rows[SETTINGS_BRIGHTNESS], SETTINGS_BRIGHTNESS, SETTINGS_BRIGHTNESS_DEFAULT_PERCENT, false);
+    lv_obj_t *screen = ui_settings_screen_create(rows, &handlers);
+    ui_settings_show_wifi(state);
+    return screen;
+}
+
 static lv_obj_t *create_settings(uint8_t timeout_s, uint8_t volume, uint8_t brightness, bool with_errors)
 {
     settings_row_t rows[SETTINGS_COUNT];
@@ -186,5 +255,27 @@ int main(int argc, char **argv)
             create_settings(SETTINGS_SCREEN_TIMEOUT_DEFAULT_S, SETTINGS_VOLUME_DEFAULT_PERCENT,
                             SETTINGS_BRIGHTNESS_DEFAULT_PERCENT, true),
             directory, "settings-errors");
+
+    const connectivity_view_t no_networks = sample_view(CONNECTIVITY_NO_NETWORKS, 0);
+    capture(display, create_wifi(&no_networks), directory, "wifi-no-networks");
+    const connectivity_view_t searching = sample_view(CONNECTIVITY_SEARCHING, 3);
+    capture(display, create_wifi(&searching), directory, "wifi-searching");
+    connectivity_view_t connected = sample_view(CONNECTIVITY_CONNECTED, WIFI_LIST_CAPACITY);
+    connected.connected_index = 1;
+    capture(display, create_wifi(&connected), directory, "wifi-connected");
+    const connectivity_view_t offline = sample_view(CONNECTIVITY_OFFLINE, 2);
+    capture(display, create_wifi(&offline), directory, "wifi-offline");
+    connectivity_view_t list_failed = sample_view(CONNECTIVITY_NO_NETWORKS, 0);
+    list_failed.list_failed = true;
+    capture(display, create_wifi(&list_failed), directory, "wifi-list-failed");
+    const connectivity_view_t setup = sample_setup_view(false);
+    capture(display, create_wifi(&setup), directory, "wifi-setup");
+    const connectivity_view_t rejected = sample_setup_view(true);
+    capture(display, create_wifi(&rejected), directory, "wifi-setup-password-rejected");
+    capture(display, create_wifi_with_dialog(&connected, UI_WIFI_DIALOG_FORGET, connected.saved[4]), directory,
+            "wifi-dialog-forget");
+    capture(display, create_wifi_with_dialog(&connected, UI_WIFI_DIALOG_ADD, NULL), directory, "wifi-dialog-add");
+    capture(display, create_settings_with_wifi(CONNECTIVITY_CONNECTED), directory, "settings-wifi-connected");
+    capture(display, create_settings_with_wifi(CONNECTIVITY_NO_NETWORKS), directory, "settings-wifi-no-networks");
     return EXIT_SUCCESS;
 }

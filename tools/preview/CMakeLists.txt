@@ -23,7 +23,8 @@ add_compile_definitions(
     LV_FONT_MONTSERRAT_24=1
     LV_FONT_MONTSERRAT_28=1
     LV_FONT_DEFAULT=&lv_font_montserrat_24
-    LV_USE_LODEPNG=1)
+    LV_USE_LODEPNG=1
+    LV_USE_QRCODE=1)
 add_subdirectory(${LVGL_DIR} lvgl)
 
 # Screens and theme only; the UI task and the display port need the device.
@@ -34,10 +35,16 @@ set(UI_SOURCES
     ${UI_DIR}/src/ui_section.c
     ${UI_DIR}/src/ui_home.c
     ${UI_DIR}/src/ui_settings.c
+    ${UI_DIR}/src/ui_wifi.c
     ${REPO_ROOT}/components/features/settings/src/settings_values.c
     ${REPO_ROOT}/components/features/settings/src/settings_row.c)
 file(GLOB FONT_SOURCES CONFIGURE_DEPENDS ${UI_DIR}/src/fonts/*.c)
 add_executable(ui_preview preview.c ${UI_SOURCES} ${FONT_SOURCES} ${REPO_ROOT}/components/board/src/display_geometry.c)
-target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${REPO_ROOT}/components/features/settings/include ${LVGL_DIR}/src/libs/lodepng)
+target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${REPO_ROOT}/components/features/settings/include ${REPO_ROOT}/components/connectivity/include ${LVGL_DIR}/src/libs/lodepng)
 target_compile_options(ui_preview PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(ui_preview PRIVATE lvgl m)
+
+# Phone setup pages as HTML files, to open at phone width in a browser.
+add_executable(page_preview page_preview.c ${REPO_ROOT}/components/connectivity/src/setup_page.c)
+target_include_directories(page_preview PRIVATE ${REPO_ROOT}/components/connectivity/include ${REPO_ROOT}/components/connectivity/src)
+target_compile_options(page_preview PRIVATE -Wall -Wextra -Werror)

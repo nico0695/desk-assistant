@@ -8,6 +8,7 @@ idf_component_register(SRCS "src/ui_task.c"
                             "src/ui_navigation.c"
                             "src/ui_settings.c"
                             "src/ui_settings_control.c"
+                            "src/ui_wifi.c"
                             "src/screen_power.c"
                             "src/touch_gate.c"
                             "src/fonts/ui_font_latin1_20.c"
@@ -16,7 +17,7 @@ idf_component_register(SRCS "src/ui_task.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
                        REQUIRES esp_common settings
-                       PRIV_REQUIRES board diagnostics esp_timer freertos log lvgl__lvgl)
+                       PRIV_REQUIRES board connectivity diagnostics esp_timer freertos log lvgl__lvgl)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
 

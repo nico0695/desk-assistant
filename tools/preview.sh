@@ -10,6 +10,7 @@ if [ ! -f "$LVGL_DIR/lvgl.h" ]; then
     exit 1
 fi
 cmake -S "$REPO_ROOT/tools/preview" -B "$BUILD_DIR/cmake" -G Ninja > /dev/null
-cmake --build "$BUILD_DIR/cmake" --target ui_preview
-mkdir -p "$OUTPUT_DIR"
+cmake --build "$BUILD_DIR/cmake" --target ui_preview page_preview
+mkdir -p "$OUTPUT_DIR" "$BUILD_DIR/pages"
 "$BUILD_DIR/cmake/ui_preview" "$OUTPUT_DIR"
+"$BUILD_DIR/cmake/page_preview" "$BUILD_DIR/pages"
