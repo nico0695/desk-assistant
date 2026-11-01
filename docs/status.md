@@ -6,8 +6,8 @@
 |---|---|---|
 | 0 | Scaffold | Done (validated 2026-11-01) |
 | 1 | Board and base UI | Done (validated 2026-11-01) |
-| 2 | Storage and settings | Next |
-| 3 | Wi-Fi and provisioning | Pending |
+| 2 | Storage and settings | Done (validated 2026-11-01) |
+| 3 | Wi-Fi and provisioning | Next |
 | 4 | Bridge base | Pending |
 | 5a | Recording: local capture | Pending |
 | 5b | Recording: upload and result | Pending |
@@ -17,15 +17,16 @@
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 2 — Storage and settings
+## Active stage: 3 — Wi-Fi and provisioning
 
-- **Goal:** reliable persistence and the complete Settings screen.
-- **Progress:** all steps done and the closing 4R review applied. Checkpoint recorded below; waiting for user validation.
+- **Goal:** connectivity configured from the phone and over USB.
+- **Progress:** not started; the stage spec comes first.
 
 ## Closed stages
 
 - **0 — Scaffold:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI. Validated on `esp32-02` at `3cad47c`.
 - **1 — Board and base UI:** I2C bus, PMIC and battery, KEY, panel and touch drivers; a UI task that owns LVGL and sleeps when idle; theme, home, section screens and navigation; screen off by timeout and KEY with a wake-gesture gate; PNG preview. Validated on `esp32-02` at `448b534`.
+- **2 — Storage and settings:** NVS storage that never erases, with one write worker; settings for screen timeout, volume and brightness with defaults and per-row errors; Settings screen with live brightness and timeout. Validated on `esp32-02` at `aebffa7`.
 
 ## Evidence
 
