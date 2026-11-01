@@ -13,7 +13,6 @@
 #define TIMEOUT_BUTTON_WIDTH_PX                                                                                       \
     ((UI_CONTENT_WIDTH_PX - (SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT - 1) * UI_ROW_LABEL_GAP_PX) /                       \
      SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT)
-#define BACK_WITH_WIFI_WIDTH_PX 168
 #define SLIDER_WIDTH_PX (UI_CONTENT_WIDTH_PX - UI_SLIDER_KNOB_SIZE_PX)
 #define SLIDER_TOUCH_MARGIN_PX ((UI_SLIDER_TOUCH_HEIGHT_PX - UI_SLIDER_TRACK_HEIGHT_PX) / 2)
 
@@ -92,21 +91,10 @@ static void forget_screen(lv_event_t *event)
     closing->on_closed();
 }
 
-static lv_obj_t *create_box(lv_obj_t *parent, lv_flex_flow_t flow, int32_t gap)
-{
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_remove_style_all(box);
-    lv_obj_set_size(box, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(box, flow);
-    lv_obj_set_style_pad_gap(box, gap, LV_PART_MAIN);
-    lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-    return box;
-}
-
 /* Title on the left and the value or error on the right. */
 static void create_row_header(lv_obj_t *row, settings_id_t id)
 {
-    lv_obj_t *header = create_box(row, LV_FLEX_FLOW_ROW, 0);
+    lv_obj_t *header = ui_box_create(row, LV_FLEX_FLOW_ROW, 0);
     lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *title = lv_label_create(header);
     lv_label_set_text_static(title, ROW_TITLES[id]);
@@ -115,7 +103,7 @@ static void create_row_header(lv_obj_t *row, settings_id_t id)
 
 static void create_timeout_buttons(lv_obj_t *row)
 {
-    lv_obj_t *options = create_box(row, LV_FLEX_FLOW_ROW, UI_ROW_LABEL_GAP_PX);
+    lv_obj_t *options = ui_box_create(row, LV_FLEX_FLOW_ROW, UI_ROW_LABEL_GAP_PX);
     ui_styles_t *styles = ui_theme_styles();
     for (unsigned i = 0; i < SETTINGS_SCREEN_TIMEOUT_OPTION_COUNT; ++i) {
         const uint8_t seconds = SETTINGS_SCREEN_TIMEOUT_OPTIONS_S[i];
@@ -135,7 +123,7 @@ static void create_timeout_buttons(lv_obj_t *row)
 static void create_slider(lv_obj_t *row, settings_id_t id, int32_t minimum, int32_t maximum)
 {
     ui_styles_t *styles = ui_theme_styles();
-    lv_obj_t *holder = create_box(row, LV_FLEX_FLOW_ROW, 0);
+    lv_obj_t *holder = ui_box_create(row, LV_FLEX_FLOW_ROW, 0);
     lv_obj_set_height(holder, UI_SLIDER_KNOB_SIZE_PX);
     lv_obj_set_flex_align(holder, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -156,7 +144,7 @@ static void create_slider(lv_obj_t *row, settings_id_t id, int32_t minimum, int3
 
 static lv_obj_t *create_row(lv_obj_t *content, settings_id_t id)
 {
-    lv_obj_t *row = create_box(content, LV_FLEX_FLOW_COLUMN, UI_ROW_LABEL_GAP_PX);
+    lv_obj_t *row = ui_box_create(content, LV_FLEX_FLOW_COLUMN, UI_ROW_LABEL_GAP_PX);
     create_row_header(row, id);
     return row;
 }
@@ -188,16 +176,17 @@ static void create_bottom_buttons(lv_obj_t *screen)
 {
     const bool with_wifi = handlers->on_wifi != NULL;
     lv_obj_t *back = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_LEFT, UI_TEXT_BACK);
-    lv_obj_set_size(back, with_wifi ? BACK_WITH_WIFI_WIDTH_PX : UI_CONTENT_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
+    lv_obj_set_size(back, with_wifi ? UI_BACK_WITH_ACTION_WIDTH_PX : UI_CONTENT_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
     lv_obj_align(back, LV_ALIGN_BOTTOM_LEFT, UI_SCREEN_MARGIN_PX, -UI_SCREEN_MARGIN_PX);
     lv_obj_add_event_cb(back, handlers->on_back, LV_EVENT_CLICKED, NULL);
     if (!with_wifi) {
         return;
     }
     lv_obj_t *wifi = ui_button_create(screen, UI_BUTTON_STANDARD, LV_SYMBOL_WIFI, UI_TEXT_WIFI_SHORT_NO_NETWORKS);
-    lv_obj_set_size(wifi, UI_CONTENT_WIDTH_PX - UI_GAP_PX - BACK_WITH_WIFI_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
+    lv_obj_set_size(wifi, UI_CONTENT_WIDTH_PX - UI_GAP_PX - UI_BACK_WITH_ACTION_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
     lv_obj_align(wifi, LV_ALIGN_BOTTOM_RIGHT, -UI_SCREEN_MARGIN_PX, -UI_SCREEN_MARGIN_PX);
     lv_obj_add_event_cb(wifi, handlers->on_wifi, LV_EVENT_CLICKED, NULL);
+    /* The text label is the last child of the button, after the icon. */
     wifi_label = lv_obj_get_child(wifi, -1);
 }
 
@@ -208,7 +197,7 @@ lv_obj_t *ui_settings_screen_create(const settings_row_t rows[SETTINGS_COUNT], c
     screen_object = screen;
     ui_status_bar_create(screen, UI_TEXT_SETTINGS);
 
-    lv_obj_t *content = create_box(screen, LV_FLEX_FLOW_COLUMN, UI_SETTINGS_ROW_GAP_PX);
+    lv_obj_t *content = ui_box_create(screen, LV_FLEX_FLOW_COLUMN, UI_SETTINGS_ROW_GAP_PX);
     lv_obj_set_width(content, UI_CONTENT_WIDTH_PX);
     lv_obj_align(content, LV_ALIGN_TOP_MID, 0, UI_STATUS_BAR_HEIGHT_PX + UI_SETTINGS_ROW_GAP_PX);
 

@@ -27,6 +27,8 @@
 #define UI_PRIMARY_BUTTON_HEIGHT_PX 120
 #define UI_TILE_HEIGHT_PX 120
 #define UI_STATUS_BAR_HEIGHT_PX 48
+/* Back button beside a wider action button on the bottom row of a screen. */
+#define UI_BACK_WITH_ACTION_WIDTH_PX 168
 #define UI_STATUS_BAR_SIDE_INSET_PX 40
 #define UI_RECORD_DOT_SIZE_PX 24
 #define UI_WIFI_SLASH_WIDTH_PX 3

@@ -47,3 +47,14 @@ lv_obj_t *ui_button_create(lv_obj_t *parent, ui_button_kind_t kind, const char *
     lv_label_set_text_static(label, text);
     return button;
 }
+
+lv_obj_t *ui_box_create(lv_obj_t *parent, lv_flex_flow_t flow, int32_t gap)
+{
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(box, flow);
+    lv_obj_set_style_pad_gap(box, gap, LV_PART_MAIN);
+    lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    return box;
+}

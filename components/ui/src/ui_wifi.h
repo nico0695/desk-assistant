@@ -22,7 +22,10 @@ typedef enum {
 /* Wi-Fi screen for the view (copied); handlers must outlive the screen. */
 lv_obj_t *ui_wifi_screen_create(const connectivity_view_t *view, const ui_wifi_handlers_t *handlers);
 
-/* Refreshes the open Wi-Fi screen, if any. An open dialog stays open unless its network is gone. */
+/*
+ * Refreshes the open Wi-Fi screen, if any, keeping the list scroll. An open dialog stays open until what it asks about
+ * no longer holds: the forgotten network is gone, the Add dialog needs a connected network, and setup closes both.
+ */
 void ui_wifi_show(const connectivity_view_t *view);
 
 /* Opens a confirmation over the open screen; the SSID is copied and used only by the forget dialog. */

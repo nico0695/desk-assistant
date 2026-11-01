@@ -17,3 +17,6 @@ lv_obj_t *ui_screen_create(void);
  * Width and height are set by the caller's layout; the kind sets the minimum height.
  */
 lv_obj_t *ui_button_create(lv_obj_t *parent, ui_button_kind_t kind, const char *symbol, const char *text);
+
+/* Transparent container, full width and as tall as its content, laying its children out in a flex flow. */
+lv_obj_t *ui_box_create(lv_obj_t *parent, lv_flex_flow_t flow, int32_t gap);

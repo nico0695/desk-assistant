@@ -17,8 +17,7 @@
 #define WIFI_BOTTOM_Y_PX (BOARD_DISPLAY_HEIGHT_PX - UI_SCREEN_MARGIN_PX - UI_BUTTON_HEIGHT_PX)
 #define WIFI_LIST_Y_PX (WIFI_STATE_Y_PX + WIFI_STATE_HEIGHT_PX + UI_ROW_LABEL_GAP_PX)
 #define WIFI_LIST_HEIGHT_PX (WIFI_BOTTOM_Y_PX - UI_GAP_PX - WIFI_LIST_Y_PX)
-#define WIFI_BACK_WIDTH_PX 168
-#define WIFI_ACTION_WIDTH_PX (UI_CONTENT_WIDTH_PX - UI_GAP_PX - WIFI_BACK_WIDTH_PX)
+#define WIFI_ACTION_WIDTH_PX (UI_CONTENT_WIDTH_PX - UI_GAP_PX - UI_BACK_WITH_ACTION_WIDTH_PX)
 #define WIFI_SETUP_TOP_Y_PX (UI_STATUS_BAR_HEIGHT_PX + UI_GAP_PX)
 #define WIFI_QR_SIZE_PX 168
 #define WIFI_QR_QUIET_ZONE_PX 8
@@ -38,20 +37,10 @@ static connectivity_view_t shown;
 static lv_obj_t *screen_object;
 static lv_obj_t *content;
 static lv_obj_t *dialog;
+static lv_obj_t *network_list;
 static ui_wifi_dialog_t dialog_kind;
 static char dialog_ssid[WIFI_SSID_SIZE];
 
-
-static lv_obj_t *create_box(lv_obj_t *parent, lv_flex_flow_t flow, int32_t gap)
-{
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_remove_style_all(box);
-    lv_obj_set_size(box, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(box, flow);
-    lv_obj_set_style_pad_gap(box, gap, LV_PART_MAIN);
-    lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-    return box;
-}
 
 static lv_obj_t *create_label(lv_obj_t *parent, const char *text, uint32_t color)
 {
@@ -208,6 +197,7 @@ static void create_network_row(lv_obj_t *list, unsigned index)
 static void create_network_list(lv_obj_t *parent)
 {
     lv_obj_t *list = lv_obj_create(parent);
+    network_list = list;
     lv_obj_remove_style_all(list);
     lv_obj_set_size(list, UI_CONTENT_WIDTH_PX, WIFI_LIST_HEIGHT_PX);
     lv_obj_set_pos(list, UI_SCREEN_MARGIN_PX, WIFI_LIST_Y_PX);
@@ -224,9 +214,9 @@ static void create_normal_content(lv_obj_t *parent)
     create_state_line(parent);
     create_network_list(parent);
     create_fixed_button(parent, UI_BUTTON_STANDARD, LV_SYMBOL_LEFT, UI_TEXT_BACK, UI_SCREEN_MARGIN_PX,
-                        WIFI_BACK_WIDTH_PX, handlers->on_back);
+                        UI_BACK_WITH_ACTION_WIDTH_PX, handlers->on_back);
     create_fixed_button(parent, UI_BUTTON_PRIMARY, LV_SYMBOL_PLUS, UI_TEXT_WIFI_ADD_NETWORK,
-                        UI_SCREEN_MARGIN_PX + WIFI_BACK_WIDTH_PX + UI_GAP_PX, WIFI_ACTION_WIDTH_PX, on_add_requested);
+                        UI_SCREEN_MARGIN_PX + UI_BACK_WITH_ACTION_WIDTH_PX + UI_GAP_PX, WIFI_ACTION_WIDTH_PX, on_add_requested);
 }
 
 static void create_qr(lv_obj_t *parent)
@@ -248,7 +238,7 @@ static void create_qr(lv_obj_t *parent)
 
 static void create_setup_field(lv_obj_t *column, const char *name, const char *value, ui_font_role_t font)
 {
-    lv_obj_t *field = create_box(column, LV_FLEX_FLOW_COLUMN, 0);
+    lv_obj_t *field = ui_box_create(column, LV_FLEX_FLOW_COLUMN, 0);
     create_secondary_label(field, name);
     lv_obj_t *text = lv_label_create(field);
     lv_label_set_text(text, value);
@@ -259,7 +249,7 @@ static void create_setup_content(lv_obj_t *parent)
 {
     create_qr(parent);
 
-    lv_obj_t *column = create_box(parent, LV_FLEX_FLOW_COLUMN, UI_ROW_LABEL_GAP_PX);
+    lv_obj_t *column = ui_box_create(parent, LV_FLEX_FLOW_COLUMN, UI_ROW_LABEL_GAP_PX);
     lv_obj_set_width(column, WIFI_SETUP_TEXT_WIDTH_PX);
     lv_obj_set_pos(column, WIFI_SETUP_TEXT_X_PX, WIFI_SETUP_TOP_Y_PX);
     create_setup_field(column, UI_TEXT_WIFI_SETUP_JOIN, shown.setup_ssid, UI_FONT_SECONDARY);
@@ -273,9 +263,9 @@ static void create_setup_content(lv_obj_t *parent)
                        WIFI_SETUP_TOP_Y_PX + WIFI_QR_BOX_PX + UI_GAP_PX);
     }
     create_fixed_button(parent, UI_BUTTON_STANDARD, LV_SYMBOL_LEFT, UI_TEXT_BACK, UI_SCREEN_MARGIN_PX,
-                        WIFI_BACK_WIDTH_PX, handlers->on_back);
+                        UI_BACK_WITH_ACTION_WIDTH_PX, handlers->on_back);
     create_fixed_button(parent, UI_BUTTON_STANDARD, LV_SYMBOL_CLOSE, UI_TEXT_WIFI_CANCEL_SETUP,
-                        UI_SCREEN_MARGIN_PX + WIFI_BACK_WIDTH_PX + UI_GAP_PX, WIFI_ACTION_WIDTH_PX, on_cancel_setup);
+                        UI_SCREEN_MARGIN_PX + UI_BACK_WITH_ACTION_WIDTH_PX + UI_GAP_PX, WIFI_ACTION_WIDTH_PX, on_cancel_setup);
 }
 
 static lv_obj_t *create_dialog_panel(lv_obj_t *parent)
@@ -315,7 +305,7 @@ static void create_dialog_text(lv_obj_t *panel, const char *title, const char *b
 
 static void create_dialog_buttons(lv_obj_t *panel, const char *action, lv_event_cb_t on_action)
 {
-    lv_obj_t *buttons = create_box(panel, LV_FLEX_FLOW_ROW, UI_GAP_PX);
+    lv_obj_t *buttons = ui_box_create(panel, LV_FLEX_FLOW_ROW, UI_GAP_PX);
     lv_obj_t *cancel = create_button(buttons, UI_BUTTON_STANDARD, NULL, UI_TEXT_WIFI_CANCEL);
     lv_obj_set_size(cancel, WIFI_DIALOG_BUTTON_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
     lv_obj_add_event_cb(cancel, on_dialog_cancel, LV_EVENT_CLICKED, NULL);
@@ -359,13 +349,30 @@ static bool dialog_still_valid(void)
     return dialog_kind == UI_WIFI_DIALOG_FORGET ? forget_target_exists() : shown.state == CONNECTIVITY_CONNECTED;
 }
 
+/* The list keeps its scroll position across refreshes. */
 static void rebuild_content(void)
 {
+    const int32_t scroll_y = network_list != NULL ? lv_obj_get_scroll_y(network_list) : 0;
+    network_list = NULL;
     lv_obj_clean(content);
     if (shown.setup_active) {
         create_setup_content(content);
-    } else {
-        create_normal_content(content);
+        return;
+    }
+    create_normal_content(content);
+    lv_obj_update_layout(network_list);
+    lv_obj_scroll_to_y(network_list, scroll_y, LV_ANIM_OFF);
+}
+
+/* Keeps the view usable if its indexes are out of range: a connected index outside the list means no link shown. */
+static void accept_view(const connectivity_view_t *view)
+{
+    shown = *view;
+    if (shown.saved_count > WIFI_LIST_CAPACITY) {
+        shown.saved_count = WIFI_LIST_CAPACITY;
+    }
+    if (shown.state == CONNECTIVITY_CONNECTED && shown.connected_index >= shown.saved_count) {
+        shown.state = CONNECTIVITY_OFFLINE;
     }
 }
 
@@ -380,13 +387,14 @@ static void forget_screen(lv_event_t *event)
     screen_object = NULL;
     content = NULL;
     dialog = NULL;
+    network_list = NULL;
     closing->on_closed();
 }
 
 lv_obj_t *ui_wifi_screen_create(const connectivity_view_t *view, const ui_wifi_handlers_t *on_events)
 {
     handlers = on_events;
-    shown = *view;
+    accept_view(view);
     dialog = NULL;
 
     screen_object = ui_screen_create();
@@ -405,7 +413,7 @@ void ui_wifi_show(const connectivity_view_t *view)
     if (handlers == NULL) {
         return;
     }
-    shown = *view;
+    accept_view(view);
     rebuild_content();
     if (dialog != NULL && !dialog_still_valid()) {
         close_dialog();

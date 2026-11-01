@@ -40,6 +40,17 @@ static void test_a_page_that_does_not_fit_is_refused(void)
     TEST_ASSERT_EQUAL(-1, setup_page_form(small, 0, "abc"));
 }
 
+static void test_the_page_buffer_boundary_is_exact(void)
+{
+    static char exact[SETUP_PAGE_MAX_BYTES];
+    const int form_length = setup_page_form(exact, sizeof(exact), "abc123");
+    TEST_ASSERT_EQUAL(form_length, setup_page_form(exact, (size_t)form_length + 1U, "abc123"));
+    TEST_ASSERT_EQUAL(-1, setup_page_form(exact, (size_t)form_length, "abc123"));
+    const int result_length = setup_page_result(exact, sizeof(exact), SETUP_PAGE_SAVED_REPLACED, "A&B");
+    TEST_ASSERT_EQUAL(result_length, setup_page_result(exact, (size_t)result_length + 1U, SETUP_PAGE_SAVED_REPLACED, "A&B"));
+    TEST_ASSERT_EQUAL(-1, setup_page_result(exact, (size_t)result_length, SETUP_PAGE_SAVED_REPLACED, "A&B"));
+}
+
 static void test_the_replaced_network_name_is_escaped(void)
 {
     TEST_ASSERT_GREATER_THAN(0, setup_page_result(page, sizeof(page), SETUP_PAGE_SAVED_REPLACED, "<b>\"x\" & 'y'</b>"));
@@ -69,6 +80,7 @@ int main(void)
     RUN_TEST(test_the_form_carries_the_nonce_and_the_field_names_of_the_parser);
     RUN_TEST(test_the_form_and_every_result_fit_the_page_buffer);
     RUN_TEST(test_a_page_that_does_not_fit_is_refused);
+    RUN_TEST(test_the_page_buffer_boundary_is_exact);
     RUN_TEST(test_the_replaced_network_name_is_escaped);
     RUN_TEST(test_a_plain_save_does_not_mention_a_replacement);
     RUN_TEST(test_errors_link_back_to_the_form);
