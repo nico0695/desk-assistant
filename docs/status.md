@@ -7,8 +7,8 @@
 | 0 | Scaffold | Done (validated 2026-11-01) |
 | 1 | Board and base UI | Done (validated 2026-11-01) |
 | 2 | Storage and settings | Done (validated 2026-11-01) |
-| 3 | Wi-Fi and provisioning | Closed, waiting for user validation |
-| 4 | Bridge base | Pending |
+| 3 | Wi-Fi and provisioning | Done (validated 2026-11-01) |
+| 4 | Bridge base | Next |
 | 5a | Recording: local capture | Pending |
 | 5b | Recording: upload and result | Pending |
 | 6 | Notifications and sound | Pending |
@@ -17,16 +17,17 @@
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 3 — Wi-Fi and provisioning
+## Active stage: 4 — Bridge base
 
-- **Goal:** connectivity configured from the phone and over USB.
-- **Progress:** implementation and reviews done (steps 1–7, stage-close 4R, fixes). Waiting for the user's smoke test; the guide is in the stage document. Nothing was tested with a phone, real networks or touches yet.
+- **Goal:** HTTPS client and SSE stream to the bridge, with the Wi-Fi status icon following the connection.
+- **Progress:** not started; the stage spec comes first.
 
 ## Closed stages
 
 - **0 — Scaffold:** repository conventions, ESP-IDF project, partition table, memory diagnostics, host tests and CI. Validated on `esp32-02` at `3cad47c`.
 - **1 — Board and base UI:** I2C bus, PMIC and battery, KEY, panel and touch drivers; a UI task that owns LVGL and sleeps when idle; theme, home, section screens and navigation; screen off by timeout and KEY with a wake-gesture gate; PNG preview. Validated on `esp32-02` at `448b534`.
 - **2 — Storage and settings:** NVS storage that never erases, with one write worker; settings for screen timeout, volume and brightness with defaults and per-row errors; Settings screen with live brightness and timeout. Validated on `esp32-02` at `aebffa7`.
+- **3 — Wi-Fi and provisioning:** saved networks (5, most recent first), station selection with the V4 timings, USB provisioning with the host tool, phone setup over a temporary access point with a QR and a small form page, Wi-Fi screen with forget and add dialogs, and the Settings Wi-Fi button. Validated on `esp32-02` at `01ff8b4`; cases deferred by the user are listed in the stage 3 evidence.
 
 ## Evidence
 
@@ -80,8 +81,10 @@ Each checkpoint records one entry per image:
 - **ELF SHA-256:** `9e475848807c26665ead68ee434a52f2565a50b87e333399035b578b77f9bd12` (the boot log prints its first 9 digits). Application image 1348048 bytes, 68% of the 4 MB app partition free.
 - **build_verified:** yes. Clean build from the committed revision with the documented command; host tests 16/16; `dependencies.lock` unchanged. CI run on the same revision (`01ff8b4`) passed: host tests, build, lock unchanged.
 - **hardware_verified:** partial.
+  - Validation by the user (2026-11-01): connected the unit to a real Wi-Fi network and saw "Connected" in Settings → Wi-Fi; the status bar icon stays crossed out by design until stage 4. The user accepted the other smoke cases as correct without a separate run, except those deferred below.
+  - Deferred by the user, not run: two real networks, hidden network, temporary router outage.
   - Unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`. Flashed with verified hashes; boot log shows app version `01ff8b4` and the ELF digits above.
   - Observed on this image: boot with one saved test network (fake credentials): scan hears 11–18 networks, tries network 0, disconnects with reason 201 (AP not found), new round every ~30 s; no SSID, password or URL in the log.
   - Memory at boot with Wi-Fi started: internal heap free 184936 B, minimum 184524 B, largest block 167936 B. Minimum free stack: `ui` 4144 of 8192 B at the Settings screen, `sys_evt` 4004 B at boot (2452 B of 4096 after several rounds on an earlier image), `usb_provision` 3108 of 3584 B, `storage` 2756 B.
   - Verified on earlier images only, not repeated on this one: USB provisioning (`configure_bridge` and `configure` answer `ok`, invalid URL, malformed JSON, a 3100-byte line and an idle partial line are rejected, values survive a reset, nothing from the request in the log) at `122fc98`; the setup access point and the HTTP server starting without errors, with about 20 KB less heap (minimum 165 KB) and `httpd` at 3476 of 4096 B before any request, with a temporary build that opened the setup at boot (`76903d3`, not kept).
-  - Not run: the phone flow (QR, form, save), a real connection to a network, two networks, wrong password, hidden network, outage recovery, on-screen taps (Settings → Wi-Fi, forget, add, cancel, back), the live screen timeout change after `configure`, boot without saved networks (the setup opening by itself) and an HTTP request to the form. They are the user's smoke test.
+  - Accepted by the user without a separate run, so not evidenced here: wrong password in the setup, forget, last network, cancel and back, persistence after a reset, boot without saved networks, the live screen timeout change after `configure`, and the sixth network replacing the oldest. Follow-up items are in `.local/follow-up.md`.
