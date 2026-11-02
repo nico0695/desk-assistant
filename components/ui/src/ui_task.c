@@ -289,9 +289,10 @@ void ui_show_battery(bool known, uint8_t percent)
 void ui_show_bridge_online(bool online)
 {
     taskENTER_CRITICAL(&bridge_lock);
+    const bool changed = latest_bridge_online != online;
     latest_bridge_online = online;
     taskEXIT_CRITICAL(&bridge_lock);
-    if (ui_task != NULL) {
+    if (changed && ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_BRIDGE, eSetBits);
     }
 }
