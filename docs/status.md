@@ -19,10 +19,9 @@
 
 ## Active stage: 5a — Recording: local capture
 
-- **Status:** planning not started; no stage document or approved mini plan yet.
+- **Status:** design and mini plan approved on 2026-11-02; executing steps 1–8. Decisions: audio partition erased after each attempt and scanned at boot; one tap starts capture; Send stays disabled until 5b; KEY does not turn the panel off during capture; audio arbitration in stage 6; I2S mono slot with stereo fallback.
 - **Goal:** reliable audio capture without depending on the bridge.
 - **Scope (macro plan):** ES7210/I2S, mono PCM16 in the audio partition and WAV synthesized on read; minimum and maximum limits with overrun handling; states through READY_TO_SEND, CANCELLING and local failure; cleanup and blocking on release failures; panel on during capture; recording screen and home entry.
-- **Open:** audio arbitration detail.
 - **Carry-overs from stage 4:** connect the durable origin guard to recording and notification records in 5b/6. Triage these deferred 4R findings at the next stage and fix only those that are real defects: stalled close-delimited GET reported as OK with a truncated body; TLS/Bearer transport duplicated between `bridge_http` and `bridge_stream`; long `bridge_http_get`; long `bridge_stream_run` and `stream_worker`; unused `BRIDGE_SSE_HEARTBEAT_EXPECTED_MS`; missing host test for the SSE clock gate; missing host test for SSE `Content-Encoding` and duplicate `Content-Type`; unexplained equal-generation tie-break; silent path when NTP never synchronizes. Also in `.local/follow-up.md`: on-device IP-without-SSE and reconnection, and setup open with TLS.
 - **Workflow:** commits, tests, builds and `standard-code-review` stay local per step; push and remote verification happen at stage close. Deeper step reviews need a reason based on size, complexity or risk; stage close uses `4r-review` by default or `judgment-day` when blind corroboration is more useful.
 
