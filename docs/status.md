@@ -13,17 +13,16 @@
 | 5b | Recording: upload and result | Done (validated 2026-11-02) |
 | 6 | Notifications and sound | Done (validated 2026-11-02) |
 | 7 | Modules: read | Done (validated 2026-11-02) |
-| 8 | Modules: actions | Waiting for validation |
-| 9 | Full acceptance | Pending |
+| 8 | Modules: actions | Done (validated 2026-11-02) |
+| 9 | Full acceptance | Next |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 8 — Modules: actions
+## Active stage: 9 — Full acceptance
 
-- **Status:** implemented and flashed on `esp32-02` at `7a2d452`; waiting for the user's smoke test.
-- **Goal:** safe mutations on remote resources.
-- **Done:** Delete (DELETE, no body) and Complete (empty POST) with a `not sent` boundary before the request is written; one action outcome shared with the card Snooze; Delete, Complete and Snooze from the detail with a frozen ticket, one dispatch and controls blocked until the result; a fresh origin page after Delete or Complete, a detail reread after Snooze; uncertain, missing or changed outcomes allow no action until a fresh detail; a result line that stays until the next user command; Delete and Snooze dialogs on a modal shared with Wi-Fi; notifications held during a dialog or an action.
-- **Deadlines:** Complete waits up to 60 s for the bridge (it asks for at least 55 s); Delete and Snooze 40 s; every action waits up to 5 s for the HTTP gate, then it is not sent.
-- **Carry-overs from stage 7:** a direct module-to-module path would need `forget_screen` to tell screens apart; the other items are in `.local/follow-up.md`.
+- **Status:** next, not started.
+- **Goal:** a final image validated against the spec.
+- **Scope (macro plan):** combined flows (browse, record and upload with SSE and notifications; notifications during capture and actions; reconnection, panel off, reboot and persistence failures), memory budgets fixed by measurement, final `build_verified` / `hardware_verified` evidence.
+- **Carry-overs:** the deferred board cases of stages 3–8 and the measured body budget, in `.local/follow-up.md` and the macro plan.
 
 ## Closed stages
 
@@ -36,6 +35,8 @@
 - **5b — Recording: upload and result:** one TLS transport shared by GET, PUT and SSE; assistant codec; the single PUT with the `unsent` boundary and progress windows; a durable attempt record with an origin hold; one-job-at-a-time attempt phases; upload, query, close and discard jobs, the 180 s wait and restore after reboot; reply panel with scroll and notes; Home entry by state. Validated by the user on `esp32-02` at `6c30f19` (green CI on `0474820`); network cut, discard and Check on the board were skipped by the user and are in `.local/follow-up.md`.
 - **6 — Notifications and sound:** a durable FIFO of eight and a pending-ACK journal in one NVS blob; `limit=1` drain on demand with persistence before the ACK and an idempotent ACK retry; an overlay card with local Next and Close, Snooze with presets and a durable close, panel wake-up and deferral during capture; an atomic audio arbiter between capture and playback and an ES8311 tone with a RAM accumulator. Validated by the user on `esp32-02` at `25af727` (green CI on `2396ba9`); the tone intensity does not follow the volume (only 0 mutes), and several cases are deferred in `.local/follow-up.md`.
 - **7 — Modules: read:** a codec for the Tasks, Notes and Alerts lists and details with exact fields and the error envelope; shared UTC-3 dates and JSON guard extracted from notifications and events; a browsing state machine with generation tickets and one retained list; a short-lived read worker that waits up to 5 s for the HTTP gate and refuses to start during capture or upload; list and detail screens with page in the title, Prev, Refresh and Next, replace-by-state loading and errors, and the host preview. Validated by the user on `esp32-02` at `4769531` (green CI on `a83b605`); a read during a Wi-Fi outage was not tested and the body budget is still unmeasured, both in `.local/follow-up.md`.
+
+- **8 — Modules: actions:** Delete (DELETE) and Complete (empty POST) without body or Content-Type and a `not sent` boundary before the request is written; one action outcome and error mapping shared with Snooze; actions from the detail with a frozen ticket, one dispatch and controls blocked until the result; a fresh origin page after Delete or Complete and a detail reread after Snooze; uncertain, missing or changed outcomes require a fresh detail; a persistent result line; Delete and Snooze dialogs on a modal shared with Wi-Fi; notifications held during a dialog or an action. Validated by the user on `esp32-02` at `7a2d452` (green CI on `6102922`).
 
 ## Evidence
 
@@ -167,7 +168,9 @@ Each checkpoint records one entry per image:
 - **Revision:** `7a2d452`, integrated profile (`sdkconfig.defaults`).
 - **ELF SHA-256:** `b64fdb0b7cea746601215cd6b814a65d59b3d7cc6337cf7fa7f2dd81be5d9cd1` (the boot log prints its first 9 digits). Application image 1657984 bytes, 60% of the 4 MB app partition free.
 - **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41; preview built and reviewed (Wi-Fi dialogs pixel-identical after the extraction); `dependencies.lock` unchanged.
-- **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
-  - Final image `7a2d452`: boot log shows the version and ELF digits above; Wi-Fi connected 5 s and event stream open 13 s after boot; heap 166 KB free, minimum 153 KB at UI ready; no errors. Only the boot was observed; no action has run against the real bridge yet.
-  - Pending: the user's smoke test with disposable records (guide in `.local/stages/08-modulos-acciones.md`).
+- **hardware_verified:** yes, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
+  - Final image `7a2d452`: boot log shows the version and ELF digits above; Wi-Fi connected 5 s and event stream open 13 s after boot; heap 166 KB free, minimum 153 KB at UI ready; no errors.
+  - Final image `7a2d452`, observed by the user with disposable records: Delete with Cancel in Notes and Delete in Alerts, Complete on a pending task without a tag with a double tap (one dispatch), no ✓ on a non-pending task, the three Snooze presets with the confirmed time and the detail reread, and a notification deferred while the Delete dialog was open; all working.
+  - Not run on the board: real uncertain (500, `action_unconfirmed`) and `task_state_changed` replies; covered by host tests.
+- **Validation:** the user ran the smoke guide on the final image and reported everything working (2026-11-02). CI on the close push `6102922` passed.
 - **Reviews:** `standard-code-review` on steps 1, 2–3 and 5, all clean; step 4 skipped (extraction with identical pixels). 4R at close: four lenses, 0 severe, 6 warnings and suggestions. Fixed in `7a2d452`: the action error mapping duplicated between Snooze and Delete/Complete, the Snooze request built twice (card and detail), a header comment about confirmation, and a test for an outcome that arrives after leaving the module. Snooze now also reads a missing route (404 `not_found`) as rejected. Discarded with their reason in the stage document: the two copies of the allowed-action rule, and an open dialog that holds notifications without a time limit (the spec defers notifications during a confirmation).
