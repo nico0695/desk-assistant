@@ -28,6 +28,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/ui/src/touch_gate.c
     ${COMPONENTS_DIR}/features/settings/src/settings_values.c
     ${COMPONENTS_DIR}/features/settings/src/settings_row.c
+    ${COMPONENTS_DIR}/features/recording/src/recording_state.c
     ${COMPONENTS_DIR}/connectivity/src/wifi_list.c
     ${COMPONENTS_DIR}/connectivity/src/wifi_select.c
     ${COMPONENTS_DIR}/connectivity/src/setup_credentials.c
@@ -45,6 +46,8 @@ set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/board/src
     ${COMPONENTS_DIR}/ui/src
     ${COMPONENTS_DIR}/features/settings/include
+    ${COMPONENTS_DIR}/features/recording/include
+    ${COMPONENTS_DIR}/features/recording/src
     ${COMPONENTS_DIR}/connectivity/include
     ${COMPONENTS_DIR}/connectivity/src
     ${COMPONENTS_DIR}/bridge/include
