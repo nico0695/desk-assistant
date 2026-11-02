@@ -46,6 +46,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/bridge/src/bridge_events.c
     ${COMPONENTS_DIR}/bridge/src/bridge_json.c
     ${COMPONENTS_DIR}/bridge/src/bridge_snooze.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_resources.c
     ${COMPONENTS_DIR}/bridge/src/bridge_time.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 set(HOST_MODULE_INCLUDE_DIRS
