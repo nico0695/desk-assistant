@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
 #include "storage.h"
 
 /* A new namespace marks an incompatible record; the old one is left untouched. */
@@ -9,6 +10,46 @@
 #define BRIDGE_ORIGIN_KEY "origin"
 
 static bridge_origin_changed_fn origin_changed;
+static portMUX_TYPE hold_lock = portMUX_INITIALIZER_UNLOCKED;
+/* Guarded by hold_lock: a save never overlaps a hold, so held work always sees the origin it started with. */
+static unsigned holds;
+static bool saving;
+
+bool bridge_origin_hold(void)
+{
+    taskENTER_CRITICAL(&hold_lock);
+    const bool held = !saving;
+    if (held) {
+        ++holds;
+    }
+    taskEXIT_CRITICAL(&hold_lock);
+    return held;
+}
+
+void bridge_origin_release(void)
+{
+    taskENTER_CRITICAL(&hold_lock);
+    if (holds > 0U) {
+        --holds;
+    }
+    taskEXIT_CRITICAL(&hold_lock);
+}
+
+static bool begin_save(void)
+{
+    taskENTER_CRITICAL(&hold_lock);
+    const bool allowed = holds == 0U && !saving;
+    saving = allowed;
+    taskEXIT_CRITICAL(&hold_lock);
+    return allowed;
+}
+
+static void end_save(void)
+{
+    taskENTER_CRITICAL(&hold_lock);
+    saving = false;
+    taskEXIT_CRITICAL(&hold_lock);
+}
 
 void bridge_origin_set_changed_callback(bridge_origin_changed_fn callback)
 {
@@ -20,6 +61,9 @@ esp_err_t bridge_origin_save(const char *url, const char *token)
     if (!bridge_url_valid(url) || !bridge_token_valid(token)) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (!begin_save()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     bridge_origin_t origin = {0};
     memcpy(origin.url, url, strlen(url));
     memcpy(origin.token, token, strlen(token));
@@ -27,6 +71,7 @@ esp_err_t bridge_origin_save(const char *url, const char *token)
     if (error == ESP_OK && origin_changed != NULL) {
         origin_changed(&origin);
     }
+    end_save();
     memset(&origin, 0, sizeof(origin));
     return error;
 }

@@ -3,6 +3,7 @@
 #include "storage.h"
 #include "unity.h"
 
+unsigned bridge_test_critical_depth;
 static bridge_origin_t persisted;
 static bool write_fails;
 static unsigned callbacks;
@@ -46,4 +47,26 @@ static void notify_only_after_successful_persistence(void)
     TEST_ASSERT_EQUAL_UINT(1, callbacks);
 }
 
-int main(void) { UNITY_BEGIN(); RUN_TEST(notify_only_after_successful_persistence); return UNITY_END(); }
+static void held_origin_cannot_change(void)
+{
+    const char *token = "01234567890123456789012345678901";
+    TEST_ASSERT_TRUE(bridge_origin_hold());
+    TEST_ASSERT_TRUE(bridge_origin_hold());
+    TEST_ASSERT_EQUAL_INT(ESP_ERR_INVALID_STATE, bridge_origin_save("https://example.test", token));
+    bridge_origin_release();
+    TEST_ASSERT_EQUAL_INT(ESP_ERR_INVALID_STATE, bridge_origin_save("https://example.test", token));
+    TEST_ASSERT_EQUAL_UINT(0, callbacks);
+    TEST_ASSERT_EQUAL_INT(0, persisted.url[0]);
+    bridge_origin_release();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, bridge_origin_save("https://example.test", token));
+    TEST_ASSERT_EQUAL_UINT(1, callbacks);
+    TEST_ASSERT_EQUAL_UINT(0, bridge_test_critical_depth);
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(notify_only_after_successful_persistence);
+    RUN_TEST(held_origin_cannot_change);
+    return UNITY_END();
+}

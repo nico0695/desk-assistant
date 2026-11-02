@@ -110,3 +110,11 @@ target_include_directories(test_recording_clip PRIVATE recording_clip_stubs
 target_compile_options(test_recording_clip PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_recording_clip PRIVATE unity)
 add_test(NAME test_recording_clip COMMAND test_recording_clip)
+
+add_executable(test_recording_record integration/test_recording_record.c
+    ${COMPONENTS_DIR}/features/recording/src/recording_record.c ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
+target_include_directories(test_recording_record PRIVATE recording_record_stubs bridge_http_stubs
+    ${COMPONENTS_DIR}/features/recording/src ${COMPONENTS_DIR}/bridge/include)
+target_compile_options(test_recording_record PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_recording_record PRIVATE unity)
+add_test(NAME test_recording_record COMMAND test_recording_record)
