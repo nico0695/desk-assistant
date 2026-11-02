@@ -32,5 +32,7 @@ jobs:
         run: |
           . "$IDF_PATH/export.sh"
           idf.py -B build-app -D SDKCONFIG="$PWD/build-app/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults" build
+      - name: HTTP client log protection
+        run: python tools/check_http_log_cap.py build-app
       - name: Dependency lock unchanged
         run: git diff --exit-code dependencies.lock
