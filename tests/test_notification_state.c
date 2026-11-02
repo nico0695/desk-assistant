@@ -50,10 +50,23 @@ static void full_queue_keeps_front_and_accepts_after_close(void)
     TEST_ASSERT_TRUE(notification_state_valid(&state));
 }
 
+static void duplicate_after_ack_rearms_displayed_without_inserting(void)
+{
+    notification_state_t state;
+    notification_state_init(&state);
+    bridge_event_t first = event(1);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_RECEIVED, notification_state_receive(&state, &first));
+    TEST_ASSERT_TRUE(notification_state_acknowledged(&state, first.event_id));
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_DUPLICATE, notification_state_receive(&state, &first));
+    TEST_ASSERT_EQUAL_UINT(1, state.count);
+    TEST_ASSERT_EQUAL_STRING(first.event_id, state.pending_ack);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(close_before_ack_keeps_tombstone_and_deduplicates);
     RUN_TEST(full_queue_keeps_front_and_accepts_after_close);
+    RUN_TEST(duplicate_after_ack_rearms_displayed_without_inserting);
     return UNITY_END();
 }

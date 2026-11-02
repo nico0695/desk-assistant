@@ -179,6 +179,68 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
     return response;
 }
 
+bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const char *path,
+                                        bridge_http_json_method_t method, const char *request, size_t request_length,
+                                        uint32_t gate_wait_ms, uint32_t io_ms, char *response_body,
+                                        size_t response_capacity)
+{
+    bridge_http_response_t response = {.result = BRIDGE_HTTP_INVALID_ARGUMENT};
+    char url[BRIDGE_HTTP_URL_SIZE];
+    if (origin == NULL || request == NULL || request_length == 0U || request_length > INT_MAX ||
+        response_body == NULL || response_capacity == 0U || response_capacity > BRIDGE_HTTP_BODY_MAX_BYTES ||
+        io_ms == 0U || (method != BRIDGE_HTTP_PUT_JSON && method != BRIDGE_HTTP_POST_JSON)) return response;
+    memset(response_body, 0, response_capacity);
+    if (!bridge_token_valid(origin->token) || !bridge_http_make_url(origin->url, path, url, sizeof(url))) return response;
+    if (!bridge_clock_ready()) {
+        response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
+        return response;
+    }
+    if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(gate_wait_ms)) != pdTRUE) {
+        response.result = BRIDGE_HTTP_BUSY;
+        return response;
+    }
+    bridge_tls_t session = {
+        .deadline_us = esp_timer_get_time() + (int64_t)io_ms * 1000,
+        .wire_limit = BRIDGE_HTTP_HEADER_MAX_BYTES,
+    };
+    const esp_http_client_method_t http_method = method == BRIDGE_HTTP_PUT_JSON ? HTTP_METHOD_PUT : HTTP_METHOD_POST;
+    if (!bridge_tls_create(&session, origin, url, http_method, (int)(io_ms > INT_MAX ? INT_MAX : io_ms))) {
+        response.result = BRIDGE_HTTP_NO_MEMORY;
+    } else if (esp_http_client_set_header(session.client, "Content-Type", "application/json") != ESP_OK ||
+               esp_http_client_set_header(session.client, "Accept", "application/json") != ESP_OK) {
+        response.result = BRIDGE_HTTP_TRANSPORT_ERROR;
+    } else {
+        const bridge_tls_open_t opened = bridge_tls_open(&session, (int)request_length);
+        if (opened == BRIDGE_TLS_GATE_TIMEOUT) response.result = BRIDGE_HTTP_TIMEOUT;
+        else if (opened == BRIDGE_TLS_OPEN_FAILED) response.result = failure_result(&session);
+        else {
+            response.result = BRIDGE_HTTP_OK;
+            for (size_t offset = 0; offset < request_length;) {
+                if (bridge_tls_budget(&session, -1) <= 0) {
+                    response.result = BRIDGE_HTTP_TIMEOUT;
+                    break;
+                }
+                const int sent = esp_http_client_write(session.client, request + offset, (int)(request_length - offset));
+                if (sent <= 0 || (size_t)sent > request_length - offset) {
+                    response.result = failure_result(&session);
+                    break;
+                }
+                offset += (size_t)sent;
+            }
+            if (response.result == BRIDGE_HTTP_OK)
+                response.result = receive_response(&session, response_body, response_capacity, &response);
+        }
+    }
+    bridge_tls_destroy(&session);
+    xSemaphoreGive(finite_gate);
+    if (gate_released_callback != NULL) gate_released_callback();
+    if (response.result != BRIDGE_HTTP_OK) {
+        memset(response_body, 0, response_capacity);
+        response.length = 0;
+    }
+    return response;
+}
+
 /* Writes the body block by block; unsent turns false before the first write of the last block. */
 static bridge_http_result_t send_body(bridge_tls_t *session, size_t body_length, bridge_http_body_reader_t read_source,
                                       void *context, char *block, bool *unsent)

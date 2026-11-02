@@ -12,6 +12,7 @@
 #define BRIDGE_EVENT_GET_PATH "/v1/device/events?limit=1"
 #define BRIDGE_EVENT_RESPONSE_MAX_BYTES 4096U
 #define BRIDGE_EVENT_ACK_BODY "{\"status\":\"displayed\"}"
+#define BRIDGE_EVENT_ACK_PATH_FORMAT "/v1/device/events/%s/ack"
 #define BRIDGE_EVENT_QUEUE_CAPACITY 8U
 
 typedef struct {

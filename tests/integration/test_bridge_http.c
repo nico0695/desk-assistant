@@ -12,7 +12,8 @@
 
 typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL,
                STREAM_OK, STREAM_NO_TYPE, STREAM_DENIED, STREAM_IDLE, STREAM_ENCODED, STREAM_TWO_TYPES,
-               DEADLINE_CLOSE, PUT_OK, PUT_FAIL_FIRST_WRITE, PUT_FAIL_LAST_WRITE, PUT_STALL, PUT_SLOW } fake_mode_t;
+               DEADLINE_CLOSE, PUT_OK, PUT_FAIL_FIRST_WRITE, PUT_FAIL_LAST_WRITE, PUT_STALL, PUT_SLOW,
+               JSON_ACK } fake_mode_t;
 struct fake_transport { void *context; connect_fn connect; read_fn read; write_fn write; close_fn close; bool tls; };
 struct fake_client { esp_http_client_config_t config; size_t offset; bool completed; };
 static fake_mode_t mode;
@@ -119,7 +120,9 @@ esp_err_t esp_http_client_set_header(esp_http_client_handle_t c, const char *key
 }
 esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
 {
-    TEST_ASSERT_EQUAL_INT(c->config.method == HTTP_METHOD_PUT ? (int)UPLOAD_BYTES : 0, length); ++dispatches;
+    TEST_ASSERT_EQUAL_INT(mode == JSON_ACK ? (int)strlen(BRIDGE_EVENT_ACK_BODY) :
+                          c->config.method == HTTP_METHOD_PUT ? (int)UPLOAD_BYTES : 0, length);
+    ++dispatches;
     if (mode == PUT_SLOW) now_us += INT64_C(29000000);
     return c->config.transport->connect(c->config.transport, "example.test", 443, c->config.timeout_ms) == 0 ? ESP_OK : ESP_FAIL;
 }
@@ -147,20 +150,23 @@ int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
                                          .header_key = "Content-Encoding", .header_value = "gzip"};
         c->config.event_handler(&event);
     }
-    return (int64_t)strlen(payload);
+    return mode == JSON_ACK ? 0 : (int64_t)strlen(payload);
 }
 int esp_http_client_get_status_code(esp_http_client_handle_t c)
 {
     (void)c;
     if (mode == PUT_OK) return 202;
+    if (mode == JSON_ACK) return 204;
     return mode == DENIED || mode == STREAM_DENIED ? 401 : 200;
 }
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t c)
 {
-    (void)c; return mode == RESPONSE_OVERFLOW || mode == DEADLINE_CLOSE ? -1 : (int64_t)strlen(payload);
+    (void)c; return mode == JSON_ACK ? 0 :
+                     mode == RESPONSE_OVERFLOW || mode == DEADLINE_CLOSE ? -1 : (int64_t)strlen(payload);
 }
 int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
 {
+    if (mode == JSON_ACK) { c->completed = true; return 0; }
     if (mode == STREAM_IDLE) {
         int64_t before = now_us;
         int result = c->config.transport->read(c->config.transport, data, length, c->config.timeout_ms);
@@ -199,6 +205,12 @@ int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
 bool esp_http_client_is_complete_data_received(esp_http_client_handle_t c) { return c->completed; }
 int esp_http_client_write(esp_http_client_handle_t c, const char *data, int length)
 {
+    if (mode == JSON_ACK) {
+        TEST_ASSERT_EQUAL_INT(HTTP_METHOD_PUT, c->config.method);
+        TEST_ASSERT_EQUAL_INT((int)strlen(BRIDGE_EVENT_ACK_BODY), length);
+        TEST_ASSERT_EQUAL_MEMORY(BRIDGE_EVENT_ACK_BODY, data, (size_t)length);
+        return length;
+    }
     TEST_ASSERT_EQUAL_INT(HTTP_METHOD_PUT, c->config.method);
     TEST_ASSERT_LESS_OR_EQUAL_INT((int)BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES, length);
     TEST_ASSERT_EQUAL_UINT8((uint8_t)uploaded, (uint8_t)data[0]);
@@ -239,6 +251,22 @@ static void complete_get_with_prefix_and_auth(void)
     TEST_ASSERT_EQUAL_MEMORY(payload, body, result.length);
     TEST_ASSERT_EQUAL_STRING("https://example.test/prefix/v1/device/events?limit=1", captured_url);
     TEST_ASSERT_TRUE(auth_set); TEST_ASSERT_EQUAL_UINT(1, dispatches);
+}
+
+static void ack_json_is_one_put_with_empty_204(void)
+{
+    mode = JSON_ACK;
+    char response[1];
+    bridge_http_response_t result = bridge_http_json(&origin,
+        "/v1/device/events/01234567-89ab-cdef-0123-456789abcdef/ack", BRIDGE_HTTP_PUT_JSON,
+        BRIDGE_EVENT_ACK_BODY, strlen(BRIDGE_EVENT_ACK_BODY), BRIDGE_HTTP_EVENT_GATE_MS,
+        BRIDGE_HTTP_EVENT_IO_MS, response, sizeof(response));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.result);
+    TEST_ASSERT_EQUAL_INT(204, result.status);
+    TEST_ASSERT_EQUAL_UINT(0, result.length);
+    TEST_ASSERT_EQUAL_UINT(1, dispatches);
+    TEST_ASSERT_EQUAL_STRING("https://example.test/prefix/v1/device/events/01234567-89ab-cdef-0123-456789abcdef/ack",
+                             captured_url);
 }
 
 static void finite_gate_release_wakes_a_waiting_owner(void)
@@ -492,6 +520,7 @@ int main(void)
     UNITY_BEGIN();
     TEST_ASSERT_EQUAL_INT(ESP_OK, bridge_http_init());
     RUN_TEST(complete_get_with_prefix_and_auth);
+    RUN_TEST(ack_json_is_one_put_with_empty_204);
     RUN_TEST(finite_gate_release_wakes_a_waiting_owner);
     RUN_TEST(clock_and_gate_fail_before_dispatch);
     RUN_TEST(allocation_and_setup_failures_release_resources_and_gates);

@@ -9,6 +9,7 @@
 #include "esp_system.h"
 #include "memory_report.h"
 #include "nvs.h"
+#include "notifications.h"
 #include "recording.h"
 #include "settings.h"
 #include "storage.h"
@@ -56,12 +57,19 @@ static void bridge_online_changed(bool online, uint64_t generation)
 {
     ui_show_bridge_online(online, generation);
     recording_bridge_online(online, generation);
+    notifications_bridge_online(online);
 }
 
 static const bridge_hooks_t BRIDGE_HOOKS = {
     .online_changed = bridge_online_changed,
     .assistant_result = recording_assistant_result,
+    .pending_events = notifications_pending_events,
 };
+
+static void show_notification(const notification_view_t *view)
+{
+    ui_show_notification(view, notifications_close, NULL);
+}
 
 static void show_battery(board_battery_reading_t reading, void *unused)
 {
@@ -87,6 +95,7 @@ void app_main(void)
         ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(show_battery, NULL));
     }
     ESP_ERROR_CHECK_WITHOUT_ABORT(bridge_start(&BRIDGE_HOOKS));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(notifications_start(show_notification));
     ESP_ERROR_CHECK_WITHOUT_ABORT(connectivity_start(&CONNECTIVITY_HOOKS));
     memory_report_log("boot");
 }

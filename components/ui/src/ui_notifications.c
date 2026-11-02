@@ -160,7 +160,7 @@ void ui_notifications_hide(void)
 
 void ui_notifications_show(const notification_view_t *view, const ui_notifications_handlers_t *handlers)
 {
-    if (view == NULL || view->count == 0U) {
+    if (view == NULL || (view->count == 0U && view->notice != NOTIFICATION_VIEW_STORAGE_ERROR)) {
         ui_notifications_hide();
         return;
     }
@@ -168,12 +168,18 @@ void ui_notifications_show(const notification_view_t *view, const ui_notificatio
     if (changed) {
         ui_notifications_hide();
         create_overlay();
-        lv_label_set_text(message, view->card.message);
+        lv_label_set_text(message, view->count == 0U ? UI_TEXT_NOTIFICATION_STORAGE_ERROR : view->card.message);
     }
     ui_status_bar_set_title_override(UI_TEXT_NOTIFICATION_TITLE);
     shown = *view;
     callbacks = handlers != NULL ? *handlers : (ui_notifications_handlers_t){0};
     has_callbacks = handlers != NULL;
+    if (view->count == 0U) {
+        lv_obj_add_flag(notice, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(actions, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(presets, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
     lv_label_set_text_static(lv_obj_get_child(close_button, -1),
                              view->count > 1U ? UI_TEXT_NOTIFICATION_NEXT : UI_TEXT_NOTIFICATION_CLOSE);
     if (view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) {
@@ -195,7 +201,7 @@ void ui_notifications_show(const notification_view_t *view, const ui_notificatio
     }
     if (view->action_busy) lv_obj_add_state(actions, LV_STATE_DISABLED);
     else lv_obj_remove_state(actions, LV_STATE_DISABLED);
-    if (view->action_busy || view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED)
+    if (callbacks.snooze == NULL || view->action_busy || view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED)
         lv_obj_add_state(snooze_button, LV_STATE_DISABLED);
     else lv_obj_remove_state(snooze_button, LV_STATE_DISABLED);
 }

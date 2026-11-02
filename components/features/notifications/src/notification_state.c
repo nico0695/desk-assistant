@@ -41,7 +41,10 @@ notification_receive_t notification_state_receive(notification_state_t *state, c
     }
     if (strcmp(state->pending_ack, event->event_id) == 0) return NOTIFICATION_DUPLICATE;
     for (size_t i = 0; i < state->count; ++i) {
-        if (strcmp(state->cards[i].event_id, event->event_id) == 0) return NOTIFICATION_DUPLICATE;
+        if (strcmp(state->cards[i].event_id, event->event_id) == 0) {
+            if (state->pending_ack[0] == '\0') memcpy(state->pending_ack, event->event_id, BRIDGE_UUID_SIZE);
+            return NOTIFICATION_DUPLICATE;
+        }
     }
     if (state->pending_ack[0] != '\0') return NOTIFICATION_ACK_PENDING;
     if (state->count == BRIDGE_EVENT_QUEUE_CAPACITY) return NOTIFICATION_FULL;

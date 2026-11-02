@@ -132,3 +132,12 @@ target_include_directories(test_notification_journal PRIVATE recording_record_st
 target_compile_options(test_notification_journal PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_notification_journal PRIVATE unity cjson m)
 add_test(NAME test_notification_journal COMMAND test_notification_journal)
+
+add_executable(test_notifications integration/test_notifications.c
+    ${COMPONENTS_DIR}/features/notifications/src/notification_state.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
+target_include_directories(test_notifications PRIVATE notifications_stubs bridge_http_stubs
+    ${COMPONENTS_DIR}/features/notifications/include ${COMPONENTS_DIR}/bridge/include)
+target_compile_options(test_notifications PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_notifications PRIVATE unity)
+add_test(NAME test_notifications COMMAND test_notifications)

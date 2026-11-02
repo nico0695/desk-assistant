@@ -1,0 +1,16 @@
+menu "Notifications"
+    config NOTIFICATIONS_WORKER_STACK_SIZE
+        int "Notification worker stack bytes"
+        default 8192
+        range 4096 16384
+
+    config NOTIFICATIONS_WORKER_PRIORITY
+        int "Notification worker priority"
+        default 4
+        range 1 20
+
+    config NOTIFICATIONS_ACK_RETRY_MS
+        int "Pending ACK retry delay in milliseconds"
+        default 5000
+        range 1000 60000
+endmenu

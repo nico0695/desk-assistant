@@ -58,6 +58,13 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
                                        uint32_t gate_wait_ms, uint32_t io_ms,
                                        char *body, size_t capacity);
 
+typedef enum { BRIDGE_HTTP_PUT_JSON, BRIDGE_HTTP_POST_JSON } bridge_http_json_method_t;
+/* One finite JSON mutation; no redirect or retry. Caller validates status and response schema. */
+bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const char *path,
+                                        bridge_http_json_method_t method, const char *request, size_t request_length,
+                                        uint32_t gate_wait_ms, uint32_t io_ms, char *response_body,
+                                        size_t response_capacity);
+
 /* Copies exactly capacity body bytes from offset into buffer; false when they cannot be read. */
 typedef bool (*bridge_http_body_reader_t)(size_t offset, void *buffer, size_t capacity, void *context);
 

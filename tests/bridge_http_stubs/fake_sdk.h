@@ -36,6 +36,7 @@ int esp_transport_get_socket(esp_transport_handle_t);
 typedef int esp_http_client_method_t;
 #define HTTP_METHOD_GET 0
 #define HTTP_METHOD_PUT 2
+#define HTTP_METHOD_POST 1
 #define ESP_ERR_HTTP_EAGAIN 0x7007
 #define HTTP_EVENT_ON_HEADER 1
 typedef struct { void *user_data; int event_id; const char *header_key; const char *header_value; } esp_http_client_event_t;
