@@ -385,7 +385,7 @@ void notifications_close(uint64_t expected_generation, const char *event_id)
     taskENTER_CRITICAL(&lock);
     const bool current = expected_generation != 0U && expected_generation <= generation;
     taskEXIT_CRITICAL(&lock);
-    if (commands == NULL || !current || !bridge_uuid_valid(event_id)) return;
+    if (commands == NULL || uncertain || !current || !bridge_uuid_valid(event_id)) return;
     close_command_t command;
     memcpy(command.event_id, event_id, sizeof(command.event_id));
     if (xQueueSend(commands, &command, 0) == pdTRUE) schedule(true);

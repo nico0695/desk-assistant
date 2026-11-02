@@ -200,6 +200,8 @@ static void failed_journal_commit_blocks_ack_and_keeps_event(void)
     TEST_ASSERT_TRUE(uncertain);
     TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_STORAGE_ERROR, notice);
     TEST_ASSERT_EQUAL_UINT(0, releases);
+    notifications_close(generation, "01234567-89ab-cdef-0123-456789abcdef");
+    TEST_ASSERT_EQUAL_UINT(0, uxQueueMessagesWaiting(commands));
 }
 
 int main(void)
