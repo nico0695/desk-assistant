@@ -8,7 +8,7 @@
 | 1 | Board and base UI | Done (validated 2026-11-01) |
 | 2 | Storage and settings | Done (validated 2026-11-01) |
 | 3 | Wi-Fi and provisioning | Done (validated 2026-11-01) |
-| 4 | Bridge base | Planning |
+| 4 | Bridge base | In progress |
 | 5a | Recording: local capture | Pending |
 | 5b | Recording: upload and result | Pending |
 | 6 | Notifications and sound | Pending |
@@ -20,13 +20,13 @@
 ## Active stage: 4 — Bridge base
 
 - **Goal:** HTTPS client and SSE stream to the bridge, with the Wi-Fi status icon following the connection.
-- **Progress:** steps 1–3 completed at `601f6a7`, `3b0d227`, `ced13c9`, `485458f` and `f8c1d6b`. Step 4 code is at `63099cc` with review fixes `916c8f6` and `2bfe0aa`; step 5 diagnostic code is at `082e216`. Standard reviews, 26 host tests, integrated and diagnostic builds passed. Hardware validation for steps 4–5 remains pending: the unit's USB port is not currently visible. The approved plan is `.local/stages/04-bridge-base.md`.
+- **Progress:** steps 1–3 are complete. Software for steps 4–5 passed standard QA with fixes through `cb87b04`. A 4R review found that SDK HTTP logs could expose the hostname; fix `0e212d4` passed QA. The candidate framing assumption was refuted by reading the SDK and fixture. `cb87b04` adds safe technical logs and passed standard QA. The diagnostic image at `cb87b04` builds but has not been flashed. The approved plan and detailed step record are in `.local/stages/04-bridge-base.md`.
 - **Validation scope:** reuse the V4 server evidence; verify the new client's TLS/auth, SSE, reconnection, status icon and memory. Previous V4 measurements include successful reads taking 4.8–6.7 s with SSE active; their success is reference evidence, not hardware verification of this firmware.
 - **Carry-overs:** wire IP + SSE to the status bar and measure TLS heap, largest block, task stacks and the LVGL pool. The durable origin guard will be connected to recording and notification records in stages 5b/6.
 - **Workflow (updated by the user, 2026-11-01):** commits, tests, builds and `standard-code-review` stay local per step; push and remote SHA/CI verification happen at stage close. Deeper step reviews need a reason based on size, complexity or risk; stage close uses `4r-review` by default or `judgment-day` when blind corroboration is more useful.
 - **Readiness check (2026-11-01):** initial worktree clean; local and remote `main` at `cf5fb57`. Host tests passed 16/16; the documented integrated build completed without warnings (incremental, 1348048-byte image, 68% of the app partition free); `dependencies.lock` unchanged. IDF 5.5.2 and LVGL 9.2.2 remain pinned.
 - **CI:** [run 41363321701](https://github.com/nico0695/desk-assistant/actions/runs/41363321701) passed on the latest firmware revision, `01ff8b4`. Only `docs/status.md` changed between that revision and `cf5fb57`; Markdown-only commits do not trigger CI.
-- **Hardware:** no new flash, reset or serial session during this readiness check. The stage 3 partial evidence and user-deferred cases below still apply.
+- **Hardware:** diagnostic image `c1ff487` booted on `esp32-02` and joined Wi-Fi. A fictitious bridge origin failed DNS, so no real HTTPS or SSE connection was established. The newer diagnostic image at `cb87b04` is build-verified but not flashed. Thus the stage remains open.
 
 ## Closed stages
 
@@ -94,3 +94,10 @@ Each checkpoint records one entry per image:
   - Memory at boot with Wi-Fi started: internal heap free 184936 B, minimum 184524 B, largest block 167936 B. Minimum free stack: `ui` 4144 of 8192 B at the Settings screen, `sys_evt` 4004 B at boot (2452 B of 4096 after several rounds on an earlier image), `usb_provision` 3108 of 3584 B, `storage` 2756 B.
   - Verified on earlier images only, not repeated on this one: USB provisioning (`configure_bridge` and `configure` answer `ok`, invalid URL, malformed JSON, a 3100-byte line and an idle partial line are rejected, values survive a reset, nothing from the request in the log) at `122fc98`; the setup access point and the HTTP server starting without errors, with about 20 KB less heap (minimum 165 KB) and `httpd` at 3476 of 4096 B before any request, with a temporary build that opened the setup at boot (`76903d3`, not kept).
   - Accepted by the user without a separate run, so not evidenced here: wrong password in the setup, forget, last network, cancel and back, persistence after a reset, boot without saved networks, the live screen timeout change after `configure`, and the sixth network replacing the oldest. Follow-up items are in `.local/follow-up.md`.
+
+### Stage 4 — Bridge base (in progress)
+
+- **Software revisions:** steps 1–3 complete; steps 4–5 software and standard QA fixes through `cb87b04`. The 4R review finding on SDK hostname logging was fixed in `0e212d4` and QA approved. A candidate framing assumption was refuted by checking the SDK and fixture. `cb87b04` adds safe technical logs and passed standard QA.
+- **build_verified:** yes for the integrated diagnostic image built from `cb87b04`; this image has not been flashed. No build evidence is inherited as hardware evidence.
+- **hardware_verified:** partial, on the earlier diagnostic image `c1ff487` on unit `esp32-02`: boot and Wi-Fi connection observed. The configured fictitious bridge origin failed DNS; real HTTPS and SSE were not reached. TLS/auth, stream, heartbeat, reconnection, status behavior with SSE, and memory under active TLS remain unverified.
+- **Artifact detail:** the booted image's ELF SHA-256 was not recorded here. `cb87b04` has no device boot evidence.
