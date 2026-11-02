@@ -22,8 +22,6 @@
 
 _Static_assert(BOARD_AUDIO_SAMPLE_RATE_HZ == RECORDING_SAMPLE_RATE_HZ, "capture rate differs from the contract");
 
-typedef enum { JOB_CLEANUP, JOB_CAPTURE } job_t;
-
 /* Technical figures only, logged once per capture; never audio. */
 typedef struct {
     uint32_t peak;
@@ -33,10 +31,7 @@ typedef struct {
 
 static const char *TAG = "recording";
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
-/*
- * Guarded by lock. Only phases without a running worker (IDLE, READY_TO_SEND, FAILED) start one, and a worker
- * reports its last outcome after releasing everything, so two workers never touch the hardware at once.
- */
+/* Guarded by lock. The state runs one job at a time, so two workers never touch the hardware or the record. */
 static recording_state_t state;
 /* Guarded by lock; numbers every view so the consumer can drop one that arrives late. */
 static uint64_t view_revision;
@@ -79,12 +74,14 @@ static void report_cleaned(bool cleaned)
     publish_current();
 }
 
-static void report_ready(void)
+/* Returns true when Send was already tapped and the upload follows in this job. */
+static bool report_ready(void)
 {
     taskENTER_CRITICAL(&lock);
-    recording_state_ready(&state);
+    const bool upload = recording_state_ready(&state);
     taskEXIT_CRITICAL(&lock);
     publish_current();
+    return upload;
 }
 
 static void report_failed(recording_failure_t failure, bool cleaned)
@@ -124,14 +121,15 @@ static void log_capture(uint32_t samples, const capture_metrics_t *metrics)
              (long long)(metrics->slowest_write_us / US_PER_MS));
 }
 
-static void finalize(uint32_t samples, const capture_metrics_t *metrics)
+/* Returns true when the valid clip continues to the upload. */
+static bool finalize(uint32_t samples, const capture_metrics_t *metrics)
 {
     const esp_err_t stopped = board_audio_stop();
     log_capture(samples, metrics);
     if (stopped != ESP_OK) {
         ESP_LOGE(TAG, "audio stop: %s", esp_err_to_name(stopped));
         report_failed(RECORDING_FAILURE_CLEANUP, false);
-        return;
+        return false;
     }
     taskENTER_CRITICAL(&lock);
     recording_failure_t failure = recording_state_validate(&state, board_audio_overruns());
@@ -141,9 +139,9 @@ static void finalize(uint32_t samples, const capture_metrics_t *metrics)
     }
     if (failure != RECORDING_FAILURE_NONE) {
         report_failed(failure, clear_clip());
-        return;
+        return false;
     }
-    report_ready();
+    return report_ready();
 }
 
 static void measure(const int16_t *samples, size_t count, capture_metrics_t *metrics)
@@ -170,7 +168,8 @@ static bool discard_warmup(int16_t *block)
     return true;
 }
 
-static void run_capture(void)
+/* Returns true when the valid clip continues to the upload. */
+static bool run_capture(void)
 {
     int16_t block[BOARD_AUDIO_BLOCK_SAMPLES];
     capture_metrics_t metrics = {0};
@@ -182,7 +181,7 @@ static void run_capture(void)
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "capture start: %s", esp_err_to_name(error));
         report_failed(RECORDING_FAILURE_START, release_and_clear());
-        return;
+        return false;
     }
     const int64_t started = esp_timer_get_time();
     int64_t published = started;
@@ -193,12 +192,11 @@ static void run_capture(void)
             memset(block, 0, sizeof(block));
             log_capture(samples, &metrics);
             report_cleaned(release_and_clear());
-            return;
+            return false;
         }
         if (phase == RECORDING_FINALIZING) {
             memset(block, 0, sizeof(block));
-            finalize(samples, &metrics);
-            return;
+            return finalize(samples, &metrics);
         }
         size_t count = 0;
         const size_t room = RECORDING_MAX_SAMPLES - samples;
@@ -233,32 +231,66 @@ static void run_capture(void)
     log_capture(samples, &metrics);
     ESP_LOGW(TAG, "capture failed: %d", (int)failure);
     report_failed(failure, release_and_clear());
+    return false;
+}
+
+/* Placeholder until the upload exists: admission is refused and the clip is kept. */
+static void run_upload(void)
+{
+    taskENTER_CRITICAL(&lock);
+    recording_state_refused(&state);
+    taskEXIT_CRITICAL(&lock);
+    publish_current();
+}
+
+static void run_job(recording_job_t job)
+{
+    switch (job) {
+    case RECORDING_JOB_CAPTURE:
+        if (run_capture()) {
+            run_upload();
+        }
+        break;
+    case RECORDING_JOB_CLEANUP:
+        /* Also retries any hardware a failed stop left owned; with nothing owned the stop is a no-op. */
+        report_cleaned(release_and_clear());
+        break;
+    case RECORDING_JOB_UPLOAD:
+        run_upload();
+        break;
+    default:
+        break;
+    }
 }
 
 static void worker(void *argument)
 {
-    if ((job_t)(uintptr_t)argument == JOB_CAPTURE) {
-        run_capture();
-    } else {
-        /* Also retries any hardware a failed stop left owned; with nothing owned the stop is a no-op. */
-        report_cleaned(release_and_clear());
+    recording_job_t job = (recording_job_t)(uintptr_t)argument;
+    while (job != RECORDING_JOB_NONE) {
+        run_job(job);
+        taskENTER_CRITICAL(&lock);
+        job = recording_state_next_job(&state);
+        taskEXIT_CRITICAL(&lock);
     }
     vTaskDelete(NULL);
 }
 
-static void start_worker(job_t job)
+/* Starts a worker for the next wanted job, unless one is already running and will take it. */
+static void start_job(void)
 {
-    if (xTaskCreate(worker, WORKER_NAME, CONFIG_RECORDING_WORKER_STACK_SIZE, (void *)(uintptr_t)job,
+    taskENTER_CRITICAL(&lock);
+    const recording_job_t job = recording_state_claim_job(&state);
+    taskEXIT_CRITICAL(&lock);
+    if (job == RECORDING_JOB_NONE ||
+        xTaskCreate(worker, WORKER_NAME, CONFIG_RECORDING_WORKER_STACK_SIZE, (void *)(uintptr_t)job,
                     CONFIG_RECORDING_WORKER_PRIORITY, NULL) == pdPASS) {
         return;
     }
     ESP_LOGE(TAG, "worker could not start");
-    /* Nothing was touched by a capture that never started; a pending cleanup stays pending. */
-    if (job == JOB_CAPTURE) {
-        report_failed(RECORDING_FAILURE_START, true);
-    } else {
-        report_failed(RECORDING_FAILURE_CLEANUP, false);
-    }
+    taskENTER_CRITICAL(&lock);
+    recording_state_start_failed(&state);
+    taskEXIT_CRITICAL(&lock);
+    publish_current();
 }
 
 static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t), uint64_t generation)
@@ -272,8 +304,8 @@ static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t
         return;
     }
     publish(&view);
-    if (effect == RECORDING_EFFECT_START_CAPTURE || effect == RECORDING_EFFECT_START_CLEANUP) {
-        start_worker(effect == RECORDING_EFFECT_START_CAPTURE ? JOB_CAPTURE : JOB_CLEANUP);
+    if (effect == RECORDING_EFFECT_VIEW) {
+        start_job();
     }
 }
 
@@ -328,6 +360,6 @@ esp_err_t recording_start(recording_view_fn on_view)
         return error;
     }
     publish_current();
-    start_worker(JOB_CLEANUP);
+    start_job();
     return ESP_OK;
 }
