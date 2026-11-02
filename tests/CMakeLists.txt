@@ -72,7 +72,7 @@ add_test(NAME test_bridge_clock COMMAND test_bridge_clock)
 
 add_executable(test_bridge_http integration/test_bridge_http.c
     ${COMPONENTS_DIR}/bridge/src/bridge_http_common.c ${COMPONENTS_DIR}/bridge/src/bridge_origin.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_stream.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_stream.c ${COMPONENTS_DIR}/bridge/src/bridge_tls.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 target_include_directories(test_bridge_http PRIVATE bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
 target_compile_options(test_bridge_http PRIVATE -Wall -Wextra -Werror)

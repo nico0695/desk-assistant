@@ -1,47 +1,23 @@
 #include "bridge_http.h"
 
 #include <limits.h>
-#include <stdio.h>
 #include <string.h>
-#include <strings.h>
 
 #include "bridge_clock.h"
 #include "bridge_http_common.h"
-#include "esp_crt_bundle.h"
+#include "bridge_tls.h"
 #include "esp_http_client.h"
 #include "esp_timer.h"
-#include "esp_transport.h"
-#include "esp_transport_ssl.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "freertos/task.h"
 #include "sdkconfig.h"
 
 #if CONFIG_BRIDGE_DIAGNOSTIC_PROBE
 #include "memory_report.h"
 #endif
 
-#define BEARER_PREFIX "Bearer "
-typedef struct {
-    esp_transport_handle_t tls;
-    int64_t deadline_us;
-    size_t wire_bytes;
-    size_t wire_limit;
-    bool wire_limited;
-    bool timed_out;
-    bool encoding_invalid;
-} http_transport_t;
-
 static SemaphoreHandle_t finite_gate;
 static SemaphoreHandle_t handshake_gate;
-
-static void clear_secret(char *secret, size_t size)
-{
-    volatile char *at = secret;
-    while (size-- > 0U) {
-        *at++ = 0;
-    }
-}
 
 esp_err_t bridge_http_init(void)
 {
@@ -71,94 +47,93 @@ void bridge_http_handshake_release(void)
     xSemaphoreGive(handshake_gate);
 }
 
-static int budget(http_transport_t *context, int requested_ms)
-{
-    return bridge_http_remaining_ms(context->deadline_us, esp_timer_get_time(), requested_ms);
-}
 
-/* Nonblocking TLS keeps a partial record inside the same absolute deadline. */
-static int transport_connect(esp_transport_handle_t wrapper, const char *host, int port, int timeout_ms)
+static bridge_http_result_t failure_result(const bridge_tls_t *session)
 {
-    http_transport_t *context = esp_transport_get_context_data(wrapper);
-    for (;;) {
-        const int remaining = budget(context, timeout_ms);
-        if (remaining <= (int)portTICK_PERIOD_MS) {
-            context->timed_out = true;
-            return -1;
-        }
-        const int result = esp_transport_connect_async(context->tls, host, port, remaining);
-        if (result != 0) {
-            return result > 0 && budget(context, timeout_ms) > 0 ? 0 : -1;
-        }
-        vTaskDelay(1);
-    }
-}
-
-static int transport_read(esp_transport_handle_t wrapper, char *data, int length, int timeout_ms)
-{
-    http_transport_t *context = esp_transport_get_context_data(wrapper);
-    if (context->wire_bytes >= context->wire_limit) {
-        context->wire_limited = true;
-        return -1;
-    }
-    if (length > (int)BRIDGE_HTTP_READ_CHUNK_BYTES) {
-        length = (int)BRIDGE_HTTP_READ_CHUNK_BYTES;
-    }
-    const size_t available = context->wire_limit - context->wire_bytes;
-    if ((size_t)length > available) {
-        length = (int)available;
-    }
-    for (;;) {
-        const int remaining = budget(context, timeout_ms);
-        if (remaining <= (int)portTICK_PERIOD_MS) {
-            context->timed_out = true;
-            return -1;
-        }
-        const int result = esp_transport_read(context->tls, data, length, remaining);
-        if (result != ERR_TCP_TRANSPORT_CONNECTION_TIMEOUT) {
-            if (result > 0) {
-                context->wire_bytes += (size_t)result;
-            }
-            return budget(context, timeout_ms) > 0 ? result : -1;
-        }
-        vTaskDelay(1);
-    }
-}
-
-static int transport_write(esp_transport_handle_t wrapper, const char *data, int length, int timeout_ms)
-{
-    http_transport_t *context = esp_transport_get_context_data(wrapper);
-    const int remaining = budget(context, timeout_ms);
-    if (remaining <= 0) {
-        context->timed_out = true;
-        return -1;
-    }
-    const int result = esp_transport_write(context->tls, data, length, remaining);
-    return budget(context, timeout_ms) > 0 ? result : -1;
-}
-
-static int transport_close(esp_transport_handle_t wrapper)
-{
-    http_transport_t *context = esp_transport_get_context_data(wrapper);
-    return esp_transport_close(context->tls);
-}
-
-static esp_err_t on_http_event(esp_http_client_event_t *event)
-{
-    http_transport_t *context = event->user_data;
-    if (event->event_id == HTTP_EVENT_ON_HEADER && event->header_key != NULL && event->header_value != NULL &&
-        strcasecmp(event->header_key, "Content-Encoding") == 0 && strcasecmp(event->header_value, "identity") != 0) {
-        context->encoding_invalid = true;
-    }
-    return ESP_OK;
-}
-
-static bridge_http_result_t failure_result(const http_transport_t *context)
-{
-    if (context->wire_limited) {
+    if (session->wire_limited) {
         return BRIDGE_HTTP_TOO_LARGE;
     }
-    return context->timed_out || esp_timer_get_time() >= context->deadline_us ? BRIDGE_HTTP_TIMEOUT : BRIDGE_HTTP_TRANSPORT_ERROR;
+    return session->timed_out || esp_timer_get_time() >= session->deadline_us ? BRIDGE_HTTP_TIMEOUT
+                                                                               : BRIDGE_HTTP_TRANSPORT_ERROR;
+}
+
+/* Reads the whole body into the caller's buffer; one byte past capacity proves the body too large. */
+static bridge_http_result_t read_body(bridge_tls_t *session, char *body, size_t capacity, size_t *length)
+{
+    for (;;) {
+        if (bridge_tls_budget(session, -1) <= 0) {
+            return BRIDGE_HTTP_TIMEOUT;
+        }
+        char probe;
+        const size_t room = capacity - *length;
+        char *destination = room > 0U ? body + *length : &probe;
+        const int amount = (int)(room > BRIDGE_HTTP_READ_CHUNK_BYTES ? BRIDGE_HTTP_READ_CHUNK_BYTES : room);
+        const int received = esp_http_client_read(session->client, destination, room > 0U ? amount : 1);
+        if (bridge_tls_budget(session, -1) <= 0) {
+            return BRIDGE_HTTP_TIMEOUT;
+        }
+        if (session->wire_limited) {
+            return BRIDGE_HTTP_TOO_LARGE;
+        }
+        if (received < 0) {
+            return failure_result(session);
+        }
+        if (received == 0) {
+            /* The SDK reports a transport timeout as a close; a close-delimited body would look complete. */
+            if (session->timed_out) {
+                return BRIDGE_HTTP_TIMEOUT;
+            }
+            return esp_http_client_is_complete_data_received(session->client) ? BRIDGE_HTTP_OK : BRIDGE_HTTP_INCOMPLETE;
+        }
+        if (room == 0U) {
+            return BRIDGE_HTTP_TOO_LARGE;
+        }
+        *length += (size_t)received;
+    }
+}
+
+/* Headers, status and the complete bounded body of an opened request. */
+static bridge_http_result_t receive_response(bridge_tls_t *session, char *body, size_t capacity,
+                                             bridge_http_response_t *response)
+{
+    if (esp_http_client_fetch_headers(session->client) < 0) {
+        return failure_result(session);
+    }
+    if (bridge_tls_budget(session, -1) <= 0) {
+        return BRIDGE_HTTP_TIMEOUT;
+    }
+    response->status = esp_http_client_get_status_code(session->client);
+    if (session->encoding_invalid) {
+        return BRIDGE_HTTP_INVALID_RESPONSE;
+    }
+    const int64_t content_length = esp_http_client_get_content_length(session->client);
+    if (content_length >= 0 && (uint64_t)content_length > capacity) {
+        return BRIDGE_HTTP_TOO_LARGE;
+    }
+    /* Bounded framing overhead, separate from decoded body and header budgets. */
+    session->wire_limit =
+        session->wire_bytes + capacity * BRIDGE_HTTP_BODY_WIRE_MULTIPLIER + BRIDGE_HTTP_HEADER_MAX_BYTES;
+    return read_body(session, body, capacity, &response->length);
+}
+
+static bridge_http_result_t exchange_get(bridge_tls_t *session, const bridge_origin_t *origin, const char *url,
+                                         uint32_t io_ms, char *body, size_t capacity,
+                                         bridge_http_response_t *response)
+{
+    if (!bridge_tls_create(session, origin, url, HTTP_METHOD_GET, (int)(io_ms > INT_MAX ? INT_MAX : io_ms))) {
+        return BRIDGE_HTTP_NO_MEMORY;
+    }
+    const bridge_tls_open_t opened = bridge_tls_open(session, 0);
+    if (opened == BRIDGE_TLS_GATE_TIMEOUT) {
+        return BRIDGE_HTTP_TIMEOUT;
+    }
+    if (opened == BRIDGE_TLS_OPEN_FAILED) {
+        return failure_result(session);
+    }
+#if CONFIG_BRIDGE_DIAGNOSTIC_PROBE
+    memory_report_log("bridge HTTPS open");
+#endif
+    return receive_response(session, body, capacity, response);
 }
 
 bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char *path,
@@ -170,8 +145,8 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
         return response;
     }
     memset(body, 0, capacity);
-    if (origin == NULL || io_ms == 0U ||
-        !bridge_token_valid(origin->token) || !bridge_http_make_url(origin->url, path, url, sizeof(url))) {
+    if (origin == NULL || io_ms == 0U || !bridge_token_valid(origin->token) ||
+        !bridge_http_make_url(origin->url, path, url, sizeof(url))) {
         return response;
     }
     if (!bridge_clock_ready()) {
@@ -182,137 +157,12 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
         response.result = BRIDGE_HTTP_BUSY;
         return response;
     }
-
-    http_transport_t transport = {
+    bridge_tls_t session = {
         .deadline_us = esp_timer_get_time() + (int64_t)io_ms * 1000,
         .wire_limit = BRIDGE_HTTP_HEADER_MAX_BYTES,
     };
-    esp_transport_handle_t wrapper = NULL;
-    esp_http_client_handle_t client = NULL;
-    char authorization[sizeof(BEARER_PREFIX) + BRIDGE_TOKEN_MAX_BYTES] = {0};
-    bool handshake_held = false;
-    response.result = BRIDGE_HTTP_NO_MEMORY;
-    wrapper = esp_transport_init();
-    transport.tls = esp_transport_ssl_init();
-    if (wrapper == NULL || transport.tls == NULL) {
-        goto cleanup;
-    }
-    esp_transport_ssl_crt_bundle_attach(transport.tls, esp_crt_bundle_attach);
-    esp_transport_set_context_data(wrapper, &transport);
-    if (esp_transport_set_func(wrapper, transport_connect, transport_read, transport_write,
-                               transport_close, NULL, NULL, NULL) != ESP_OK) {
-        goto cleanup;
-    }
-    const esp_http_client_config_t config = {
-        .url = url,
-        .method = HTTP_METHOD_GET,
-        .transport = wrapper,
-        .timeout_ms = (int)(io_ms > INT_MAX ? INT_MAX : io_ms),
-        .disable_auto_redirect = true,
-        .max_authorization_retries = -1,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-        .event_handler = on_http_event,
-        .user_data = &transport,
-        .buffer_size = BRIDGE_HTTP_READ_CHUNK_BYTES,
-    };
-    client = esp_http_client_init(&config);
-    if (client == NULL) {
-        goto cleanup;
-    }
-    snprintf(authorization, sizeof(authorization), BEARER_PREFIX "%s", origin->token);
-    const esp_err_t header_error = esp_http_client_set_header(client, "Authorization", authorization);
-    clear_secret(authorization, sizeof(authorization));
-    if (header_error != ESP_OK || esp_http_client_set_header(client, "Accept-Encoding", "identity") != ESP_OK) {
-        goto cleanup;
-    }
-    const int remaining = budget(&transport, -1);
-    if (remaining <= 0 || !bridge_http_handshake_acquire((uint32_t)remaining)) {
-        response.result = BRIDGE_HTTP_TIMEOUT;
-        goto cleanup;
-    }
-    handshake_held = true;
-    const esp_err_t open_error = esp_http_client_open(client, 0);
-    bridge_http_handshake_release();
-    handshake_held = false;
-    if (open_error != ESP_OK) {
-        response.result = failure_result(&transport);
-        goto cleanup;
-    }
-#if CONFIG_BRIDGE_DIAGNOSTIC_PROBE
-    memory_report_log("bridge HTTPS open");
-#endif
-    if (esp_http_client_fetch_headers(client) < 0) {
-        response.result = failure_result(&transport);
-        goto cleanup;
-    }
-    if (budget(&transport, -1) <= 0) {
-        response.result = BRIDGE_HTTP_TIMEOUT;
-        goto cleanup;
-    }
-    response.status = esp_http_client_get_status_code(client);
-    if (transport.encoding_invalid) {
-        response.result = BRIDGE_HTTP_INVALID_RESPONSE;
-        goto cleanup;
-    }
-    const int64_t content_length = esp_http_client_get_content_length(client);
-    if (content_length >= 0 && (uint64_t)content_length > capacity) {
-        response.result = BRIDGE_HTTP_TOO_LARGE;
-        goto cleanup;
-    }
-    /* Bounded framing overhead, separate from decoded body and header budgets. */
-    transport.wire_limit = transport.wire_bytes + capacity * BRIDGE_HTTP_BODY_WIRE_MULTIPLIER + BRIDGE_HTTP_HEADER_MAX_BYTES;
-    for (;;) {
-        if (budget(&transport, -1) <= 0) {
-            response.result = BRIDGE_HTTP_TIMEOUT;
-            goto cleanup;
-        }
-        char probe;
-        const size_t room = capacity - response.length;
-        char *destination = room > 0U ? body + response.length : &probe;
-        const int amount = (int)(room > BRIDGE_HTTP_READ_CHUNK_BYTES ? BRIDGE_HTTP_READ_CHUNK_BYTES : room);
-        const int received = esp_http_client_read(client, destination, room > 0U ? amount : 1);
-        if (budget(&transport, -1) <= 0) {
-            response.result = BRIDGE_HTTP_TIMEOUT;
-            goto cleanup;
-        }
-        if (transport.wire_limited) {
-            response.result = BRIDGE_HTTP_TOO_LARGE;
-            goto cleanup;
-        }
-        if (received < 0) {
-            response.result = failure_result(&transport);
-            goto cleanup;
-        }
-        if (received == 0) {
-            /* The SDK reports a transport timeout as a close; a close-delimited body would look complete. */
-            if (transport.timed_out) {
-                response.result = BRIDGE_HTTP_TIMEOUT;
-            } else {
-                response.result = esp_http_client_is_complete_data_received(client) ? BRIDGE_HTTP_OK : BRIDGE_HTTP_INCOMPLETE;
-            }
-            break;
-        }
-        if (room == 0U) {
-            response.result = BRIDGE_HTTP_TOO_LARGE;
-            goto cleanup;
-        }
-        response.length += (size_t)received;
-    }
-
-cleanup:
-    if (handshake_held) {
-        bridge_http_handshake_release();
-    }
-    if (client != NULL) {
-        esp_http_client_cleanup(client);
-    }
-    if (wrapper != NULL) {
-        esp_transport_destroy(wrapper);
-    }
-    if (transport.tls != NULL) {
-        esp_transport_destroy(transport.tls);
-    }
-    clear_secret(authorization, sizeof(authorization));
+    response.result = exchange_get(&session, origin, url, io_ms, body, capacity, &response);
+    bridge_tls_destroy(&session);
     xSemaphoreGive(finite_gate);
     if (response.result != BRIDGE_HTTP_OK) {
         memset(body, 0, capacity);

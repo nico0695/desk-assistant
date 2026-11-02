@@ -32,12 +32,13 @@ int esp_transport_connect_async(esp_transport_handle_t, const char *, int, int);
 int esp_transport_read(esp_transport_handle_t, char *, int, int);
 int esp_transport_write(esp_transport_handle_t, const char *, int, int);
 int esp_transport_close(esp_transport_handle_t);
+typedef int esp_http_client_method_t;
 #define HTTP_METHOD_GET 0
 #define ESP_ERR_HTTP_EAGAIN 0x7007
 #define HTTP_EVENT_ON_HEADER 1
 typedef struct { void *user_data; int event_id; const char *header_key; const char *header_value; } esp_http_client_event_t;
 typedef struct {
-    const char *url; int method; int timeout_ms; bool disable_auto_redirect; int max_authorization_retries;
+    const char *url; esp_http_client_method_t method; int timeout_ms; bool disable_auto_redirect; int max_authorization_retries;
     esp_err_t (*crt_bundle_attach)(void *); esp_err_t (*event_handler)(esp_http_client_event_t *);
     void *user_data; int buffer_size; esp_transport_handle_t transport;
 } esp_http_client_config_t;

@@ -121,6 +121,92 @@ static bool stream_opened(void *context)
     return opened;
 }
 
+typedef struct {
+    bool has_ip;
+    bool has_origin;
+    uint64_t revision;
+    uint64_t generation;
+} stream_inputs_t;
+
+static void read_inputs(stream_inputs_t *inputs)
+{
+    taskENTER_CRITICAL(&state_lock);
+    inputs->has_ip = connection.has_ip;
+    inputs->has_origin = connection.has_origin;
+    inputs->revision = input_revision;
+    inputs->generation = connection.generation;
+    taskEXIT_CRITICAL(&state_lock);
+}
+
+/* Sleeps until inputs, the clock or the retry delay may allow a stream; true when one should open now. */
+static bool stream_due(const bridge_sse_t *stream, const stream_inputs_t *inputs, bool *clock_wait_logged)
+{
+    const uint64_t now = (uint64_t)esp_timer_get_time() / 1000U;
+    const bridge_stream_step_t step = bridge_stream_next_step(inputs->has_ip, inputs->has_origin,
+                                                              bridge_clock_ready(), bridge_sse_retry_due(stream, now));
+    switch (step) {
+    case BRIDGE_STREAM_STEP_WAIT_INPUT:
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        return false;
+    case BRIDGE_STREAM_STEP_WAIT_CLOCK: {
+        if (!*clock_wait_logged) {
+            ESP_LOGI(TAG, "waiting for clock synchronization");
+            *clock_wait_logged = true;
+        }
+        const esp_err_t error = bridge_clock_start(clock_synced, NULL);
+        ulTaskNotifyTake(pdTRUE, error == ESP_OK ? portMAX_DELAY : pdMS_TO_TICKS(BRIDGE_SSE_RETRY_FIRST_MS));
+        return false;
+    }
+    case BRIDGE_STREAM_STEP_WAIT_RETRY: {
+        const uint64_t due = stream->disconnected_ms + stream->retry_delay_ms;
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(due > now ? due - now : 0U));
+        return false;
+    }
+    case BRIDGE_STREAM_STEP_OPEN:
+        break;
+    }
+    return true;
+}
+
+/* Logs a failure once until it changes or a stream connects. */
+static void log_stream_failure(bridge_stream_result_t result, bridge_stream_result_t *previous_failure)
+{
+    if (result.reason != BRIDGE_STREAM_STOPPED &&
+        (result.reason != previous_failure->reason || result.http_status != previous_failure->http_status)) {
+        ESP_LOGW(TAG, "event stream failure: %s (HTTP %d)", stream_failure_name(result.reason), result.http_status);
+        *previous_failure = result;
+    }
+}
+
+/* One stream session for the inputs, unless they changed since they were read. */
+static void run_stream(bridge_sse_t *stream, const stream_inputs_t *inputs, bridge_stream_result_t *previous_failure)
+{
+    bridge_origin_t origin;
+    stream_context_t context = {.origin = &origin};
+    taskENTER_CRITICAL(&state_lock);
+    origin = active_origin;
+    context.ticket = inputs->revision == input_revision ? bridge_connection_begin_stream(&connection) : 0;
+    taskEXIT_CRITICAL(&state_lock);
+    if (context.ticket == 0U) {
+        clear_secret(&origin, sizeof(origin));
+        return;
+    }
+    const bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
+    const bridge_stream_result_t result = bridge_stream_run(&origin, stream, &hooks);
+    clear_secret(&origin, sizeof(origin));
+    if (stream->connected) *previous_failure = (bridge_stream_result_t){0};
+    log_stream_failure(result, previous_failure);
+    taskENTER_CRITICAL(&state_lock);
+    const bool closed = bridge_connection_stream_closed(&connection, context.ticket);
+    const uint64_t generation = connection.generation;
+    taskEXIT_CRITICAL(&state_lock);
+    if (closed) {
+        online_callback(false, generation);
+        if (stream->connected) ESP_LOGI(TAG, "event stream closed");
+    }
+    bridge_sse_disconnected(stream, (uint64_t)esp_timer_get_time() / 1000U);
+}
+
 static void stream_worker(void *unused)
 {
     (void)unused;
@@ -130,74 +216,17 @@ static void stream_worker(void *unused)
     bridge_stream_result_t previous_failure = {0};
     bool clock_wait_logged = false;
     for (;;) {
-        bridge_origin_t origin;
-        bool has_ip;
-        bool has_origin;
-        uint64_t revision;
-        uint64_t generation;
-        taskENTER_CRITICAL(&state_lock);
-        origin = active_origin;
-        has_ip = connection.has_ip;
-        has_origin = connection.has_origin;
-        revision = input_revision;
-        generation = connection.generation;
-        taskEXIT_CRITICAL(&state_lock);
-        if (revision != observed_revision) {
+        stream_inputs_t inputs;
+        read_inputs(&inputs);
+        if (inputs.revision != observed_revision) {
             bridge_sse_init(&stream);
             previous_failure = (bridge_stream_result_t){0};
-            observed_revision = revision;
-            online_callback(false, generation);
+            observed_revision = inputs.revision;
+            online_callback(false, inputs.generation);
         }
-        uint64_t now = (uint64_t)esp_timer_get_time() / 1000U;
-        const bool clock_ready = bridge_clock_ready();
-        const bridge_stream_step_t step =
-            bridge_stream_next_step(has_ip, has_origin, clock_ready, bridge_sse_retry_due(&stream, now));
-        if (step == BRIDGE_STREAM_STEP_WAIT_INPUT) {
-            clear_secret(&origin, sizeof(origin));
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-            continue;
+        if (stream_due(&stream, &inputs, &clock_wait_logged)) {
+            run_stream(&stream, &inputs, &previous_failure);
         }
-        if (step == BRIDGE_STREAM_STEP_WAIT_CLOCK) {
-            if (!clock_wait_logged) {
-                ESP_LOGI(TAG, "waiting for clock synchronization");
-                clock_wait_logged = true;
-            }
-            esp_err_t error = bridge_clock_start(clock_synced, NULL);
-            clear_secret(&origin, sizeof(origin));
-            ulTaskNotifyTake(pdTRUE, error == ESP_OK ? portMAX_DELAY : pdMS_TO_TICKS(BRIDGE_SSE_RETRY_FIRST_MS));
-            continue;
-        }
-        if (step == BRIDGE_STREAM_STEP_WAIT_RETRY) {
-            uint64_t due = stream.disconnected_ms + stream.retry_delay_ms;
-            uint64_t wait_ms = due > now ? due - now : 0U;
-            clear_secret(&origin, sizeof(origin));
-            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(wait_ms));
-            continue;
-        }
-        stream_context_t context;
-        context.origin = &origin;
-        taskENTER_CRITICAL(&state_lock);
-        context.ticket = revision == input_revision ? bridge_connection_begin_stream(&connection) : 0;
-        taskEXIT_CRITICAL(&state_lock);
-        if (context.ticket != 0U) {
-            bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
-            bridge_stream_result_t result = bridge_stream_run(&origin, &stream, &hooks);
-            if (stream.connected) previous_failure = (bridge_stream_result_t){0};
-            if (result.reason != BRIDGE_STREAM_STOPPED &&
-                (result.reason != previous_failure.reason || result.http_status != previous_failure.http_status)) {
-                ESP_LOGW(TAG, "event stream failure: %s (HTTP %d)", stream_failure_name(result.reason),
-                         result.http_status);
-                previous_failure = result;
-            }
-            taskENTER_CRITICAL(&state_lock);
-            bool closed = bridge_connection_stream_closed(&connection, context.ticket);
-            generation = connection.generation;
-            taskEXIT_CRITICAL(&state_lock);
-            if (closed) online_callback(false, generation);
-            if (closed && stream.connected) ESP_LOGI(TAG, "event stream closed");
-            bridge_sse_disconnected(&stream, (uint64_t)esp_timer_get_time() / 1000U);
-        }
-        clear_secret(&origin, sizeof(origin));
     }
 }
 

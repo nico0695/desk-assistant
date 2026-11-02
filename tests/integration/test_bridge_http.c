@@ -156,7 +156,7 @@ int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
     }
     if (mode == DEADLINE_CLOSE) {
         /* Close-delimited body whose last read reaches the deadline; the SDK reports it as a close. */
-        http_transport_t *transport = esp_transport_get_context_data(c->config.transport);
+        bridge_tls_t *transport = esp_transport_get_context_data(c->config.transport);
         now_us = transport->deadline_us - 1000;
         TEST_ASSERT_EQUAL_INT(-1, c->config.transport->read(c->config.transport, data, length, c->config.timeout_ms));
         c->completed = true;
