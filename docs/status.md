@@ -152,7 +152,7 @@ Each checkpoint records one entry per image:
 
 - **Revision:** `4769531` (firmware content; later commits only change documentation), integrated profile (`sdkconfig.defaults`).
 - **ELF SHA-256:** `56d244cb604c6b23f120bdd0014f73ec2ad0e23104f688073fb08a3a2ed7b326` (the boot log prints its first 9 digits). Application image 1652720 bytes, 61% of the 4 MB app partition free.
-- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41; `dependencies.lock` unchanged. CI on the close push: pending.
+- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41; `dependencies.lock` unchanged. CI on the close push `a83b605` passed (build job: host tests, integrated build, log protection, lock unchanged).
 - **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
   - Final image `4769531`: boot log shows the version and ELF digits above; heap 166 KB free, minimum 153 KB at UI ready; event stream open 10 s after boot; no errors. Only the boot was observed on this image; the modules were not exercised on it.
   - Image `6c81f34` (same module logic; the final image only adds tests, a log field and cosmetic UI cleanups): the user opened Tasks, Notes and Alerts with real data and reported everything working. The per-read lengths in the `modules` log were not recorded, so the 4096 B budget stays provisional.
