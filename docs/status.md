@@ -19,7 +19,7 @@
 
 ## Active stage: 6 — Notifications and sound
 
-- **Status:** design and mini plan approved on 2026-11-02; implementation in progress. Steps 1–6 (bridge contract/signals, durable FIFO, overlay preview, event drain and ACK, Snooze, audio arbiter and tone) verified locally and on the board; step 7 verified by real use (full queue and interrupted ACK left to stage 9). Known gap: the tone volume does not change intensity between 5% and 100%, only 0 mutes (deferred).
+- **Status:** implementation, 4R review and fixes done; awaiting the user's validation on the final image `25af727` after the push and CI check.
 - **Goal:** durable notifications with coordinated presentation and a tone.
 - **Scope (macro plan):** `limit=1` drain, validation, dedup, persistence before the ACK, a queue of eight and the full-queue case; overlay card with local Next/Close and Snooze from the card; deferral during capture, return to the previous context and panel wake-up; ES8311 tone with a RAM accumulator, capture priority and applied volume.
 - **Carry-overs from stage 2:** apply the stored volume to the tone (0 mutes); a public synchronous `storage` write to persist notifications and ACKs outside the UI.
@@ -134,3 +134,15 @@ Each checkpoint records one entry per image:
   - Tooling: after a reset the USB log sometimes stops without an error; capturing without a reset or reconnecting the cable recovers it.
 - **Validation:** the user ran the smoke guide on the final image and reported everything working (2026-11-02).
 - **Reviews:** `standard-code-review` per step group (1, 3–4, 5–7), findings fixed in `0c8e030` and `0891c45`. 4R at close: four lenses, 0 severe, 8 warnings and 3 suggestions. Fixed in `6c30f19`: a discard queued during a query could erase a terminal that just arrived; an unreadable record lost its block if the boot cleanup worker failed to start; a held origin refused an identical save, which blocked Wi-Fi provisioning; an ambiguous upload armed no 180 s wait; a missing log on an allocation failure; misleading names and header comments. Details in `.local/stages/05b-grabacion-envio-resultado.md`.
+
+### Stage 6 — 2026-11-02
+
+- **Revision:** `25af727` (firmware content; later commits only change documentation), integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `39993ada406151b1ecfc37e3e92f12a2f3635c47887fa2e03d1ecbdadc482d16` (the boot log prints its first 9 digits). Application image 1639936 bytes, 61% of the 4 MB app partition free.
+- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 37/37; `dependencies.lock` unchanged.
+- **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
+  - Final image `25af727`: boot log shows the version and ELF digits above; clip cleanup `ESP_OK`; event stream open 12.5 s after boot; heap 167 KB free, minimum 154 KB at UI ready; no errors. The final fixes (worker exit races, tone volume read after the claim, shared I2S pins) were not exercised with real notifications on this image.
+  - Image `f5b30eb` (the audio step, same notification and audio logic before the fixes), observed by the user: notifications arriving and shown, Next and Close, Snooze from the card, an alert arriving during a recording without interrupting it, then shown on Send and the upload flow continuing; the tone audible at 36% with the ES8311 answering at 0x18, silent at volume 0; a reset with an open alert restored it once, without a tone, and it closed normally. A real upload with SSE open reached a heap minimum of 57.8 KB.
+  - Known gap: the tone intensity does not change between 5% and 36% (only 0 mutes); deferred in `.local/follow-up.md`.
+  - Not run: full queue (8), an ACK interrupted by a network cut, a capture started during a tone, tone at 100%, volume 25%. Covered by host tests except the audio cases.
+- **Reviews:** `standard-code-review` after steps 1–6 (findings fixed in the step substeps). 4R at close: four lenses, 0 severe, 17 warnings and suggestions. Fixed in `25af727`: a command sent while the notification worker exits could stay queued, and both workers could be notified after the lock was released; the tone worker polled NVS while waiting for a capture; the I2S pins were duplicated; the time zone label was a literal. Deferred: unbounded tone cleanup retry, an ACK answered with a permanent error retrying forever, a journal save failing on memory blocking notifications until reboot, single-slot queue in the notification tests, and readability suggestions. Details in `.local/follow-up.md`.
