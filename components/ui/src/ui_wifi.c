@@ -24,11 +24,6 @@
 #define WIFI_QR_BOX_PX (WIFI_QR_SIZE_PX + 2 * WIFI_QR_QUIET_ZONE_PX)
 #define WIFI_SETUP_TEXT_X_PX (UI_SCREEN_MARGIN_PX + WIFI_QR_BOX_PX + UI_GAP_PX)
 #define WIFI_SETUP_TEXT_WIDTH_PX (BOARD_DISPLAY_WIDTH_PX - UI_SCREEN_MARGIN_PX - WIFI_SETUP_TEXT_X_PX)
-#define WIFI_DIALOG_WIDTH_PX 400
-#define WIFI_DIALOG_PAD_PX 24
-#define WIFI_DIALOG_INNER_WIDTH_PX (WIFI_DIALOG_WIDTH_PX - 2 * WIFI_DIALOG_PAD_PX)
-#define WIFI_DIALOG_BUTTON_WIDTH_PX ((WIFI_DIALOG_INNER_WIDTH_PX - UI_GAP_PX) / 2)
-#define WIFI_DIALOG_SCRIM_OPA LV_OPA_70
 #define WIFI_QR_TEXT_CAPACITY (sizeof(UI_TEXT_WIFI_SETUP_QR_FORMAT) + SETUP_AP_SSID_SIZE + SETUP_AP_PASSWORD_SIZE)
 
 /* State of the open screen; cleared when it is deleted. */
@@ -268,67 +263,28 @@ static void create_setup_content(lv_obj_t *parent)
                         UI_SCREEN_MARGIN_PX + UI_BACK_WITH_ACTION_WIDTH_PX + UI_GAP_PX, WIFI_ACTION_WIDTH_PX, on_cancel_setup);
 }
 
-static lv_obj_t *create_dialog_panel(lv_obj_t *parent)
-{
-    lv_obj_t *scrim = lv_obj_create(parent);
-    lv_obj_remove_style_all(scrim);
-    lv_obj_set_size(scrim, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(scrim, lv_color_hex(UI_COLOR_BACKGROUND), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(scrim, WIFI_DIALOG_SCRIM_OPA, LV_PART_MAIN);
-    lv_obj_remove_flag(scrim, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *panel = lv_obj_create(scrim);
-    lv_obj_remove_style_all(panel);
-    lv_obj_set_size(panel, WIFI_DIALOG_WIDTH_PX, LV_SIZE_CONTENT);
-    lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, lv_color_hex(UI_COLOR_SURFACE_RAISED), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, UI_CORNER_RADIUS_PX, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(panel, WIFI_DIALOG_PAD_PX, LV_PART_MAIN);
-    lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(panel, UI_GAP_PX, LV_PART_MAIN);
-    lv_obj_remove_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
-    return panel;
-}
-
-static void create_dialog_text(lv_obj_t *panel, const char *title, const char *body)
-{
-    lv_obj_t *title_label = lv_label_create(panel);
-    lv_label_set_text(title_label, title);
-    lv_obj_set_width(title_label, WIFI_DIALOG_INNER_WIDTH_PX);
-    lv_label_set_long_mode(title_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(title_label, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);
-    lv_obj_t *body_label = create_secondary_label(panel, body);
-    lv_obj_set_width(body_label, WIFI_DIALOG_INNER_WIDTH_PX);
-    lv_label_set_long_mode(body_label, LV_LABEL_LONG_WRAP);
-}
-
 static void create_dialog_buttons(lv_obj_t *panel, const char *action, lv_event_cb_t on_action)
 {
-    lv_obj_t *buttons = ui_box_create(panel, LV_FLEX_FLOW_ROW, UI_GAP_PX);
-    lv_obj_t *cancel = create_button(buttons, UI_BUTTON_STANDARD, NULL, UI_TEXT_WIFI_CANCEL);
-    lv_obj_set_size(cancel, WIFI_DIALOG_BUTTON_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
-    lv_obj_add_event_cb(cancel, on_dialog_cancel, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *confirm = create_button(buttons, UI_BUTTON_PRIMARY, NULL, action);
-    lv_obj_set_size(confirm, WIFI_DIALOG_BUTTON_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
-    lv_obj_add_event_cb(confirm, on_action, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *buttons = ui_dialog_buttons_create(panel);
+    ui_dialog_button_create(buttons, UI_BUTTON_STANDARD, UI_TEXT_WIFI_CANCEL, on_dialog_cancel, NULL);
+    ui_dialog_button_create(buttons, UI_BUTTON_PRIMARY, action, on_action, NULL);
 }
 
 static void create_dialog(lv_obj_t *parent)
 {
-    lv_obj_t *panel = create_dialog_panel(parent);
-    dialog = lv_obj_get_parent(panel);
-    char title[sizeof(UI_TEXT_WIFI_FORGET_TITLE_FORMAT) + WIFI_SSID_SIZE];
+    lv_obj_t *panel;
     if (dialog_kind == UI_WIFI_DIALOG_FORGET) {
+        char title[sizeof(UI_TEXT_WIFI_FORGET_TITLE_FORMAT) + WIFI_SSID_SIZE];
         snprintf(title, sizeof(title), UI_TEXT_WIFI_FORGET_TITLE_FORMAT, dialog_ssid);
-        create_dialog_text(panel, title, UI_TEXT_WIFI_FORGET_BODY);
+        panel = ui_dialog_create(parent, title, UI_TEXT_WIFI_FORGET_BODY);
         create_dialog_buttons(panel, UI_TEXT_WIFI_FORGET, on_forget_confirmed);
-        return;
+    } else {
+        char body[sizeof(UI_TEXT_WIFI_ADD_BODY_FORMAT) + WIFI_SSID_SIZE];
+        snprintf(body, sizeof(body), UI_TEXT_WIFI_ADD_BODY_FORMAT, shown.saved[shown.connected_index]);
+        panel = ui_dialog_create(parent, UI_TEXT_WIFI_ADD_TITLE, body);
+        create_dialog_buttons(panel, UI_TEXT_WIFI_CONTINUE, on_add_confirmed);
     }
-    char body[sizeof(UI_TEXT_WIFI_ADD_BODY_FORMAT) + WIFI_SSID_SIZE];
-    snprintf(body, sizeof(body), UI_TEXT_WIFI_ADD_BODY_FORMAT, shown.saved[shown.connected_index]);
-    create_dialog_text(panel, UI_TEXT_WIFI_ADD_TITLE, body);
-    create_dialog_buttons(panel, UI_TEXT_WIFI_CONTINUE, on_add_confirmed);
+    dialog = lv_obj_get_parent(panel);
 }
 
 static bool forget_target_exists(void)
