@@ -12,5 +12,8 @@ esp_err_t notification_journal_load(notification_state_t *state);
  * unless notification_journal_unwritten() says the previous record is intact.
  */
 esp_err_t notification_journal_save(const notification_state_t *state);
-/* True for save errors returned before anything reached NVS. */
+/*
+ * True for save errors treated as not written: allocation, validation or unavailable storage. If NVS ran out of memory
+ * after writing, the caller still holds the last saved state and its next save replaces the record.
+ */
 bool notification_journal_unwritten(esp_err_t error);
