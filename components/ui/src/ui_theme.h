@@ -51,6 +51,7 @@ typedef struct {
     lv_style_t button_pressed;
     lv_style_t button_primary;
     lv_style_t button_primary_pressed;
+    lv_style_t button_disabled;
     lv_style_t text_secondary;
     lv_style_t slider_track;
     lv_style_t slider_indicator;

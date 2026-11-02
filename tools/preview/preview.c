@@ -7,6 +7,7 @@
 #include "lodepng.h"
 #include "lvgl.h"
 #include "ui_home.h"
+#include "ui_recording.h"
 #include "ui_section.h"
 #include "ui_settings.h"
 #include "ui_wifi.h"
@@ -142,6 +143,23 @@ static const ui_wifi_handlers_t WIFI_HANDLERS = {
     .on_back = ignore_back,
 };
 
+static void ignore_generation(uint64_t generation)
+{
+    (void)generation;
+}
+
+static const ui_recording_handlers_t RECORDING_HANDLERS = {
+    .on_send = ignore_generation,
+    .on_cancel = ignore_generation,
+    .on_close = ignore_generation,
+};
+
+static lv_obj_t *create_recording(recording_phase_t phase, recording_failure_t failure, uint32_t duration_ms)
+{
+    const recording_view_t view = {.phase = phase, .failure = failure, .duration_ms = duration_ms, .generation = 1};
+    return ui_recording_screen_create(&view, &RECORDING_HANDLERS);
+}
+
 static connectivity_view_t sample_view(connectivity_state_t state, unsigned saved_count)
 {
     static const char *const SSIDS[WIFI_LIST_CAPACITY] = {"Home", "Office 5G", "Casa de Ana", "Cafe Central",
@@ -272,5 +290,17 @@ int main(int argc, char **argv)
     capture(display, create_wifi_with_dialog(&connected, UI_WIFI_DIALOG_ADD, NULL), directory, "wifi-dialog-add");
     capture(display, create_settings_with_wifi(CONNECTIVITY_CONNECTED), directory, "settings-wifi-connected");
     capture(display, create_settings_with_wifi(CONNECTIVITY_NO_NETWORKS), directory, "settings-wifi-no-networks");
+
+    capture(display, create_recording(RECORDING_RECORDING, RECORDING_FAILURE_NONE, 12400), directory, "recording");
+    capture(display, create_recording(RECORDING_FINALIZING, RECORDING_FAILURE_NONE, 30000), directory,
+            "recording-finalizing");
+    capture(display, create_recording(RECORDING_READY_TO_SEND, RECORDING_FAILURE_NONE, 30000), directory,
+            "recording-ready");
+    capture(display, create_recording(RECORDING_CANCELLING, RECORDING_FAILURE_NONE, 0), directory,
+            "recording-cancelling");
+    capture(display, create_recording(RECORDING_FAILED, RECORDING_FAILURE_TOO_SHORT, 300), directory,
+            "recording-too-short");
+    capture(display, create_recording(RECORDING_FAILED, RECORDING_FAILURE_CLEANUP, 0), directory,
+            "recording-cleanup-failed");
     return EXIT_SUCCESS;
 }

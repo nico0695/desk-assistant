@@ -32,6 +32,7 @@ lv_obj_t *ui_button_create(lv_obj_t *parent, ui_button_kind_t kind, const char *
     lv_obj_add_style(button, primary ? &styles->button_primary : &styles->button, LV_PART_MAIN);
     lv_obj_add_style(button, primary ? &styles->button_primary_pressed : &styles->button_pressed,
                      LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_add_style(button, &styles->button_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
     lv_obj_set_style_min_height(button, minimum_height(kind), LV_PART_MAIN);
     lv_obj_remove_flag(button, LV_OBJ_FLAG_SCROLLABLE);
 

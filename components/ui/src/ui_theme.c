@@ -46,6 +46,9 @@ void ui_theme_init(void)
     init_pressed_style(&styles.button_pressed, UI_COLOR_CONTROL_PRESSED);
     init_button_style(&styles.button_primary, UI_COLOR_PRIMARY);
     init_pressed_style(&styles.button_primary_pressed, UI_COLOR_PRIMARY_PRESSED);
+    lv_style_init(&styles.button_disabled);
+    lv_style_set_bg_color(&styles.button_disabled, lv_color_hex(UI_COLOR_SURFACE_RAISED));
+    lv_style_set_text_color(&styles.button_disabled, lv_color_hex(UI_COLOR_TEXT_SECONDARY));
 
     lv_style_init(&styles.text_secondary);
     lv_style_set_text_color(&styles.text_secondary, lv_color_hex(UI_COLOR_TEXT_SECONDARY));
