@@ -24,6 +24,8 @@ typedef struct {
     bool manual_sleep;
     bool wake_pending;
     bool sleep_pending;
+    /* Held on: neither the timeout nor KEY turns the panel off. */
+    bool held;
     uint32_t timeout_s;
     uint64_t last_activity_ms;
     uint64_t retry_at_ms;
@@ -34,6 +36,12 @@ void screen_power_init(screen_power_t *state, uint32_t timeout_s, uint64_t now_m
 
 /* Restarts the inactivity timer with a new timeout; always-on also wakes a sleeping panel on the next update. */
 void screen_power_set_timeout(screen_power_t *state, uint32_t timeout_s, uint64_t now_ms);
+
+/*
+ * Holds the panel on (waking it if needed) or releases it, restarting the inactivity timer so the panel does not
+ * turn off right after the hold.
+ */
+void screen_power_set_held(screen_power_t *state, bool held, uint64_t now_ms);
 
 /*
  * Pass TOUCH while the touch is held, not only on its first sample. KEY is one debounced press and toggles the

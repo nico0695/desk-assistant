@@ -18,6 +18,20 @@ void screen_power_set_timeout(screen_power_t *state, uint32_t timeout_s, uint64_
     }
 }
 
+void screen_power_set_held(screen_power_t *state, bool held, uint64_t now_ms)
+{
+    if (state->held == held) {
+        return;
+    }
+    state->held = held;
+    if (held) {
+        state->sleep_pending = false;
+        state->wake_pending = state->asleep;
+    } else if (now_ms > state->last_activity_ms) {
+        state->last_activity_ms = now_ms;
+    }
+}
+
 static screen_action_t wake_panel(screen_power_t *state, uint64_t now_ms)
 {
     state->asleep = false;
@@ -53,6 +67,12 @@ static screen_action_t decide(screen_power_t *state, uint64_t now_ms, uint32_t e
 
     if (state->asleep) {
         return touched || key_pressed || state->wake_pending ? wake_panel(state, now_ms) : SCREEN_ACTION_NONE;
+    }
+    if (state->held) {
+        if (touched) {
+            state->last_activity_ms = now_ms;
+        }
+        return SCREEN_ACTION_NONE;
     }
     if (key_pressed) {
         if (state->sleep_pending) {
@@ -109,7 +129,7 @@ uint64_t screen_power_next_deadline_ms(const screen_power_t *state)
     uint64_t deadline = SCREEN_POWER_NO_DEADLINE;
     if (state->wake_pending || state->sleep_pending) {
         deadline = state->last_activity_ms;
-    } else if (!state->asleep && state->timeout_s != SCREEN_POWER_ALWAYS_ON) {
+    } else if (!state->asleep && !state->held && state->timeout_s != SCREEN_POWER_ALWAYS_ON) {
         deadline = state->last_activity_ms + (uint64_t)state->timeout_s * MS_PER_SECOND;
     }
     if (deadline != SCREEN_POWER_NO_DEADLINE && deadline < state->retry_at_ms) {

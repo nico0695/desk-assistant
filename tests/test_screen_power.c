@@ -175,6 +175,37 @@ static void test_a_timed_timeout_leaves_a_sleeping_panel_off(void)
     TEST_ASSERT_TRUE(state.asleep);
 }
 
+static void test_hold_ignores_timeout_and_key_then_restarts_the_timer(void)
+{
+    screen_power_init(&state, TIMEOUT_S, 0);
+    screen_power_set_held(&state, true, 0);
+    TEST_ASSERT_EQUAL_UINT64(SCREEN_POWER_NO_DEADLINE, screen_power_next_deadline_ms(&state));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 2 * TIMEOUT_MS, 0));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 2 * TIMEOUT_MS, SCREEN_EVENT_KEY));
+    TEST_ASSERT_FALSE(state.asleep);
+    screen_power_set_held(&state, false, 3 * TIMEOUT_MS);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 4 * TIMEOUT_MS - 1, 0));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 4 * TIMEOUT_MS, 0));
+}
+
+static void test_hold_wakes_a_sleeping_panel_and_cancels_a_pending_sleep(void)
+{
+    screen_power_init(&state, TIMEOUT_S, 0);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 10, SCREEN_EVENT_KEY));
+    screen_power_set_held(&state, true, 20);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, 20, 0));
+    TEST_ASSERT_FALSE(state.asleep);
+
+    screen_power_init(&state, TIMEOUT_S, 0);
+    const screen_power_t previous = state;
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 10, SCREEN_EVENT_KEY));
+    screen_power_reject_action(&state, &previous, 10);
+    TEST_ASSERT_TRUE(state.sleep_pending);
+    screen_power_set_held(&state, true, 20);
+    TEST_ASSERT_FALSE(state.sleep_pending);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 10 + SCREEN_POWER_RETRY_DELAY_MS, 0));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -193,5 +224,7 @@ int main(void)
     RUN_TEST(test_always_on_stops_the_timer);
     RUN_TEST(test_always_on_wakes_a_sleeping_panel);
     RUN_TEST(test_a_timed_timeout_leaves_a_sleeping_panel_off);
+    RUN_TEST(test_hold_ignores_timeout_and_key_then_restarts_the_timer);
+    RUN_TEST(test_hold_wakes_a_sleeping_panel_and_cancels_a_pending_sleep);
     return UNITY_END();
 }
