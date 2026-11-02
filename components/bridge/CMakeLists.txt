@@ -14,6 +14,6 @@ idf_component_register(SRCS "src/bridge.c"
                             "src/bridge_uuid.c"
                        INCLUDE_DIRS "include"
                        REQUIRES esp_common
-                       PRIV_REQUIRES diagnostics esp_http_client esp_netif esp_timer esp-tls freertos json log mbedtls storage tcp_transport)
+                       PRIV_REQUIRES diagnostics esp_http_client esp_netif esp_timer esp-tls freertos json log lwip mbedtls storage tcp_transport)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

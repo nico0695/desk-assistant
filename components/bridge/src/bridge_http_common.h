@@ -11,3 +11,8 @@
 
 bool bridge_http_make_url(const char *base, const char *path, char *url, size_t capacity);
 int bridge_http_remaining_ms(int64_t deadline_us, int64_t now_us, int requested_ms);
+
+/* Absolute end of the upload body: start + 30 s + floor(body bytes x 1000 / 4096) ms. */
+int64_t bridge_http_upload_cap_us(int64_t start_us, size_t body_bytes);
+/* Deadline after an accepted write: the progress window from now, never past the cap. */
+int64_t bridge_http_progress_deadline_us(int64_t now_us, int64_t cap_us);

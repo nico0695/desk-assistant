@@ -48,4 +48,6 @@ bool bridge_tls_create(bridge_tls_t *session, const bridge_origin_t *origin, con
 bridge_tls_open_t bridge_tls_open(bridge_tls_t *session, int write_length);
 /* Milliseconds left before the deadline, capped at requested_ms when it is not negative. */
 int bridge_tls_budget(const bridge_tls_t *session, int requested_ms);
+/* Sends small writes without waiting for acknowledgments; an optimization only, failures are ignored. */
+void bridge_tls_disable_delay(bridge_tls_t *session);
 void bridge_tls_destroy(bridge_tls_t *session);

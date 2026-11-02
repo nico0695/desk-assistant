@@ -31,9 +31,20 @@ static void remaining_time_never_extends_deadline(void)
     TEST_ASSERT_EQUAL_INT(INT_MAX, bridge_http_remaining_ms(INT64_C(3000000000000), 0, -1));
 }
 
+static void upload_progress_is_capped_by_size(void)
+{
+    /* 960044 B at 4096 B/s adds 234385 ms to the 30 s base. */
+    TEST_ASSERT_EQUAL_INT64(INT64_C(1000000) + INT64_C(264385000), bridge_http_upload_cap_us(1000000, 960044U));
+    TEST_ASSERT_EQUAL_INT64(INT64_C(33916000), bridge_http_upload_cap_us(0, 16044U));
+    const int64_t cap = bridge_http_upload_cap_us(0, 16044U);
+    TEST_ASSERT_EQUAL_INT64(INT64_C(30000000), bridge_http_progress_deadline_us(0, cap));
+    TEST_ASSERT_EQUAL_INT64(cap, bridge_http_progress_deadline_us(INT64_C(10000000), cap));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
+    RUN_TEST(upload_progress_is_capped_by_size);
     RUN_TEST(url_preserves_prefix_and_rejects_untrusted_paths);
     RUN_TEST(remaining_time_never_extends_deadline);
     return UNITY_END();

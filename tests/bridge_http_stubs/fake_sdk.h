@@ -32,8 +32,10 @@ int esp_transport_connect_async(esp_transport_handle_t, const char *, int, int);
 int esp_transport_read(esp_transport_handle_t, char *, int, int);
 int esp_transport_write(esp_transport_handle_t, const char *, int, int);
 int esp_transport_close(esp_transport_handle_t);
+int esp_transport_get_socket(esp_transport_handle_t);
 typedef int esp_http_client_method_t;
 #define HTTP_METHOD_GET 0
+#define HTTP_METHOD_PUT 2
 #define ESP_ERR_HTTP_EAGAIN 0x7007
 #define HTTP_EVENT_ON_HEADER 1
 typedef struct { void *user_data; int event_id; const char *header_key; const char *header_value; } esp_http_client_event_t;
@@ -50,5 +52,6 @@ int64_t esp_http_client_fetch_headers(esp_http_client_handle_t);
 int esp_http_client_get_status_code(esp_http_client_handle_t);
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t);
 int esp_http_client_read(esp_http_client_handle_t, char *, int);
+int esp_http_client_write(esp_http_client_handle_t, const char *, int);
 bool esp_http_client_is_complete_data_received(esp_http_client_handle_t);
 esp_err_t esp_http_client_cleanup(esp_http_client_handle_t);

@@ -11,6 +11,7 @@
 #include "esp_transport_ssl.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "lwip/sockets.h"
 
 #define BEARER_PREFIX "Bearer "
 
@@ -166,6 +167,15 @@ bridge_tls_open_t bridge_tls_open(bridge_tls_t *session, int write_length)
     const esp_err_t error = esp_http_client_open(session->client, write_length);
     bridge_http_handshake_release();
     return error == ESP_OK ? BRIDGE_TLS_OPENED : BRIDGE_TLS_OPEN_FAILED;
+}
+
+void bridge_tls_disable_delay(bridge_tls_t *session)
+{
+    const int socket = esp_transport_get_socket(session->tls);
+    const int enabled = 1;
+    if (socket >= 0) {
+        (void)setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
+    }
 }
 
 void bridge_tls_destroy(bridge_tls_t *session)

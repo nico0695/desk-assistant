@@ -27,6 +27,8 @@ typedef enum {
     BRIDGE_HTTP_INCOMPLETE,
     BRIDGE_HTTP_TOO_LARGE,
     BRIDGE_HTTP_INVALID_RESPONSE,
+    /* The upload body could not be read from its source. */
+    BRIDGE_HTTP_SOURCE_FAILED,
 } bridge_http_result_t;
 
 typedef struct {
@@ -52,3 +54,24 @@ void bridge_http_handshake_release(void);
 bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char *path,
                                        uint32_t gate_wait_ms, uint32_t io_ms,
                                        char *body, size_t capacity);
+
+/* Copies exactly capacity body bytes from offset into buffer; false when they cannot be read. */
+typedef bool (*bridge_http_body_reader_t)(size_t offset, void *buffer, size_t capacity, void *context);
+
+typedef struct {
+    bridge_http_response_t response;
+    /*
+     * True only when the upload failed before the first write of its last block, so the bridge never received the
+     * whole body. From that write on, a failure may still have delivered every byte and stays uncertain.
+     */
+    bool unsent;
+} bridge_http_upload_t;
+
+/*
+ * The single assistant upload: one PUT of an audio/wav body of body_length bytes, never redirected or repeated.
+ * Waits up to BRIDGE_ASSISTANT_PUT_GATE_MS for the finite gate, then applies the open, progress and response windows
+ * of bridge_assistant.h, writing blocks of BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES. The response is returned like a GET.
+ */
+bridge_http_upload_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
+                                         bridge_http_body_reader_t read_body, void *context, char *body,
+                                         size_t capacity);

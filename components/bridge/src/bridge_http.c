@@ -1,8 +1,10 @@
 #include "bridge_http.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "bridge_assistant.h"
 #include "bridge_clock.h"
 #include "bridge_http_common.h"
 #include "bridge_tls.h"
@@ -46,7 +48,6 @@ void bridge_http_handshake_release(void)
 {
     xSemaphoreGive(handshake_gate);
 }
-
 
 static bridge_http_result_t failure_result(const bridge_tls_t *session)
 {
@@ -169,4 +170,103 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
         response.length = 0;
     }
     return response;
+}
+
+/* Writes the body block by block; unsent turns false before the first write of the last block. */
+static bridge_http_result_t send_body(bridge_tls_t *session, size_t body_length, bridge_http_body_reader_t read_body,
+                                      void *context, char *block, int64_t cap_us, bool *unsent)
+{
+    session->deadline_us = bridge_http_progress_deadline_us(esp_timer_get_time(), cap_us);
+    for (size_t offset = 0; offset < body_length;) {
+        const size_t remaining = body_length - offset;
+        const size_t count =
+            remaining < BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES ? remaining : BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES;
+        if (bridge_tls_budget(session, -1) <= 0) {
+            return BRIDGE_HTTP_TIMEOUT;
+        }
+        if (!read_body(offset, block, count, context)) {
+            return BRIDGE_HTTP_SOURCE_FAILED;
+        }
+        if (offset + count == body_length) {
+            *unsent = false;
+        }
+        for (size_t written = 0; written < count;) {
+            const int sent = esp_http_client_write(session->client, block + written, (int)(count - written));
+            if (sent <= 0 || (size_t)sent > count - written) {
+                return failure_result(session);
+            }
+            written += (size_t)sent;
+            session->deadline_us = bridge_http_progress_deadline_us(esp_timer_get_time(), cap_us);
+        }
+        offset += count;
+    }
+    return BRIDGE_HTTP_OK;
+}
+
+static bridge_http_result_t exchange_put(bridge_tls_t *session, const bridge_origin_t *origin, const char *url,
+                                         size_t body_length, bridge_http_body_reader_t read_body, void *context,
+                                         char *body, size_t capacity, bridge_http_upload_t *upload)
+{
+    const int64_t cap_us = bridge_http_upload_cap_us(esp_timer_get_time(), body_length);
+    /* Allocated before opening: a missing buffer never starts the upload. */
+    char *block = malloc(BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES);
+    if (block == NULL || !bridge_tls_create(session, origin, url, HTTP_METHOD_PUT, BRIDGE_ASSISTANT_PUT_OPEN_MS) ||
+        esp_http_client_set_header(session->client, "Content-Type", "audio/wav") != ESP_OK ||
+        esp_http_client_set_header(session->client, "Accept", "application/json") != ESP_OK) {
+        free(block);
+        return BRIDGE_HTTP_NO_MEMORY;
+    }
+    const bridge_tls_open_t opened = bridge_tls_open(session, (int)body_length);
+    bridge_http_result_t result = opened == BRIDGE_TLS_GATE_TIMEOUT ? BRIDGE_HTTP_TIMEOUT
+                                  : opened == BRIDGE_TLS_OPENED     ? BRIDGE_HTTP_OK
+                                                                    : failure_result(session);
+    if (result == BRIDGE_HTTP_OK) {
+        bridge_tls_disable_delay(session);
+        result = send_body(session, body_length, read_body, context, block, cap_us, &upload->unsent);
+    }
+    /* Released before the response is read, to keep the peak memory with two TLS sessions low. */
+    free(block);
+    if (result != BRIDGE_HTTP_OK) {
+        return result;
+    }
+    session->deadline_us = esp_timer_get_time() + (int64_t)BRIDGE_ASSISTANT_PUT_RESPONSE_MS * 1000;
+    return receive_response(session, body, capacity, &upload->response);
+}
+
+bridge_http_upload_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
+                                         bridge_http_body_reader_t read_body, void *context, char *body,
+                                         size_t capacity)
+{
+    bridge_http_upload_t upload = {.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
+    char url[BRIDGE_HTTP_URL_SIZE];
+    if (body == NULL || capacity == 0U || capacity > BRIDGE_HTTP_BODY_MAX_BYTES) {
+        return upload;
+    }
+    memset(body, 0, capacity);
+    if (origin == NULL || read_body == NULL || body_length < BRIDGE_ASSISTANT_WAV_MIN_BYTES ||
+        body_length > BRIDGE_ASSISTANT_WAV_MAX_BYTES || !bridge_token_valid(origin->token) ||
+        !bridge_http_make_url(origin->url, path, url, sizeof(url))) {
+        return upload;
+    }
+    if (!bridge_clock_ready()) {
+        upload.response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
+        return upload;
+    }
+    if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(BRIDGE_ASSISTANT_PUT_GATE_MS)) != pdTRUE) {
+        upload.response.result = BRIDGE_HTTP_BUSY;
+        return upload;
+    }
+    bridge_tls_t session = {
+        .deadline_us = esp_timer_get_time() + (int64_t)BRIDGE_ASSISTANT_PUT_OPEN_MS * 1000,
+        .wire_limit = BRIDGE_HTTP_HEADER_MAX_BYTES,
+    };
+    upload.response.result =
+        exchange_put(&session, origin, url, body_length, read_body, context, body, capacity, &upload);
+    bridge_tls_destroy(&session);
+    xSemaphoreGive(finite_gate);
+    if (upload.response.result != BRIDGE_HTTP_OK) {
+        memset(body, 0, capacity);
+        upload.response.length = 0;
+    }
+    return upload;
 }
