@@ -287,6 +287,18 @@ static void test_closing_setup_with_a_link_keeps_it(void)
     expect_action(&state, 100, WIFI_SELECT_WAIT);
 }
 
+static void test_lost_ip_starts_recovery_without_a_network_identity(void)
+{
+    wifi_select_t state;
+    wifi_select_reset(&state, 0);
+    wifi_select_connected(&state, 0);
+    TEST_ASSERT_EQUAL(CONNECTIVITY_CONNECTED, wifi_select_state(&state, 1));
+    wifi_select_disconnected(&state, WIFI_SELECT_UNKNOWN_NETWORK, 1000);
+    TEST_ASSERT_FALSE(state.linked);
+    TEST_ASSERT_TRUE(state.lost);
+    TEST_ASSERT_EQUAL_UINT8(0, expect_connect(&state, 1000));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -308,5 +320,6 @@ int main(void)
     RUN_TEST(test_opening_setup_stops_a_round_in_progress);
     RUN_TEST(test_setup_keeps_the_recovery_of_a_lost_link);
     RUN_TEST(test_closing_setup_with_a_link_keeps_it);
+    RUN_TEST(test_lost_ip_starts_recovery_without_a_network_identity);
     return UNITY_END();
 }

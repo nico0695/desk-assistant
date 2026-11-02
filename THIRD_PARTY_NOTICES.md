@@ -42,6 +42,8 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 
 `components/bridge/src/bridge_sse.*` adapts the incremental event stream state, framing and reconnection timing, with strict JSON validation and expanded per-frame budgets.
 
+`components/bridge/src/bridge_stream.c` adapts the authenticated SSE transport, header checks and bounded opening from `main/app_events.c` of the same revision.
+
 - Author: Schmidt Nicolás
 - License: none declared in the source repository; same author as this project
 - Source: [slack_bot_esp32 @ 7e84ac0](https://github.com/nico0695/slack_bot_esp32/tree/7e84ac0f4150d0af49f5735fda3c1c50da87ed39/main)

@@ -2,6 +2,7 @@
 
 #include "board.h"
 #include "board_battery.h"
+#include "bridge.h"
 #include "bridge_origin_store.h"
 #include "connectivity.h"
 #include "esp_log.h"
@@ -28,10 +29,16 @@ static esp_err_t store_screen_timeout(uint8_t seconds)
     return error;
 }
 
+static void show_connectivity(const connectivity_view_t *view)
+{
+    ui_show_connectivity(view);
+    bridge_set_ip(view->state == CONNECTIVITY_CONNECTED);
+}
+
 static const connectivity_hooks_t CONNECTIVITY_HOOKS = {
     .screen_timeout_valid = screen_timeout_valid,
     .store_screen_timeout = store_screen_timeout,
-    .view_changed = ui_show_connectivity,
+    .view_changed = show_connectivity,
 };
 
 /* Only whether an origin is usable; the URL and token are never logged. */
@@ -66,6 +73,7 @@ void app_main(void)
         ESP_ERROR_CHECK_WITHOUT_ABORT(ui_start(&settings));
         ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(show_battery, NULL));
     }
+    ESP_ERROR_CHECK_WITHOUT_ABORT(bridge_start(ui_show_bridge_online));
     ESP_ERROR_CHECK_WITHOUT_ABORT(connectivity_start(&CONNECTIVITY_HOOKS));
     memory_report_log("boot");
 }

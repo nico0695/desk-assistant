@@ -6,4 +6,14 @@ menu "Desk Assistant bridge"
         help
             Server for the test unit's automatic clock synchronization.
 
+    config BRIDGE_STREAM_TASK_STACK_SIZE
+        int "SSE task stack size (bytes)"
+        range 6144 16384
+        default 8192
+
+    config BRIDGE_STREAM_TASK_PRIORITY
+        int "SSE task priority"
+        range 1 10
+        default 4
+
 endmenu

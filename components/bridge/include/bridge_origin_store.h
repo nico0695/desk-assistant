@@ -9,6 +9,10 @@ typedef struct {
     char token[BRIDGE_TOKEN_SIZE];
 } bridge_origin_t;
 
+/* Registered during startup before provisioning; callback copies the origin before returning. */
+typedef void (*bridge_origin_changed_fn)(const bridge_origin_t *origin);
+void bridge_origin_set_changed_callback(bridge_origin_changed_fn callback);
+
 /*
  * Replaces the stored origin with one write, so URL and token change together or not at all. This is the single
  * point where the origin changes. ESP_ERR_INVALID_ARG when either value is invalid; nothing is written then.

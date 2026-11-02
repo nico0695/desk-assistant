@@ -33,6 +33,7 @@ int esp_transport_read(esp_transport_handle_t, char *, int, int);
 int esp_transport_write(esp_transport_handle_t, const char *, int, int);
 int esp_transport_close(esp_transport_handle_t);
 #define HTTP_METHOD_GET 0
+#define ESP_ERR_HTTP_EAGAIN 0x7007
 #define HTTP_EVENT_ON_HEADER 1
 typedef struct { void *user_data; int event_id; const char *header_key; const char *header_value; } esp_http_client_event_t;
 typedef struct {

@@ -4,11 +4,13 @@
 
 #include "bridge_clock.h"
 #include "bridge_http.h"
+#include "bridge_stream.h"
 #include "fake_sdk.h"
 #include "unity.h"
 #include "../../components/bridge/src/bridge_http.c"
 
-typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL } fake_mode_t;
+typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL,
+               STREAM_OK, STREAM_NO_TYPE, STREAM_DENIED, STREAM_IDLE } fake_mode_t;
 struct fake_transport { void *context; connect_fn connect; read_fn read; write_fn write; close_fn close; bool tls; };
 struct fake_client { esp_http_client_config_t config; size_t offset; bool completed; };
 static fake_mode_t mode;
@@ -68,6 +70,7 @@ int esp_transport_close(esp_transport_handle_t t) { (void)t; return 0; }
 int esp_transport_read(esp_transport_handle_t t, char *data, int length, int timeout)
 {
     (void)t; (void)timeout;
+    if (mode == STREAM_IDLE) return ERR_TCP_TRANSPORT_CONNECTION_TIMEOUT;
     if (mode == LONG_HEADERS || mode == FALSE_EOF) { memset(data, 'h', (size_t)length); return length; }
     if (mode == SLOW) now_us += INT64_C(600000);
     size_t available = strlen(payload) - current->offset;
@@ -102,6 +105,11 @@ esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
 }
 int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
 {
+    if (mode == STREAM_OK || mode == STREAM_DENIED || mode == STREAM_IDLE) {
+        esp_http_client_event_t event = {.user_data = c->config.user_data, .event_id = HTTP_EVENT_ON_HEADER,
+                                         .header_key = "Content-Type", .header_value = "text/event-stream"};
+        c->config.event_handler(&event);
+    }
     if (mode == LONG_HEADERS) {
         char bytes[1024];
         while (c->config.transport->read(c->config.transport, bytes, sizeof(bytes), 5000) > 0) {}
@@ -114,13 +122,30 @@ int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
     }
     return (int64_t)strlen(payload);
 }
-int esp_http_client_get_status_code(esp_http_client_handle_t c) { (void)c; return mode == DENIED ? 401 : 200; }
+int esp_http_client_get_status_code(esp_http_client_handle_t c) { (void)c; return mode == DENIED || mode == STREAM_DENIED ? 401 : 200; }
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t c)
 {
     (void)c; return mode == RESPONSE_OVERFLOW ? -1 : (int64_t)strlen(payload);
 }
 int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
 {
+    if (mode == STREAM_IDLE) {
+        int64_t before = now_us;
+        int result = c->config.transport->read(c->config.transport, data, length, c->config.timeout_ms);
+        if (now_us == before) now_us += 1000;
+        return result == ERR_TCP_TRANSPORT_CONNECTION_TIMEOUT ? -ESP_ERR_HTTP_EAGAIN : result;
+    }
+    if (mode == STREAM_OK) {
+        static const char frame[] = "event: pending_events\ndata: {}\n\n";
+        if (c->offset == 0U) {
+            TEST_ASSERT_GREATER_OR_EQUAL(sizeof(frame) - 1U, (size_t)length);
+            memcpy(data, frame, sizeof(frame) - 1U);
+            c->offset = 1U;
+            return (int)(sizeof(frame) - 1U);
+        }
+        now_us += 1000000;
+        return -ESP_ERR_HTTP_EAGAIN;
+    }
     if (mode == FALSE_EOF) {
         char framing[1024];
         while (c->config.transport->read(c->config.transport, framing, sizeof(framing), 5000) > 0) {}
@@ -225,6 +250,68 @@ static void deadlines_bound_stalls_and_free_gates(void)
     TEST_ASSERT_EQUAL_UINT(3, dispatches);
 }
 
+typedef struct { bool opened; unsigned checks; } stream_test_t;
+static bool stream_opened(void *context) { ((stream_test_t *)context)->opened = true; return true; }
+static bool stream_open_rejected(void *context) { (void)context; return false; }
+static bool stream_current(void *context) { return ++((stream_test_t *)context)->checks < 3U; }
+static bool stream_always_current(void *context) { (void)context; return true; }
+
+static void stream_opens_with_auth_processes_frame_and_releases_resources(void)
+{
+    bridge_sse_t state;
+    bridge_sse_init(&state);
+    stream_test_t context = {0};
+    bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
+    mode = STREAM_OK;
+    bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_TRUE(context.opened);
+    TEST_ASSERT_TRUE(state.connected);
+    TEST_ASSERT_TRUE(bridge_sse_take_pending_events(&state));
+    TEST_ASSERT_EQUAL_STRING("https://example.test/prefix/v1/device/event-stream", captured_url);
+    TEST_ASSERT_TRUE(auth_set);
+    TEST_ASSERT_EQUAL_UINT(1, dispatches);
+}
+
+static void stream_rejects_missing_type_and_unauthorized_response(void)
+{
+    bridge_sse_t state;
+    bridge_sse_init(&state);
+    stream_test_t context = {0};
+    bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
+    mode = STREAM_NO_TYPE;
+    bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_FALSE(context.opened);
+    mode = STREAM_DENIED;
+    bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_FALSE(context.opened);
+    TEST_ASSERT_EQUAL_UINT(2, dispatches);
+}
+
+static void stream_idle_times_out_after_sixty_seconds(void)
+{
+    bridge_sse_t state;
+    bridge_sse_init(&state);
+    stream_test_t context = {0};
+    bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_always_current, .context = &context};
+    mode = STREAM_IDLE;
+    bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_TRUE(context.opened);
+    TEST_ASSERT_GREATER_OR_EQUAL_INT64(INT64_C(60000000), now_us);
+    TEST_ASSERT_LESS_THAN_INT64(INT64_C(61000000), now_us);
+}
+
+static void stream_stale_open_does_not_publish_connected(void)
+{
+    bridge_sse_t state;
+    bridge_sse_init(&state);
+    stream_test_t context = {0};
+    bridge_stream_hooks_t hooks = {.opened = stream_open_rejected, .current = stream_current, .context = &context};
+    mode = STREAM_OK;
+    bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_FALSE(state.connected);
+    TEST_ASSERT_EQUAL_UINT(0, context.checks);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -234,5 +321,9 @@ int main(void)
     RUN_TEST(allocation_and_setup_failures_release_resources_and_gates);
     RUN_TEST(errors_are_bounded_and_never_redispatched);
     RUN_TEST(deadlines_bound_stalls_and_free_gates);
+    RUN_TEST(stream_opens_with_auth_processes_frame_and_releases_resources);
+    RUN_TEST(stream_rejects_missing_type_and_unauthorized_response);
+    RUN_TEST(stream_idle_times_out_after_sixty_seconds);
+    RUN_TEST(stream_stale_open_does_not_publish_connected);
     return UNITY_END();
 }

@@ -67,8 +67,25 @@ target_link_libraries(test_bridge_clock PRIVATE unity)
 add_test(NAME test_bridge_clock COMMAND test_bridge_clock)
 
 add_executable(test_bridge_http integration/test_bridge_http.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_http_common.c ${COMPONENTS_DIR}/bridge/src/bridge_origin.c)
+    ${COMPONENTS_DIR}/bridge/src/bridge_http_common.c ${COMPONENTS_DIR}/bridge/src/bridge_origin.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_stream.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 target_include_directories(test_bridge_http PRIVATE bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
 target_compile_options(test_bridge_http PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(test_bridge_http PRIVATE unity)
+target_link_libraries(test_bridge_http PRIVATE unity cjson m)
 add_test(NAME test_bridge_http COMMAND test_bridge_http)
+
+add_executable(test_bridge_service integration/test_bridge_service.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_connection.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
+target_include_directories(test_bridge_service PRIVATE bridge_service_stubs bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
+target_compile_options(test_bridge_service PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_bridge_service PRIVATE unity cjson m)
+add_test(NAME test_bridge_service COMMAND test_bridge_service)
+
+add_executable(test_bridge_origin_store integration/test_bridge_origin_store.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_origin_store.c ${COMPONENTS_DIR}/bridge/src/bridge_origin.c)
+target_include_directories(test_bridge_origin_store PRIVATE bridge_service_stubs bridge_http_stubs ${COMPONENTS_DIR}/bridge/include)
+target_compile_options(test_bridge_origin_store PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_bridge_origin_store PRIVATE unity)
+add_test(NAME test_bridge_origin_store COMMAND test_bridge_origin_store)

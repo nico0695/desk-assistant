@@ -271,6 +271,18 @@ static void on_got_ip(void *unused, esp_event_base_t base, int32_t id, void *dat
     settle();
 }
 
+static void on_lost_ip(void *unused, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)unused;
+    (void)base;
+    (void)id;
+    (void)data;
+    if (selection.linked) {
+        wifi_select_disconnected(&selection, WIFI_SELECT_UNKNOWN_NETWORK, uptime_ms());
+        settle();
+    }
+}
+
 static void on_station_event(void *unused, esp_event_base_t base, int32_t id, void *data)
 {
     (void)unused;
@@ -337,6 +349,7 @@ esp_err_t station_start(station_view_changed_t on_view_changed)
     ESP_RETURN_ON_ERROR(esp_timer_create(&timer_args, &deadline_timer), TAG, "timer");
     ESP_RETURN_ON_ERROR(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL), TAG, "wifi");
     ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_got_ip, NULL), TAG, "ip");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, on_lost_ip, NULL), TAG, "lost ip");
     ESP_RETURN_ON_ERROR(esp_event_handler_register(STATION_EVENT, ESP_EVENT_ANY_ID, on_station_event, NULL), TAG,
                         "station");
     return esp_wifi_start();
