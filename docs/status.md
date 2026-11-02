@@ -14,15 +14,16 @@
 | 6 | Notifications and sound | Done (validated 2026-11-02) |
 | 7 | Modules: read | Done (validated 2026-11-02) |
 | 8 | Modules: actions | Done (validated 2026-11-02) |
-| 9 | Full acceptance | Next |
+| 9 | Full acceptance | Checkpoint, awaiting validation |
 | 10 | Battery (optional) | Pending |
 
 ## Active stage: 9 — Full acceptance
 
-- **Status:** next, not started.
-- **Goal:** a final image validated against the spec.
-- **Scope (macro plan):** combined flows (browse, record and upload with SSE and notifications; notifications during capture and actions; reconnection, panel off, reboot and persistence failures), memory budgets fixed by measurement, final `build_verified` / `hardware_verified` evidence.
-- **Carry-overs:** the deferred board cases of stages 3–8 and the measured body budget, in `.local/follow-up.md` and the macro plan.
+- **Status:** checkpoint at `bd267df`, awaiting the user's validation.
+- **Scope, reduced by the user:** no provoked board tests (wrong token, network cuts); network and upload failures audited in the code only (no crash, no stuck state); long-term use left to the user over time; only blocking fixes.
+- **Done:** robustness audit of the transport, upload, query, event stream, modules, ACK, persistence, workers and tone cleanup, with no new stuck state; an ACK refused with HTTP 400 or 404 is no longer retried; a journal save that wrote nothing no longer blocks notifications until reboot.
+- **Spec changes:** the tone sounds at a fixed level for any volume above 0; a 400 or 404 ACK is definitive.
+- **Out of scope:** the 8000-byte reply measurement and the optional fixes, listed in `.local/follow-up.md`.
 
 ## Closed stages
 
@@ -174,3 +175,13 @@ Each checkpoint records one entry per image:
   - Not run on the board: real uncertain (500, `action_unconfirmed`) and `task_state_changed` replies; covered by host tests.
 - **Validation:** the user ran the smoke guide on the final image and reported everything working (2026-11-02). CI on the close push `6102922` passed.
 - **Reviews:** `standard-code-review` on steps 1, 2–3 and 5, all clean; step 4 skipped (extraction with identical pixels). 4R at close: four lenses, 0 severe, 6 warnings and suggestions. Fixed in `7a2d452`: the action error mapping duplicated between Snooze and Delete/Complete, the Snooze request built twice (card and detail), a header comment about confirmation, and a test for an outcome that arrives after leaving the module. Snooze now also reads a missing route (404 `not_found`) as rejected. Discarded with their reason in the stage document: the two copies of the allowed-action rule, and an open dialog that holds notifications without a time limit (the spec defers notifications during a confirmation).
+
+### Stage 9 — 2026-11-02
+
+- **Revision:** `bd267df`, integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `f70f256553501a19276a12421edde4a7d19856d8fde0c4cb6f8df0bf2dc98951` (the boot log prints its first 9 digits). Application image 1658208 bytes.
+- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41 (new ACK and journal cases); `dependencies.lock` unchanged.
+- **hardware_verified:** boot only so far, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes. Boot log shows the version and ELF digits above; Wi-Fi connected 5 s and event stream open 13 s after boot; heap 166 KB free, minimum 153 KB at UI ready; no errors. The regression smoke is pending the user.
+  - Not run by decision of the user: provoked failures (wrong token, network or bridge cuts during upload, reads and actions), full queue and interrupted ACK, long-term use, the 8000-byte reply. Network failures were audited in the code instead.
+- **Reviews:** `standard-code-review` on steps 2–3, clean. 4R at close: standard tier, resilience lens, 0 severe, 1 info (a header comment over-promising what an unwritten error guarantees), fixed in `bd267df`.
+
