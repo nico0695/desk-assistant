@@ -9,6 +9,7 @@
 #include "board_audio.h"
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "board_bus.h"
 #include "board_power.h"
@@ -26,6 +27,8 @@
 #define I2S_WS_GPIO GPIO_NUM_22
 #define I2S_DIN_GPIO GPIO_NUM_21
 #define BYTES_PER_SAMPLE sizeof(int16_t)
+#define SLOTS_PER_FRAME 2U
+#define BYTES_PER_FRAME (SLOTS_PER_FRAME * BYTES_PER_SAMPLE)
 #define ADC_REGISTER_CLOCK_MODE 0x08
 #define ADC_CLOCK_MODE_MASTER 0x01
 
@@ -60,6 +63,8 @@ static bool receiver_enabled;
 static bool adc_configured;
 static bool rail_owned;
 static volatile uint32_t overruns;
+/* Interleaved left/right frames of one read; cleared after each read so no audio stays behind. */
+static int16_t frames[BOARD_AUDIO_BLOCK_SAMPLES * SLOTS_PER_FRAME];
 
 static esp_err_t write_adc(uint8_t reg, uint8_t value)
 {
@@ -105,10 +110,10 @@ static esp_err_t start_receiver(void)
     channel.dma_desc_num = CONFIG_BOARD_AUDIO_DMA_DESC_COUNT;
     channel.dma_frame_num = BOARD_AUDIO_BLOCK_SAMPLES;
     ESP_RETURN_ON_ERROR(i2s_new_channel(&channel, NULL, &receiver), TAG, "I2S channel");
-    /* Mono keeps only the left slot, which carries MIC1. */
+    /* Stereo: RX mono on this chip still delivers both slots and doubles the rate. Reads keep the left slot (MIC1). */
     const i2s_std_config_t config = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(BOARD_AUDIO_SAMPLE_RATE_HZ),
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg =
             {
                 .mclk = I2S_MCLK_GPIO,
@@ -172,8 +177,16 @@ esp_err_t board_audio_read(int16_t *samples, size_t capacity, size_t *count, uin
         capacity = BOARD_AUDIO_BLOCK_SAMPLES;
     }
     size_t bytes = 0;
-    const esp_err_t error = i2s_channel_read(receiver, samples, capacity * BYTES_PER_SAMPLE, &bytes, timeout_ms);
-    *count = bytes / BYTES_PER_SAMPLE;
+    esp_err_t error = i2s_channel_read(receiver, frames, capacity * BYTES_PER_FRAME, &bytes, timeout_ms);
+    if (bytes % BYTES_PER_FRAME != 0U) {
+        error = ESP_ERR_INVALID_SIZE;
+        bytes = 0;
+    }
+    *count = bytes / BYTES_PER_FRAME;
+    for (size_t i = 0; i < *count; ++i) {
+        samples[i] = frames[i * SLOTS_PER_FRAME];
+    }
+    memset(frames, 0, sizeof(frames));
     return error;
 }
 
