@@ -9,6 +9,14 @@
 #define TILE_WIDTH_PX ((UI_CONTENT_WIDTH_PX - (GRID_COLUMNS - 1) * UI_GAP_PX) / GRID_COLUMNS)
 
 static ui_open_section_cb_t open_section_callback;
+/* Label of the record button while Home is shown; cleared when Home is deleted. */
+static lv_obj_t *record_label;
+
+static void forget_record_label(lv_event_t *event)
+{
+    (void)event;
+    record_label = NULL;
+}
 
 static void open_section(lv_event_t *event)
 {
@@ -57,16 +65,26 @@ static void create_section_grid(lv_obj_t *content)
     }
 }
 
-lv_obj_t *ui_home_screen_create(ui_open_section_cb_t on_open_section, lv_event_cb_t on_record)
+void ui_home_show_record_entry(const char *text)
+{
+    if (record_label != NULL) {
+        lv_label_set_text_static(record_label, text);
+    }
+}
+
+lv_obj_t *ui_home_screen_create(ui_open_section_cb_t on_open_section, lv_event_cb_t on_record,
+                                const char *record_text)
 {
     open_section_callback = on_open_section;
     lv_obj_t *screen = ui_screen_create();
     ui_status_bar_create(screen, UI_TEXT_HOME_TITLE);
 
     lv_obj_t *content = create_content(screen);
-    lv_obj_t *record = ui_button_create(content, UI_BUTTON_PRIMARY, NULL, UI_TEXT_RECORD);
+    lv_obj_t *record = ui_button_create(content, UI_BUTTON_PRIMARY, NULL, record_text);
     lv_obj_set_size(record, lv_pct(100), UI_PRIMARY_BUTTON_HEIGHT_PX);
     lv_obj_set_style_text_font(record, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);
+    record_label = lv_obj_get_child(record, -1);
+    lv_obj_add_event_cb(record_label, forget_record_label, LV_EVENT_DELETE, NULL);
     add_record_dot(record);
     lv_obj_add_event_cb(record, on_record, LV_EVENT_CLICKED, NULL);
 

@@ -38,7 +38,16 @@ static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
  * reports its last outcome after releasing everything, so two workers never touch the hardware at once.
  */
 static recording_state_t state;
+/* Guarded by lock; numbers every view so the consumer can drop one that arrives late. */
+static uint64_t view_revision;
 static recording_view_fn view_callback;
+
+/* Call under lock. */
+static void snapshot(recording_view_t *view)
+{
+    recording_state_view(&state, view);
+    view->revision = ++view_revision;
+}
 
 static void publish(const recording_view_t *view)
 {
@@ -49,7 +58,7 @@ static void publish_current(void)
 {
     recording_view_t view;
     taskENTER_CRITICAL(&lock);
-    recording_state_view(&state, &view);
+    snapshot(&view);
     taskEXIT_CRITICAL(&lock);
     publish(&view);
 }
@@ -213,7 +222,7 @@ static void run_capture(void)
         recording_view_t view;
         taskENTER_CRITICAL(&lock);
         const bool limit = recording_state_captured(&state, samples);
-        recording_state_view(&state, &view);
+        snapshot(&view);
         taskEXIT_CRITICAL(&lock);
         if (limit || now - published >= VIEW_PERIOD_US) {
             published = now;
@@ -257,7 +266,7 @@ static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t
     recording_view_t view;
     taskENTER_CRITICAL(&lock);
     const recording_effect_t effect = command(&state, generation);
-    recording_state_view(&state, &view);
+    snapshot(&view);
     taskEXIT_CRITICAL(&lock);
     if (effect == RECORDING_EFFECT_NONE) {
         return;
@@ -286,6 +295,25 @@ void recording_cancel(uint64_t generation)
 void recording_close(uint64_t generation)
 {
     dispatch(recording_state_close, generation);
+}
+
+/* Upload, queries and discard arrive in the next steps of stage 5b. */
+void recording_check(uint64_t generation)
+{
+    (void)generation;
+}
+
+void recording_discard(uint64_t generation)
+{
+    (void)generation;
+}
+
+bool recording_read_message(uint64_t generation, void (*reader)(const char *text, void *context), void *context)
+{
+    (void)generation;
+    (void)reader;
+    (void)context;
+    return false;
 }
 
 esp_err_t recording_start(recording_view_fn on_view)

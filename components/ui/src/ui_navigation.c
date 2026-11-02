@@ -86,7 +86,7 @@ static void request_recording(lv_event_t *event)
 static void show_home(void *unused)
 {
     (void)unused;
-    replace_active_screen(ui_home_screen_create(request_section, request_recording));
+    replace_active_screen(ui_home_screen_create(request_section, request_recording, ui_recording_control_entry_text()));
 }
 
 void ui_navigation_start(void)

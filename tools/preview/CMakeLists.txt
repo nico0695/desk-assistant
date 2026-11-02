@@ -25,6 +25,8 @@ add_compile_definitions(
     LV_FONT_DEFAULT=&lv_font_montserrat_24
     LV_USE_LODEPNG=1
     LV_USE_QRCODE=1)
+# Matches CONFIG_LV_TXT_BREAK_CHARS in sdkconfig.defaults; quoting it as a definition breaks the build shell.
+add_compile_options(-include ${CMAKE_CURRENT_SOURCE_DIR}/lv_text_break.h)
 add_subdirectory(${LVGL_DIR} lvgl)
 
 # Screens and theme only; the UI task and the display port need the device.
@@ -35,6 +37,7 @@ set(UI_SOURCES
     ${UI_DIR}/src/ui_section.c
     ${UI_DIR}/src/ui_home.c
     ${UI_DIR}/src/ui_recording.c
+    ${UI_DIR}/src/ui_text_support.c
     ${UI_DIR}/src/ui_settings.c
     ${UI_DIR}/src/ui_wifi.c
     ${REPO_ROOT}/components/features/settings/src/settings_values.c

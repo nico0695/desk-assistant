@@ -8,10 +8,12 @@
 #include "lvgl.h"
 #include "ui_home.h"
 #include "ui_recording.h"
+#include "ui_recording_text.h"
 #include "ui_section.h"
 #include "ui_settings.h"
 #include "ui_wifi.h"
 #include "ui_status_bar.h"
+#include "ui_text.h"
 #include "ui_theme.h"
 
 #define WIDTH BOARD_DISPLAY_WIDTH_PX
@@ -148,16 +150,92 @@ static void ignore_generation(uint64_t generation)
     (void)generation;
 }
 
+/* A long reply in Spanish with typographic punctuation, plus one character outside the supported set. */
+static const char SAMPLE_REPLY[] =
+    "Listo: agendé la reunión con Ana para el jueves a las 10:00 \u2014 te mandé la invitación.\n\n"
+    "Pendientes que encontré en tu lista:\n"
+    "\u2022 Revisar el presupuesto (vence mañana).\n"
+    "\u2022 Llamar al proveedor por la entrega de 1.250 \u20ac.\n"
+    "\u2022 Confirmar el \u201cplan B\u201d del viaje\u2026\n\n"
+    "Si querés, también puedo recordarte la reunión 15 minutos antes. \u2705";
+static const char *sample_reply = SAMPLE_REPLY;
+
+static bool read_sample_reply(uint64_t generation, void (*reader)(const char *text, void *context), void *context)
+{
+    (void)generation;
+    reader(sample_reply, context);
+    return true;
+}
+
 static const ui_recording_handlers_t RECORDING_HANDLERS = {
     .on_send = ignore_generation,
     .on_cancel = ignore_generation,
     .on_close = ignore_generation,
+    .on_check = ignore_generation,
+    .on_discard = ignore_generation,
+    .read_message = read_sample_reply,
 };
+
+static lv_obj_t *create_recording_view(const recording_view_t *view)
+{
+    return ui_recording_screen_create(view, &RECORDING_HANDLERS);
+}
 
 static lv_obj_t *create_recording(recording_phase_t phase, recording_failure_t failure, uint32_t duration_ms)
 {
     const recording_view_t view = {.phase = phase, .failure = failure, .duration_ms = duration_ms, .generation = 1};
-    return ui_recording_screen_create(&view, &RECORDING_HANDLERS);
+    return create_recording_view(&view);
+}
+
+/* Taps Discard on the open panel so the confirmation shows. */
+static lv_obj_t *create_discard_confirmation(const recording_view_t *view)
+{
+    lv_obj_t *screen = create_recording_view(view);
+    lv_obj_t *row = lv_obj_get_child(screen, -1);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(row); ++i) {
+        lv_obj_t *button = lv_obj_get_child(row, (int32_t)i);
+        if (strcmp(lv_label_get_text(lv_obj_get_child(button, -1)), "Discard") == 0 &&
+            !lv_obj_has_flag(button, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_send_event(button, LV_EVENT_CLICKED, NULL);
+            break;
+        }
+    }
+    return screen;
+}
+
+static void capture_attempt_states(lv_display_t *display, const char *directory)
+{
+    recording_view_t ready = {.phase = RECORDING_READY_TO_SEND, .notice = RECORDING_NOTICE_NOT_CONNECTED,
+                              .duration_ms = 8400, .generation = 1};
+    capture(display, create_recording_view(&ready), directory, "recording-ready-not-connected");
+    const recording_view_t uploading = {.phase = RECORDING_UPLOADING, .generation = 2, .close_keeps_attempt = true};
+    capture(display, create_recording_view(&uploading), directory, "recording-uploading");
+    const recording_view_t processing = {.phase = RECORDING_PROCESSING, .generation = 2, .can_check = true,
+                                         .close_keeps_attempt = true};
+    capture(display, create_recording_view(&processing), directory, "recording-processing");
+    const recording_view_t completed = {.phase = RECORDING_COMPLETED, .generation = 2, .has_message = true,
+                                        .content_omitted = true};
+    capture(display, create_recording_view(&completed), directory, "recording-completed");
+    const recording_view_t restored = {.phase = RECORDING_COMPLETED, .generation = 2, .can_check = true};
+    capture(display, create_recording_view(&restored), directory, "recording-completed-unavailable");
+    sample_reply = "The assistant could not understand the audio. Try recording again in a quieter place.";
+    const recording_view_t remote = {.phase = RECORDING_FAILED, .failure = RECORDING_FAILURE_REMOTE,
+                                     .generation = 2, .has_message = true};
+    capture(display, create_recording_view(&remote), directory, "recording-remote-failed");
+    sample_reply = "The result of this request could not be confirmed by the bridge.";
+    const recording_view_t unknown = {.phase = RECORDING_UNKNOWN, .generation = 2, .has_message = true};
+    capture(display, create_recording_view(&unknown), directory, "recording-unknown");
+    sample_reply = SAMPLE_REPLY;
+    const recording_view_t unconfirmed = {.phase = RECORDING_UNCONFIRMED, .generation = 2, .can_check = true,
+                                          .can_discard = true, .close_keeps_attempt = true};
+    capture(display, create_recording_view(&unconfirmed), directory, "recording-unconfirmed");
+    capture(display, create_discard_confirmation(&unconfirmed), directory, "recording-discard-confirm");
+    const recording_view_t not_sent = {.phase = RECORDING_FAILED, .failure = RECORDING_FAILURE_NOT_SENT,
+                                       .generation = 2};
+    capture(display, create_recording_view(&not_sent), directory, "recording-not-sent");
+    const recording_view_t record_failed = {.phase = RECORDING_UNCONFIRMED, .failure = RECORDING_FAILURE_RECORD,
+                                            .generation = 2, .close_keeps_attempt = true};
+    capture(display, create_recording_view(&record_failed), directory, "recording-record-failed");
 }
 
 static connectivity_view_t sample_view(connectivity_state_t state, unsigned saved_count)
@@ -243,13 +321,13 @@ int main(int argc, char **argv)
     ui_theme_init();
 
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
-    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORD), directory, "home");
     ui_status_bar_set_bridge_online(true);
-    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home-wifi-online");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORD), directory, "home-wifi-online");
     ui_status_bar_set_bridge_online(false);
-    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home-wifi-offline");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORD), directory, "home-wifi-offline");
     ui_status_bar_set_battery((ui_battery_t){.known = false});
-    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home-battery-unknown");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORD), directory, "home-battery-unknown");
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
     capture(display, ui_section_screen_create(UI_SECTION_TASKS, ignore_back), directory, "section");
     capture(display, create_latin1_sample(), directory, "latin1-sample");
@@ -302,5 +380,8 @@ int main(int argc, char **argv)
             "recording-too-short");
     capture(display, create_recording(RECORDING_FAILED, RECORDING_FAILURE_CLEANUP, 0), directory,
             "recording-cleanup-failed");
+    capture_attempt_states(display, directory);
+    capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORDING_ENTRY_PENDING), directory,
+            "home-entry-pending");
     return EXIT_SUCCESS;
 }
