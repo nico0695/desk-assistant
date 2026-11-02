@@ -30,6 +30,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/features/settings/src/settings_row.c
     ${COMPONENTS_DIR}/features/recording/src/recording_state.c
     ${COMPONENTS_DIR}/features/notifications/src/notification_state.c
+    ${COMPONENTS_DIR}/features/modules/src/modules_state.c
     ${COMPONENTS_DIR}/connectivity/src/wifi_list.c
     ${COMPONENTS_DIR}/connectivity/src/wifi_select.c
     ${COMPONENTS_DIR}/connectivity/src/setup_credentials.c
@@ -57,6 +58,8 @@ set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/features/recording/include
     ${COMPONENTS_DIR}/features/recording/src
     ${COMPONENTS_DIR}/features/notifications/include
+    ${COMPONENTS_DIR}/features/modules/include
+    ${COMPONENTS_DIR}/features/modules/src
     ${COMPONENTS_DIR}/connectivity/include
     ${COMPONENTS_DIR}/connectivity/src
     ${COMPONENTS_DIR}/bridge/include
