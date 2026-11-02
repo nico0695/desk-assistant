@@ -359,6 +359,12 @@ static void ignore_open(uint64_t ticket, uint64_t id)
     (void)id;
 }
 
+static void ignore_preset(uint64_t ticket, bridge_snooze_preset_t preset)
+{
+    (void)ticket;
+    (void)preset;
+}
+
 static const ui_modules_handlers_t MODULES_HANDLERS = {
     .on_leave = ignore_closed,
     .on_previous = ignore_ticket,
@@ -366,6 +372,9 @@ static const ui_modules_handlers_t MODULES_HANDLERS = {
     .on_refresh = ignore_ticket,
     .on_open = ignore_open,
     .on_back = ignore_ticket,
+    .on_delete = ignore_ticket,
+    .on_complete = ignore_ticket,
+    .on_snooze = ignore_preset,
     .read_page = read_sample_page,
     .read_detail = read_sample_detail,
 };
@@ -390,6 +399,15 @@ static modules_view_t modules_view(bridge_resource_kind_t kind, modules_screen_t
 static lv_obj_t *create_modules(const modules_view_t *view)
 {
     return ui_modules_screen_create(view, &MODULES_HANDLERS);
+}
+
+/* Taps a button of the fixed control row: Back, Previous, Refresh, Next, Complete, Snooze, Delete. */
+enum { CONTROL_SNOOZE = 5, CONTROL_DELETE = 6 };
+
+static lv_obj_t *tap_control(lv_obj_t *screen, int32_t index)
+{
+    lv_obj_send_event(lv_obj_get_child(lv_obj_get_child(screen, -1), index), LV_EVENT_CLICKED, NULL);
+    return screen;
 }
 
 static void capture_module_lists(lv_display_t *display, const char *directory)
@@ -418,6 +436,14 @@ static void capture_module_lists(lv_display_t *display, const char *directory)
                  "2026-11-03T13:00:00.250Z");
     const modules_view_t alerts = modules_view(BRIDGE_RESOURCE_ALERTS, MODULES_SCREEN_LIST, MODULES_READY, MODULES_ERROR_NONE);
     capture(display, create_modules(&alerts), directory, "modules-alerts");
+
+    modules_view_t deleted = tasks;
+    deleted.action = MODULES_ACTION_DELETE;
+    deleted.notice = MODULES_NOTICE_DONE;
+    capture(display, create_modules(&deleted), directory, "modules-action-deleted");
+    deleted.status = MODULES_FAILED;
+    deleted.error = MODULES_ERROR_NETWORK;
+    capture(display, create_modules(&deleted), directory, "modules-action-deleted-refresh-failed");
 
     sample_page.count = 0;
     modules_view_t empty = modules_view(BRIDGE_RESOURCE_ALERTS, MODULES_SCREEN_LIST, MODULES_READY, MODULES_ERROR_NONE);
@@ -467,6 +493,26 @@ static void capture_module_details(lv_display_t *display, const char *directory)
     snprintf(sample_detail.when_at, sizeof(sample_detail.when_at), "2026-11-03T12:00:00Z");
     capture(display, create_modules(&detail), directory, "modules-detail-task");
 
+    sample_detail_base(BRIDGE_RESOURCE_TASKS, 54, "Pagar la factura de luz antes del vencimiento del viernes y guardar el comprobante en la carpeta");
+    sample_detail.task_status = BRIDGE_TASK_PENDING;
+    modules_view_t pending = detail;
+    pending.can_delete = pending.can_complete = true;
+    capture(display, create_modules(&pending), directory, "modules-action-task-pending");
+    capture(display, tap_control(create_modules(&pending), CONTROL_DELETE), directory, "modules-action-delete-dialog");
+    modules_view_t acting = detail;
+    acting.status = MODULES_ACTING;
+    acting.action = MODULES_ACTION_COMPLETE;
+    acting.notice = MODULES_NOTICE_WORKING;
+    capture(display, create_modules(&acting), directory, "modules-action-completing");
+    modules_view_t uncertain = detail;
+    uncertain.action = MODULES_ACTION_COMPLETE;
+    uncertain.notice = MODULES_NOTICE_UNCONFIRMED;
+    capture(display, create_modules(&uncertain), directory, "modules-action-uncertain");
+    modules_view_t busy = pending;
+    busy.action = MODULES_ACTION_DELETE;
+    busy.notice = MODULES_NOTICE_BUSY;
+    capture(display, create_modules(&busy), directory, "modules-action-busy");
+
     sample_detail_base(BRIDGE_RESOURCE_TASKS, 53, "Comprar pan ✅");
     sample_detail.description = "Sin alerta ni tag. Emoji ✅ sin glifo.";
     modules_view_t task_view = detail;
@@ -482,6 +528,13 @@ static void capture_module_details(lv_display_t *display, const char *directory)
     snprintf(sample_detail.when_at, sizeof(sample_detail.when_at), "2026-11-03T13:00:00.250Z");
     modules_view_t alert_view = modules_view(BRIDGE_RESOURCE_ALERTS, MODULES_SCREEN_DETAIL, MODULES_READY, MODULES_ERROR_NONE);
     capture(display, create_modules(&alert_view), directory, "modules-detail-alert");
+    alert_view.can_delete = alert_view.can_snooze = true;
+    capture(display, create_modules(&alert_view), directory, "modules-action-alert");
+    capture(display, tap_control(create_modules(&alert_view), CONTROL_SNOOZE), directory, "modules-action-snooze-dialog");
+    alert_view.action = MODULES_ACTION_SNOOZE;
+    alert_view.notice = MODULES_NOTICE_DONE;
+    snprintf(alert_view.snoozed_until, sizeof(alert_view.snoozed_until), "2026-11-03T14:00:00Z");
+    capture(display, create_modules(&alert_view), directory, "modules-action-snoozed");
 }
 
 int main(int argc, char **argv)

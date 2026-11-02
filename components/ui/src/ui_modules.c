@@ -23,6 +23,8 @@
 #define ID_SIZE 24
 /* Status line, three dates, sent line and the ID, each with its label. */
 #define FACTS_SIZE 384
+#define SUMMARY_DATE_SIZE (DATE_SIZE + 24)
+#define NOTICE_SIZE 96
 
 /* State of the open screen; cleared when it is deleted. */
 static const ui_modules_handlers_t *handlers;
@@ -33,6 +35,15 @@ static lv_obj_t *back_button;
 static lv_obj_t *previous_button;
 static lv_obj_t *refresh_button;
 static lv_obj_t *next_button;
+static lv_obj_t *complete_button;
+static lv_obj_t *snooze_button;
+static lv_obj_t *delete_button;
+/* The open dialog acts on the detail shown with dialog_ticket. */
+static lv_obj_t *dialog;
+static uint64_t dialog_ticket;
+static bool dialog_snooze;
+/* The shown detail is a pending task. */
+static bool complete_offered;
 static char title_text[TITLE_SIZE];
 /* The IDs of the rows on screen, in order. */
 static uint64_t row_ids[BRIDGE_RESOURCE_PAGE_SIZE];
@@ -84,6 +95,29 @@ static void format_date(const char *utc, char text[DATE_SIZE])
         snprintf(text, DATE_SIZE, "%s", UI_TEXT_MODULES_NOT_AVAILABLE);
 }
 
+static const char *item_name(bridge_resource_kind_t kind)
+{
+    switch (kind) {
+    case BRIDGE_RESOURCE_TASKS: return UI_TEXT_MODULES_ITEM_TASK;
+    case BRIDGE_RESOURCE_NOTES: return UI_TEXT_MODULES_ITEM_NOTE;
+    case BRIDGE_RESOURCE_ALERTS:
+    default: return UI_TEXT_MODULES_ITEM_ALERT;
+    }
+}
+
+/* The one date of a summary: the schedule of an alert, the alert of a task when it has one, else the creation. */
+static void format_summary_date(bridge_resource_kind_t kind, const char *when_at, const char *created_at,
+                                char line[SUMMARY_DATE_SIZE])
+{
+    char date[DATE_SIZE];
+    const bool alert_time = kind != BRIDGE_RESOURCE_NOTES && when_at[0] != '\0';
+    const char *format = kind == BRIDGE_RESOURCE_ALERTS ? UI_TEXT_MODULES_ROW_SCHEDULED
+                         : alert_time                   ? UI_TEXT_MODULES_ROW_ALERT
+                                                        : UI_TEXT_MODULES_ROW_CREATED;
+    format_date(alert_time ? when_at : created_at, date);
+    snprintf(line, SUMMARY_DATE_SIZE, format, date);
+}
+
 static void set_visible(lv_obj_t *object, bool visible)
 {
     if (visible) lv_obj_remove_flag(object, LV_OBJ_FLAG_HIDDEN);
@@ -103,6 +137,27 @@ static lv_obj_t *create_label(lv_obj_t *parent, ui_font_role_t font, lv_text_ali
     lv_obj_set_style_text_font(label, ui_theme_font(font), LV_PART_MAIN);
     lv_obj_set_style_text_align(label, align, LV_PART_MAIN);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    return label;
+}
+
+/* Summary text in two lines at most: the detail shows the whole text. */
+static void create_summary_text(lv_obj_t *parent, const char *text)
+{
+    lv_obj_t *label = create_label(parent, UI_FONT_BODY, LV_TEXT_ALIGN_LEFT);
+    lv_label_set_text(label, text);
+    lv_obj_update_layout(label);
+    const int32_t max_height = ROW_TEXT_LINES * lv_font_get_line_height(ui_theme_font(UI_FONT_BODY));
+    if (lv_obj_get_height(label) > max_height) {
+        lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+        lv_obj_set_height(label, max_height);
+    }
+}
+
+static lv_obj_t *create_secondary_label(lv_obj_t *parent, const char *text)
+{
+    lv_obj_t *label = create_label(parent, UI_FONT_SECONDARY, LV_TEXT_ALIGN_LEFT);
+    lv_obj_add_style(label, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
+    lv_label_set_text(label, text);
     return label;
 }
 
@@ -138,12 +193,104 @@ static void on_row(lv_event_t *event)
     if (handlers != NULL && index < BRIDGE_RESOURCE_PAGE_SIZE) handlers->on_open(shown.ticket, row_ids[index]);
 }
 
+static void close_dialog(void)
+{
+    if (dialog == NULL) return;
+    lv_obj_delete(dialog);
+    dialog = NULL;
+}
+
+static void on_dialog_cancel(lv_event_t *event)
+{
+    (void)event;
+    close_dialog();
+}
+
+static void on_delete_confirmed(lv_event_t *event)
+{
+    (void)event;
+    const uint64_t ticket = dialog_ticket;
+    close_dialog();
+    if (handlers != NULL) handlers->on_delete(ticket);
+}
+
+static void on_preset(lv_event_t *event)
+{
+    const bridge_snooze_preset_t preset = (bridge_snooze_preset_t)(uintptr_t)lv_event_get_user_data(event);
+    const uint64_t ticket = dialog_ticket;
+    close_dialog();
+    if (handlers != NULL) handlers->on_snooze(ticket, preset);
+}
+
+static void add_preset(lv_obj_t *buttons, const char *text, bridge_snooze_preset_t preset)
+{
+    ui_dialog_button_create(buttons, UI_BUTTON_PRIMARY, text, on_preset, (void *)(uintptr_t)preset);
+}
+
+/* Builds the dialog from the detail the user sees; it identifies the item by its text and date. */
+static void create_dialog(const bridge_resource_detail_t *detail, void *unused)
+{
+    (void)unused;
+    char title[sizeof(UI_TEXT_MODULES_DELETE_TITLE_FORMAT) + sizeof(UI_TEXT_MODULES_ITEM_ALERT)];
+    char line[SUMMARY_DATE_SIZE];
+    snprintf(title, sizeof(title), UI_TEXT_MODULES_DELETE_TITLE_FORMAT, item_name(detail->kind));
+    lv_obj_t *panel = ui_dialog_create(screen_object, dialog_snooze ? UI_TEXT_MODULES_SNOOZE_TITLE : title, NULL);
+    dialog = lv_obj_get_parent(panel);
+    create_summary_text(panel, detail->text);
+    format_summary_date(detail->kind, detail->when_at, detail->created_at, line);
+    create_secondary_label(panel, line);
+    lv_obj_t *buttons = ui_dialog_buttons_create(panel);
+    if (dialog_snooze) {
+        add_preset(buttons, UI_TEXT_MODULES_SNOOZE_FIVE_MINUTES, BRIDGE_SNOOZE_FIVE_MINUTES);
+        add_preset(buttons, UI_TEXT_MODULES_SNOOZE_ONE_HOUR, BRIDGE_SNOOZE_ONE_HOUR);
+        add_preset(buttons, UI_TEXT_MODULES_SNOOZE_TOMORROW, BRIDGE_SNOOZE_TOMORROW);
+        ui_dialog_button_create(buttons, UI_BUTTON_STANDARD, UI_TEXT_MODULES_CANCEL, on_dialog_cancel, NULL);
+        return;
+    }
+    ui_dialog_button_create(buttons, UI_BUTTON_STANDARD, UI_TEXT_MODULES_CANCEL, on_dialog_cancel, NULL);
+    ui_dialog_button_create(buttons, UI_BUTTON_PRIMARY, UI_TEXT_MODULES_DELETE, on_delete_confirmed, NULL);
+}
+
+/* The dialog freezes the target: it keeps the ticket of the view it was opened from. */
+static void open_dialog(bool snooze)
+{
+    if (handlers == NULL || handlers->read_detail == NULL) return;
+    close_dialog();
+    dialog_snooze = snooze;
+    dialog_ticket = shown.ticket;
+    (void)handlers->read_detail(shown.ticket, create_dialog, NULL);
+}
+
+static void on_delete(lv_event_t *event)
+{
+    (void)event;
+    open_dialog(false);
+}
+
+static void on_snooze(lv_event_t *event)
+{
+    (void)event;
+    open_dialog(true);
+}
+
+static void on_complete(lv_event_t *event)
+{
+    (void)event;
+    if (handlers != NULL) handlers->on_complete(shown.ticket);
+}
+
+bool ui_modules_dialog_open(void)
+{
+    return dialog != NULL;
+}
+
 static void forget_screen(lv_event_t *event)
 {
     if (lv_event_get_target(event) != screen_object) return;
     handlers = NULL;
     screen_object = NULL;
     content = NULL;
+    dialog = NULL;
 }
 
 static lv_obj_t *create_icon_button(lv_obj_t *row, const char *symbol, lv_event_cb_t on_click)
@@ -168,11 +315,15 @@ static void create_controls(lv_obj_t *parent)
     previous_button = create_icon_button(row, LV_SYMBOL_PREV, on_previous);
     refresh_button = create_icon_button(row, LV_SYMBOL_REFRESH, on_refresh);
     next_button = create_icon_button(row, LV_SYMBOL_NEXT, on_next);
+    complete_button = create_icon_button(row, LV_SYMBOL_OK, on_complete);
+    snooze_button = create_icon_button(row, LV_SYMBOL_BELL, on_snooze);
+    delete_button = create_icon_button(row, LV_SYMBOL_TRASH, on_delete);
 }
 
 lv_obj_t *ui_modules_screen_create(const modules_view_t *view, const ui_modules_handlers_t *on_events)
 {
     handlers = on_events;
+    dialog = NULL;
     screen_object = ui_screen_create();
     ui_status_bar_create(screen_object, module_title(view->kind));
     lv_obj_add_event_cb(screen_object, forget_screen, LV_EVENT_DELETE, NULL);
@@ -204,15 +355,53 @@ static void show_failure(void)
     lv_label_set_text(text, hint);
 }
 
+static const char *working_text(modules_action_t action)
+{
+    switch (action) {
+    case MODULES_ACTION_COMPLETE: return UI_TEXT_MODULES_NOTICE_COMPLETING;
+    case MODULES_ACTION_SNOOZE: return UI_TEXT_MODULES_NOTICE_SNOOZING;
+    case MODULES_ACTION_DELETE:
+    default: return UI_TEXT_MODULES_NOTICE_DELETING;
+    }
+}
+
+static const char *done_text(char text[NOTICE_SIZE])
+{
+    if (shown.action == MODULES_ACTION_COMPLETE) return UI_TEXT_MODULES_NOTICE_COMPLETED;
+    if (shown.action != MODULES_ACTION_SNOOZE) return UI_TEXT_MODULES_NOTICE_DELETED;
+    char date[DATE_SIZE];
+    format_date(shown.snoozed_until, date);
+    snprintf(text, NOTICE_SIZE, UI_TEXT_MODULES_NOTICE_SNOOZED_FORMAT, date);
+    return text;
+}
+
+/* The line above the content with the progress or outcome of the last action. */
+static void show_notice(void)
+{
+    char buffer[NOTICE_SIZE];
+    const char *text;
+    uint32_t color = UI_COLOR_WARNING_TEXT;
+    switch (shown.notice) {
+    case MODULES_NOTICE_NONE: return;
+    case MODULES_NOTICE_WORKING: text = working_text(shown.action); break;
+    case MODULES_NOTICE_DONE: text = done_text(buffer); color = UI_COLOR_SUCCESS; break;
+    case MODULES_NOTICE_BUSY: text = UI_TEXT_MODULES_NOTICE_BUSY; break;
+    case MODULES_NOTICE_NOT_SENT: text = UI_TEXT_MODULES_NOTICE_NOT_SENT; break;
+    case MODULES_NOTICE_NOT_FOUND: text = UI_TEXT_MODULES_NOTICE_NOT_FOUND; break;
+    case MODULES_NOTICE_CHANGED: text = UI_TEXT_MODULES_NOTICE_CHANGED; break;
+    case MODULES_NOTICE_REJECTED: text = UI_TEXT_MODULES_NOTICE_REJECTED; color = UI_COLOR_ERROR; break;
+    case MODULES_NOTICE_UNCONFIRMED:
+    default: text = UI_TEXT_MODULES_NOTICE_UNCONFIRMED; color = UI_COLOR_ERROR; break;
+    }
+    lv_obj_t *line = create_label(content, UI_FONT_SECONDARY, LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_style_text_color(line, lv_color_hex(color), LV_PART_MAIN);
+    lv_label_set_text(line, text);
+}
+
 static void create_row(const bridge_resource_entry_t *entry, size_t index)
 {
-    char date[DATE_SIZE], line[DATE_SIZE + 24];
-    const bool alert_time = shown.kind != BRIDGE_RESOURCE_NOTES && entry->when_at[0] != '\0';
-    const char *format = shown.kind == BRIDGE_RESOURCE_ALERTS ? UI_TEXT_MODULES_ROW_SCHEDULED
-                         : alert_time                          ? UI_TEXT_MODULES_ROW_ALERT
-                                                               : UI_TEXT_MODULES_ROW_CREATED;
-    format_date(alert_time ? entry->when_at : entry->created_at, date);
-    snprintf(line, sizeof(line), format, date);
+    char line[SUMMARY_DATE_SIZE];
+    format_summary_date(shown.kind, entry->when_at, entry->created_at, line);
     row_ids[index] = entry->id;
 
     ui_styles_t *styles = ui_theme_styles();
@@ -228,18 +417,8 @@ static void create_row(const bridge_resource_entry_t *entry, size_t index)
     lv_obj_set_style_pad_gap(row, UI_ROW_LABEL_GAP_PX, LV_PART_MAIN);
     lv_obj_add_event_cb(row, on_row, LV_EVENT_CLICKED, (void *)(uintptr_t)index);
 
-    /* Two lines at most: the row is a summary and the detail shows the whole text. */
-    lv_obj_t *text = create_label(row, UI_FONT_BODY, LV_TEXT_ALIGN_LEFT);
-    lv_label_set_text(text, entry->text);
-    lv_obj_update_layout(text);
-    const int32_t max_height = ROW_TEXT_LINES * lv_font_get_line_height(ui_theme_font(UI_FONT_BODY));
-    if (lv_obj_get_height(text) > max_height) {
-        lv_label_set_long_mode(text, LV_LABEL_LONG_DOT);
-        lv_obj_set_height(text, max_height);
-    }
-    lv_obj_t *when = create_label(row, UI_FONT_SECONDARY, LV_TEXT_ALIGN_LEFT);
-    lv_obj_add_style(when, &styles->text_secondary, LV_PART_MAIN);
-    lv_label_set_text(when, line);
+    create_summary_text(row, entry->text);
+    create_secondary_label(row, line);
 }
 
 static void show_rows(const bridge_resource_page_t *page, void *unused)
@@ -281,6 +460,7 @@ static lv_obj_t *create_fact_label(void)
 static void show_detail_content(const bridge_resource_detail_t *detail, void *unused)
 {
     (void)unused;
+    complete_offered = detail->kind == BRIDGE_RESOURCE_TASKS && detail->task_status == BRIDGE_TASK_PENDING;
     /* Only bounded values go here: dates, status and the ID. Free text has a label of its own. */
     char meta[FACTS_SIZE] = "";
     char date[DATE_SIZE], id[ID_SIZE];
@@ -337,12 +517,19 @@ static void show_controls(void)
 {
     const bool list = shown.screen == MODULES_SCREEN_LIST;
     const bool ready = shown.status == MODULES_READY;
+    const bool acting = shown.status == MODULES_ACTING;
     set_visible(previous_button, list);
     set_visible(next_button, list);
-    set_visible(refresh_button, list || shown.status == MODULES_FAILED);
+    set_visible(complete_button, !list && complete_offered);
+    set_visible(snooze_button, !list && shown.kind == BRIDGE_RESOURCE_ALERTS);
+    set_visible(delete_button, !list);
+    set_enabled(back_button, !acting);
     set_enabled(previous_button, ready && shown.has_previous);
     set_enabled(next_button, ready && shown.has_next);
-    set_enabled(refresh_button, shown.status != MODULES_LOADING);
+    set_enabled(refresh_button, shown.status != MODULES_LOADING && !acting);
+    set_enabled(complete_button, shown.can_complete);
+    set_enabled(snooze_button, shown.can_snooze);
+    set_enabled(delete_button, shown.can_delete);
 }
 
 void ui_modules_show(const modules_view_t *view)
@@ -351,6 +538,8 @@ void ui_modules_show(const modules_view_t *view)
     shown = *view;
     lv_obj_clean(content);
     lv_obj_scroll_to_y(content, 0, LV_ANIM_OFF);
+    complete_offered = false;
+    show_notice();
     if (shown.screen == MODULES_SCREEN_LIST) show_list();
     else show_detail();
     show_controls();

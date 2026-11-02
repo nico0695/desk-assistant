@@ -22,6 +22,9 @@ static const ui_modules_handlers_t HANDLERS = {
     .on_refresh = modules_refresh,
     .on_open = modules_open_detail,
     .on_back = modules_back,
+    .on_delete = modules_delete,
+    .on_complete = modules_complete,
+    .on_snooze = modules_snooze,
     .read_page = modules_read_page,
     .read_detail = modules_read_detail,
 };
@@ -59,6 +62,11 @@ void ui_modules_control_take_view(void)
     if (finished_handler == NULL) return;
     apply_latest();
     ui_modules_show(&applied_view);
+}
+
+bool ui_modules_control_holds_notifications(void)
+{
+    return finished_handler != NULL && (ui_modules_dialog_open() || applied_view.status == MODULES_ACTING);
 }
 
 lv_obj_t *ui_modules_control_open(bridge_resource_kind_t kind, void (*on_finished)(void))

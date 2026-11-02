@@ -26,7 +26,7 @@ lv_obj_t *ui_scroll_box_create(lv_obj_t *parent, int32_t width, int32_t height);
 
 /*
  * Modal dialog over parent: a scrim that takes every touch and a centered panel with a title and a body, both copied.
- * Returns the panel; deleting its parent, the scrim, closes the dialog.
+ * A NULL body leaves room for the caller's own labels. Returns the panel; deleting its parent, the scrim, closes it.
  */
 lv_obj_t *ui_dialog_create(lv_obj_t *parent, const char *title, const char *body);
 

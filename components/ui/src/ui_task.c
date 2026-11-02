@@ -271,7 +271,8 @@ static void run(void *unused)
             ui_modules_control_take_view();
         }
         bool notification_arrived = false;
-        const bool notification_blocked = ui_recording_control_holds_screen();
+        const bool notification_blocked =
+            ui_recording_control_holds_screen() || ui_modules_control_holds_notifications();
         if ((events & EVENT_NOTIFICATIONS) || notification_blocked != notification_was_blocked) {
             notification_view_t view;
             ui_notifications_handlers_t handlers;

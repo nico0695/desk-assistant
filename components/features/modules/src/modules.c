@@ -171,8 +171,9 @@ bool modules_read_detail(uint64_t ticket, void (*reader)(const bridge_resource_d
                          void *context)
 {
     xSemaphoreTake(lock, portMAX_DELAY);
+    /* An action in flight keeps its target on screen. */
     const bool available = modules_state_is_current(&state, ticket) && state.screen == MODULES_SCREEN_DETAIL &&
-                           state.status == MODULES_READY && detail_slot != NULL;
+                           (state.status == MODULES_READY || state.status == MODULES_ACTING) && detail_slot != NULL;
     if (available) reader(&detail_slot->detail, context);
     xSemaphoreGive(lock);
     return available;

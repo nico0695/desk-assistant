@@ -114,8 +114,10 @@ lv_obj_t *ui_dialog_create(lv_obj_t *parent, const char *title, const char *body
 
     lv_obj_t *title_label = create_dialog_label(panel, title);
     lv_obj_set_style_text_font(title_label, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);
-    lv_obj_t *body_label = create_dialog_label(panel, body);
-    lv_obj_add_style(body_label, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
+    if (body != NULL) {
+        lv_obj_t *body_label = create_dialog_label(panel, body);
+        lv_obj_add_style(body_label, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
+    }
     return panel;
 }
 

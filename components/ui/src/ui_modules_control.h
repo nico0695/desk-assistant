@@ -14,3 +14,6 @@ void ui_modules_control_take_view(void);
  * and deleting the screen by any path frees what the module holds. UI task only.
  */
 lv_obj_t *ui_modules_control_open(bridge_resource_kind_t kind, void (*on_finished)(void));
+
+/* True while a module dialog waits for the user or an action waits for its result: notifications wait too. UI task only. */
+bool ui_modules_control_holds_notifications(void);

@@ -85,10 +85,18 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
 bool recording_external_action_begin(void) { return !action_slot_taken; }
 void recording_external_action_end(void) { ++action_slot_releases; }
 
+static void copy_title(const bridge_resource_detail_t *detail, void *context);
+static const modules_view_t *latest(void);
+/* Title the screen can still read while the action is in flight. */
+static char title_during_action[16];
+
 static bridge_http_mutation_t answer_action(const char *path, uint32_t gate_ms, uint32_t io_ms, char *body,
                                             size_t capacity)
 {
     TEST_ASSERT_EQUAL_INT(0, held);
+    title_during_action[0] = '\0';
+    TEST_ASSERT_EQUAL(MODULES_ACTING, latest()->status);
+    TEST_ASSERT_TRUE(modules_read_detail(latest()->ticket, copy_title, title_during_action));
     TEST_ASSERT_EQUAL_UINT32(BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS, gate_ms);
     TEST_ASSERT_EQUAL_size_t(BRIDGE_RESOURCE_BODY_MAX_BYTES, capacity);
     ++actions_sent;
@@ -371,6 +379,7 @@ static void a_confirmed_delete_reads_a_fresh_origin_page(void)
     const unsigned reads = get_calls;
     modules_delete(latest()->ticket);
     TEST_ASSERT_EQUAL_UINT(1U, actions_sent);
+    TEST_ASSERT_EQUAL_STRING("Two", title_during_action);
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_DELETE, last_method);
     TEST_ASSERT_EQUAL_UINT32(BRIDGE_RESOURCE_IO_MS, last_action_io_ms);
     TEST_ASSERT_EQUAL_UINT(1U, action_slot_releases);
