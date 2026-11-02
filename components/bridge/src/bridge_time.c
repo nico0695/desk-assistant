@@ -1,3 +1,4 @@
+/* The timestamp validation is extracted from event_codec.c in the author's V4 firmware; see THIRD_PARTY_NOTICES.md. */
 #include "bridge_time.h"
 
 #include <stdio.h>

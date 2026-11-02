@@ -1,3 +1,4 @@
+/* Extracted from event_codec.c in the author's V4 firmware; see THIRD_PARTY_NOTICES.md. */
 #include "bridge_json.h"
 
 #include <stdint.h>

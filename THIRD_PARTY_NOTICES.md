@@ -60,6 +60,8 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 
 `components/bridge/src/bridge_events.c` adapts the strict event response codec from `main/event_codec.c`.
 
+`components/bridge/src/bridge_json.*` and `bridge_time.*` hold the JSON guard, the exact-field check and the UTC timestamp validation extracted from that codec.
+
 `components/bridge/src/bridge_snooze.c` adapts the Snooze request and response codec from `main/snooze_codec.c`.
 
 `components/features/notifications/src/notification_tones.c` adapts the RAM tone saturation policy from `main/notification_tones.c`.
