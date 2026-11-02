@@ -8,6 +8,7 @@
 #include "lvgl.h"
 #include "ui_home.h"
 #include "ui_recording.h"
+#include "ui_notifications.h"
 #include "ui_recording_text.h"
 #include "ui_section.h"
 #include "ui_settings.h"
@@ -149,6 +150,23 @@ static void ignore_generation(uint64_t generation)
 {
     (void)generation;
 }
+
+static void ignore_notification_close(uint64_t generation, const char *event_id)
+{
+    (void)generation;
+    (void)event_id;
+}
+
+static void ignore_notification_snooze(uint64_t generation, const char *event_id, unsigned preset)
+{
+    (void)generation;
+    (void)event_id;
+    (void)preset;
+}
+
+static const ui_notifications_handlers_t NOTIFICATION_HANDLERS = {
+    .close = ignore_notification_close, .snooze = ignore_notification_snooze,
+};
 
 /* A long reply in Spanish with typographic punctuation, plus one character outside the supported set. */
 static const char SAMPLE_REPLY[] =
@@ -385,5 +403,43 @@ int main(int argc, char **argv)
     capture_attempt_states(display, directory);
     capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORDING_ENTRY_PENDING), directory,
             "home-entry-pending");
+
+    capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORD), directory,
+            "home-beneath-notification");
+    notification_view_t notification = {.count = 1, .generation = 1};
+    strcpy(notification.card.event_id, "01234567-89ab-cdef-0123-456789abcdef");
+    strcpy(notification.card.message,
+           "Meeting reminder: review the proposal with Ana at 15:00. Bring the revised budget and notes.");
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-single");
+    notification.count = 2;
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-next");
+    lv_obj_t *card = lv_obj_get_child(lv_obj_get_child(lv_layer_top(), -1), 0);
+    lv_obj_t *actions = lv_obj_get_child(card, 3);
+    lv_obj_send_event(lv_obj_get_child(actions, 1), LV_EVENT_CLICKED, NULL);
+    lv_refr_now(display);
+    write_png(directory, "notification-snooze-presets");
+    notification.action_busy = true;
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-snooze-busy");
+    notification.action_busy = false;
+    notification.notice = NOTIFICATION_VIEW_STORAGE_ERROR;
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-storage-error");
+    notification.notice = NOTIFICATION_VIEW_SNOOZE_UNCONFIRMED;
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-snooze-unconfirmed");
+    notification.notice = NOTIFICATION_VIEW_SNOOZE_CONFIRMED;
+    strcpy(notification.snoozed_at_text, "Nov 2, 10:00");
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-snooze-confirmed");
+    ui_notifications_hide();
     return EXIT_SUCCESS;
 }

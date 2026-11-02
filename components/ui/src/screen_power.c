@@ -32,6 +32,13 @@ void screen_power_set_held(screen_power_t *state, bool held, uint64_t now_ms)
     }
 }
 
+void screen_power_notification_arrived(screen_power_t *state, uint64_t now_ms)
+{
+    if (now_ms > state->last_activity_ms) state->last_activity_ms = now_ms;
+    state->sleep_pending = false;
+    if (state->asleep) state->wake_pending = true;
+}
+
 static screen_action_t wake_panel(screen_power_t *state, uint64_t now_ms)
 {
     state->asleep = false;

@@ -6,6 +6,7 @@
 #include "connectivity_view.h"
 #include "esp_err.h"
 #include "recording.h"
+#include "notification_view.h"
 #include "settings_values.h"
 
 /*
@@ -28,3 +29,7 @@ void ui_show_connectivity(const connectivity_view_t *view);
 
 /* Safe from any task and never blocks; the recording panel and the screen hold follow the latest view (copied). */
 void ui_show_recording(const recording_view_t *view);
+
+/* Safe from any task; the UI owner applies the latest durable notification view. */
+void ui_show_notification(const notification_view_t *view, void (*close)(uint64_t, const char *),
+                          void (*snooze)(uint64_t, const char *, unsigned));

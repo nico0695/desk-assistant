@@ -16,6 +16,9 @@ static bool bridge_online;
 static lv_obj_t *battery_icon;
 static lv_obj_t *battery_text;
 static lv_obj_t *wifi_slash;
+static lv_obj_t *title_label;
+static const char *base_title;
+static const char *title_override;
 
 static const char *battery_symbol(ui_battery_t battery)
 {
@@ -56,6 +59,7 @@ static void forget_deleted_bar(lv_event_t *event)
         battery_icon = NULL;
         battery_text = NULL;
         wifi_slash = NULL;
+        title_label = NULL;
     }
 }
 
@@ -102,8 +106,9 @@ lv_obj_t *ui_status_bar_create(lv_obj_t *screen, const char *title)
     lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_remove_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title_label = lv_label_create(bar);
-    lv_label_set_text_static(title_label, title);
+    title_label = lv_label_create(bar);
+    base_title = title;
+    lv_label_set_text_static(title_label, title_override != NULL ? title_override : base_title);
     lv_obj_set_style_text_font(title_label, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);
     lv_obj_set_flex_grow(title_label, 1);
 
@@ -127,4 +132,10 @@ void ui_status_bar_set_bridge_online(bool online)
 {
     bridge_online = online;
     show_bridge_status();
+}
+
+void ui_status_bar_set_title_override(const char *title)
+{
+    title_override = title;
+    if (title_label != NULL) lv_label_set_text_static(title_label, title != NULL ? title : base_title);
 }

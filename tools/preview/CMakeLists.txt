@@ -37,6 +37,7 @@ set(UI_SOURCES
     ${UI_DIR}/src/ui_section.c
     ${UI_DIR}/src/ui_home.c
     ${UI_DIR}/src/ui_recording.c
+    ${UI_DIR}/src/ui_notifications.c
     ${UI_DIR}/src/ui_text_support.c
     ${UI_DIR}/src/ui_settings.c
     ${UI_DIR}/src/ui_wifi.c
@@ -44,7 +45,7 @@ set(UI_SOURCES
     ${REPO_ROOT}/components/features/settings/src/settings_row.c)
 file(GLOB FONT_SOURCES CONFIGURE_DEPENDS ${UI_DIR}/src/fonts/*.c)
 add_executable(ui_preview preview.c ${UI_SOURCES} ${FONT_SOURCES} ${REPO_ROOT}/components/board/src/display_geometry.c)
-target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${REPO_ROOT}/components/features/settings/include ${REPO_ROOT}/components/features/recording/include ${REPO_ROOT}/components/connectivity/include ${LVGL_DIR}/src/libs/lodepng)
+target_include_directories(ui_preview PRIVATE ${UI_DIR}/src ${REPO_ROOT}/components/board/include ${REPO_ROOT}/components/features/settings/include ${REPO_ROOT}/components/features/recording/include ${REPO_ROOT}/components/features/notifications/include ${REPO_ROOT}/components/bridge/include ${REPO_ROOT}/components/connectivity/include ${LVGL_DIR}/src/libs/lodepng)
 target_compile_options(ui_preview PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(ui_preview PRIVATE lvgl m)
 

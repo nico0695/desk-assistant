@@ -42,6 +42,8 @@ void screen_power_set_timeout(screen_power_t *state, uint32_t timeout_s, uint64_
  * turn off right after the hold.
  */
 void screen_power_set_held(screen_power_t *state, bool held, uint64_t now_ms);
+/* A newly inserted notification wakes the panel and restarts its reading time. */
+void screen_power_notification_arrived(screen_power_t *state, uint64_t now_ms);
 
 /*
  * Pass TOUCH while the touch is held, not only on its first sample. KEY is one debounced press and toggles the

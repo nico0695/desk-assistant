@@ -206,6 +206,16 @@ static void test_hold_wakes_a_sleeping_panel_and_cancels_a_pending_sleep(void)
     TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 10 + SCREEN_POWER_RETRY_DELAY_MS, 0));
 }
 
+static void test_notification_wakes_and_restarts_reading_time(void)
+{
+    screen_power_init(&state, TIMEOUT_S, 0);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 10, SCREEN_EVENT_KEY));
+    screen_power_notification_arrived(&state, 20);
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_WAKE, screen_power_update(&state, 20, 0));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_NONE, screen_power_update(&state, 20 + TIMEOUT_MS - 1, 0));
+    TEST_ASSERT_EQUAL(SCREEN_ACTION_SLEEP, screen_power_update(&state, 20 + TIMEOUT_MS, 0));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -226,5 +236,6 @@ int main(void)
     RUN_TEST(test_a_timed_timeout_leaves_a_sleeping_panel_off);
     RUN_TEST(test_hold_ignores_timeout_and_key_then_restarts_the_timer);
     RUN_TEST(test_hold_wakes_a_sleeping_panel_and_cancels_a_pending_sleep);
+    RUN_TEST(test_notification_wakes_and_restarts_reading_time);
     return UNITY_END();
 }

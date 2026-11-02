@@ -1,0 +1,15 @@
+#pragma once
+
+#define UI_TEXT_NOTIFICATION_TITLE "Notification"
+#define UI_TEXT_NOTIFICATION_CARD_TITLE "Alert"
+#define UI_TEXT_NOTIFICATION_NEXT "Next"
+#define UI_TEXT_NOTIFICATION_CLOSE "Close"
+#define UI_TEXT_NOTIFICATION_SNOOZE "Snooze"
+#define UI_TEXT_NOTIFICATION_SNOOZE_FIVE "5 min"
+#define UI_TEXT_NOTIFICATION_SNOOZE_HOUR "1 hour"
+#define UI_TEXT_NOTIFICATION_SNOOZE_TOMORROW "Tomorrow"
+#define UI_TEXT_NOTIFICATION_SNOOZE_CANCEL "Cancel"
+#define UI_TEXT_NOTIFICATION_STORAGE_ERROR "Could not save. Try again."
+#define UI_TEXT_NOTIFICATION_SNOOZE_REJECTED "Could not snooze this alert."
+#define UI_TEXT_NOTIFICATION_SNOOZE_UNCONFIRMED "Snooze not confirmed. The alert may have changed."
+#define UI_TEXT_NOTIFICATION_SNOOZE_CONFIRMED "Snoozed until %s. Close this card to continue."

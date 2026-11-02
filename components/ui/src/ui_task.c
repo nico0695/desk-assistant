@@ -15,6 +15,7 @@
 #include "ui_bridge_status.h"
 #include "ui_navigation.h"
 #include "ui_recording_control.h"
+#include "ui_notifications.h"
 #include "ui_settings_control.h"
 #include "ui_status_bar.h"
 #include "ui_theme.h"
@@ -37,6 +38,7 @@ enum {
     EVENT_CONNECTIVITY = 1U << 4,
     EVENT_BRIDGE = 1U << 5,
     EVENT_RECORDING = 1U << 6,
+    EVENT_NOTIFICATIONS = 1U << 7,
 };
 
 static const char *TAG = "ui";
@@ -45,6 +47,11 @@ static portMUX_TYPE battery_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_battery_t latest_battery;
 static portMUX_TYPE bridge_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_bridge_status_t latest_bridge;
+static portMUX_TYPE notification_lock = portMUX_INITIALIZER_UNLOCKED;
+static notification_view_t latest_notification;
+static ui_notifications_handlers_t notification_handlers;
+static uint64_t observed_arrival_sequence;
+static bool notification_was_blocked;
 
 static settings_loaded_t initial_settings;
 static screen_power_t screen;
@@ -258,12 +265,31 @@ static void run(void *unused)
         if (events & EVENT_RECORDING) {
             ui_recording_control_take_view();
         }
+        bool notification_arrived = false;
+        const bool notification_blocked = ui_recording_control_holds_screen();
+        if ((events & EVENT_NOTIFICATIONS) || notification_blocked != notification_was_blocked) {
+            notification_view_t view;
+            ui_notifications_handlers_t handlers;
+            taskENTER_CRITICAL(&notification_lock);
+            view = latest_notification;
+            handlers = notification_handlers;
+            taskEXIT_CRITICAL(&notification_lock);
+            if (view.arrival_sequence > observed_arrival_sequence) {
+                observed_arrival_sequence = view.arrival_sequence;
+                screen_power_notification_arrived(&screen, now_ms);
+                notification_arrived = true;
+            }
+            if (notification_blocked) ui_notifications_hide();
+            else ui_notifications_show(&view, &handlers);
+            notification_was_blocked = notification_blocked;
+        }
         screen_power_set_held(&screen, ui_recording_control_holds_screen(), now_ms);
         uint32_t screen_events = 0;
         if (ui_display_port_take_touch_activity()) {
             screen_events |= SCREEN_EVENT_TOUCH;
         }
-        if (((events & EVENT_KEY) || now_ms >= key_settle_at_ms) && take_key_press(now_ms)) {
+        if (((events & EVENT_KEY) || now_ms >= key_settle_at_ms) && take_key_press(now_ms) &&
+            !notification_arrived) {
             screen_events |= SCREEN_EVENT_KEY;
         }
         update_screen(now_ms, screen_events);
@@ -325,4 +351,17 @@ void ui_show_recording(const recording_view_t *view)
     if (ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_RECORDING, eSetBits);
     }
+}
+
+void ui_show_notification(const notification_view_t *view, void (*close)(uint64_t, const char *),
+                          void (*snooze)(uint64_t, const char *, unsigned))
+{
+    if (view == NULL) return;
+    taskENTER_CRITICAL(&notification_lock);
+    if (view->generation >= latest_notification.generation) {
+        latest_notification = *view;
+        notification_handlers = (ui_notifications_handlers_t){.close = close, .snooze = snooze};
+    }
+    taskEXIT_CRITICAL(&notification_lock);
+    if (ui_task != NULL) xTaskNotify(ui_task, EVENT_NOTIFICATIONS, eSetBits);
 }
