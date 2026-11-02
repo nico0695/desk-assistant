@@ -7,22 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bridge_json.h"
 #include "bridge_text.h"
 #include "cJSON.h"
-
-static bool fields_exact(const cJSON *object, const char *const *names, size_t count)
-{
-    if (!cJSON_IsObject(object) || cJSON_GetArraySize(object) != (int)count) return false;
-    unsigned seen = 0;
-    const cJSON *item;
-    cJSON_ArrayForEach(item, object) {
-        size_t field = 0;
-        while (field < count && (item->string == NULL || strcmp(item->string, names[field]) != 0)) ++field;
-        if (field == count || (seen & (1U << field)) != 0U) return false;
-        seen |= 1U << field;
-    }
-    return seen == (1U << count) - 1U;
-}
 
 bool bridge_snooze_path(uint64_t alert_id, char *path, size_t capacity)
 {
@@ -63,7 +50,7 @@ bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t
         static const char *const names[] = {"alert_id", "scheduled_at"};
         const cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "alert_id");
         const cJSON *time = cJSON_GetObjectItemCaseSensitive(root, "scheduled_at");
-        if (fields_exact(root, names, 2U) && cJSON_IsNumber(id) &&
+        if (bridge_json_fields_exact(root, names, 2U) && cJSON_IsNumber(id) &&
             isfinite(id->valuedouble) && id->valuedouble == (double)alert_id &&
             cJSON_IsString(time) && time->valuestring != NULL &&
             bridge_time_valid(time->valuestring)) {
@@ -76,7 +63,7 @@ bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t
         const cJSON *error = cJSON_GetObjectItemCaseSensitive(root, "error");
         const cJSON *code = cJSON_GetObjectItemCaseSensitive(error, "code");
         const cJSON *message = cJSON_GetObjectItemCaseSensitive(error, "message");
-        if (fields_exact(root, wrapper, 1U) && fields_exact(error, fields, 2U) &&
+        if (bridge_json_fields_exact(root, wrapper, 1U) && bridge_json_fields_exact(error, fields, 2U) &&
             cJSON_IsString(code) && cJSON_IsString(message) && code->valuestring != NULL) {
             const char *name = code->valuestring;
             if (status == 409 && strcmp(name, "alert_schedule_changed") == 0)

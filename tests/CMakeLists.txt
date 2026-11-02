@@ -44,6 +44,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/bridge/src/bridge_text.c
     ${COMPONENTS_DIR}/bridge/src/bridge_assistant.c
     ${COMPONENTS_DIR}/bridge/src/bridge_events.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_json.c
     ${COMPONENTS_DIR}/bridge/src/bridge_snooze.c
     ${COMPONENTS_DIR}/bridge/src/bridge_time.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
@@ -127,8 +128,8 @@ add_test(NAME test_recording_record COMMAND test_recording_record)
 add_executable(test_notification_journal integration/test_notification_journal.c
     ${COMPONENTS_DIR}/features/notifications/src/notification_journal.c
     ${COMPONENTS_DIR}/features/notifications/src/notification_state.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_events.c ${COMPONENTS_DIR}/bridge/src/bridge_text.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_time.c ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
+    ${COMPONENTS_DIR}/bridge/src/bridge_events.c ${COMPONENTS_DIR}/bridge/src/bridge_json.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_text.c ${COMPONENTS_DIR}/bridge/src/bridge_time.c ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 target_include_directories(test_notification_journal PRIVATE recording_record_stubs bridge_http_stubs
     ${COMPONENTS_DIR}/features/notifications/include ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
 target_compile_options(test_notification_journal PRIVATE -Wall -Wextra -Werror)
