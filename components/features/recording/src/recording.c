@@ -15,6 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "memory_report.h"
 #include "recording_clip.h"
 #include "recording_record.h"
 #include "recording_state.h"
@@ -490,6 +491,7 @@ static void send_clip(const bridge_origin_t *origin, const char *id)
         ESP_LOGI(TAG, "upload: result %d HTTP %d unsent %d in %lld ms", (int)upload.response.result,
                  upload.response.status, (int)upload.unsent,
                  (long long)((esp_timer_get_time() - started) / US_PER_MS));
+        memory_report_log("recording upload");
     }
     clean_after_upload();
     if (upload.response.result != BRIDGE_HTTP_OK || !apply_reply(id, body, upload.response, true)) {
@@ -539,6 +541,7 @@ static void run_query(void)
                                                                 BRIDGE_ASSISTANT_GET_IO_MS, body,
                                                                 BRIDGE_ASSISTANT_JSON_MAX_BYTES);
         ESP_LOGI(TAG, "query: result %d HTTP %d", (int)response.result, response.status);
+        memory_report_log("recording query");
         if (response.result == BRIDGE_HTTP_OK) {
             (void)apply_reply(id, body, response, false);
         }
