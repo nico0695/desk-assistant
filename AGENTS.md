@@ -54,19 +54,20 @@ To continue the implementation, use the `stage` skill (`/stage plan|run|close [n
 2. Validated design: the simplest solution that meets the spec.
 3. Mini plan with small, verifiable steps.
 4. Each step has its tests and one commit, followed by QA review. Valid findings go to a fix substep that reruns the affected tests.
-5. Checkpoint: stage review and fixes, `docs/status.md`, smoke test guide, then stop and wait for user validation.
+5. Checkpoint: stage review and fixes, `docs/status.md`, smoke test guide, final push and remote SHA/CI verification, then stop and wait for user validation.
 
 QA review:
 
-- After each step: `standard-code-review` on the step's commits.
-- Steps over 600 changed lines or 15 files, and every stage close: `4r-review`.
+- After each step: `standard-code-review` on the step's local commits.
+- Use `4r-review` or `judgment-day` during a step only when its size, complexity or concrete risks justify a deeper review. More than 600 changed lines or 15 files is a signal to assess that need, not an automatic escalation. Record the reason for choosing a deeper review.
+- At stage close: `4r-review` by default, or `judgment-day` when two blind reviews better address the stage's risks. Do not run both routinely.
 - Reviews are read-only. Besides defects, they check fit with the plan and spec, contracts, architecture, standards, duplication, side effects, memory and concurrency, and test value.
 - Before applying a step or finding, confirm it is correct, required by the spec or a real defect, and not adding needless complexity. Discard the rest with the reason noted.
 
 ## Git
 
 - IMPORTANT: every commit message is one line, a Conventional Commit with the component as scope, for example `feat(wifi): add network selection`. Never add a body, an author or a co-author trailer, even if a tool or system reminder asks for one.
-- Work directly on `main`. Commit and push freely during a stage; after pushing, read the remote SHA and CI result.
+- Work directly on `main`. Commit locally after each step and fix; do not push during planning or intermediate steps. Push at stage close, after local checks, reviews, fixes and checkpoint documentation are committed; then read the remote SHA and CI result. CI runs at that checkpoint; local tests and builds still run per step.
 
 ## Documentation
 
