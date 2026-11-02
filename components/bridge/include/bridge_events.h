@@ -35,3 +35,5 @@ bool bridge_event_valid(const bridge_event_t *event);
 bridge_event_decode_t bridge_event_decode(const char *body, size_t length, int status,
                                           bridge_event_t *event, bool *present);
 bool bridge_event_ack_succeeded(int status, size_t body_length);
+/* A definitive ACK refusal (invalid request or unknown event): the same identity is not retried. */
+bool bridge_event_ack_rejected(int status);

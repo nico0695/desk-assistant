@@ -289,7 +289,15 @@ static bool acknowledge(void)
         handle_busy(before);
         return false;
     }
-    if (response.result != BRIDGE_HTTP_OK || !bridge_event_ack_succeeded(response.status, response.length)) {
+    const bool answered = response.result == BRIDGE_HTTP_OK;
+    const bool rejected = answered && bridge_event_ack_rejected(response.status);
+    if (rejected) {
+        /* Definitive: clear the pending ACK and keep the card; the drain waits for the next signal. */
+        ESP_LOGW(TAG, "ACK rejected: HTTP %d", response.status);
+        taskENTER_CRITICAL(&lock);
+        drain_requested = false;
+        taskEXIT_CRITICAL(&lock);
+    } else if (!answered || !bridge_event_ack_succeeded(response.status, response.length)) {
         ESP_LOGW(TAG, "ACK pending: transport %d HTTP %d", response.result, response.status);
         taskENTER_CRITICAL(&lock);
         drain_requested = false;

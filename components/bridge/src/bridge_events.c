@@ -97,3 +97,8 @@ bool bridge_event_ack_succeeded(int http_status, size_t body_length)
 {
     return http_status == 204 && body_length == 0;
 }
+
+bool bridge_event_ack_rejected(int http_status)
+{
+    return http_status == 400 || http_status == 404;
+}

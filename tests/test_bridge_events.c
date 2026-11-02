@@ -26,6 +26,11 @@ static void valid_and_empty_responses(void)
     TEST_ASSERT_TRUE(bridge_event_ack_succeeded(204, 0));
     TEST_ASSERT_FALSE(bridge_event_ack_succeeded(204, 1));
     TEST_ASSERT_FALSE(bridge_event_ack_succeeded(200, 0));
+    TEST_ASSERT_TRUE(bridge_event_ack_rejected(400));
+    TEST_ASSERT_TRUE(bridge_event_ack_rejected(404));
+    TEST_ASSERT_FALSE(bridge_event_ack_rejected(401));
+    TEST_ASSERT_FALSE(bridge_event_ack_rejected(503));
+    TEST_ASSERT_FALSE(bridge_event_ack_rejected(204));
 }
 
 static void invalid_responses_leave_outputs_unchanged(void)

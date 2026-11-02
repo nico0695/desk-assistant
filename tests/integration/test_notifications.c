@@ -13,6 +13,7 @@ static notification_state_t durable;
 static unsigned saves, get_calls, acks, posts, holds, releases, publications, tones_enqueued;
 static bool fail_ack, busy_get, fail_save, fail_snooze_transport, unsent_snooze, deny_external_action, fail_worker_create;
 static unsigned timer_starts;
+static int ack_status;
 static bridge_action_result_t fake_snooze_result;
 static void (*gate_callback)(void);
 
@@ -98,6 +99,7 @@ bridge_event_decode_t bridge_event_decode(const char *body, size_t length, int s
     return BRIDGE_EVENT_DECODE_OK;
 }
 bool bridge_event_ack_succeeded(int status, size_t length) { return status == 204 && length == 0U; }
+bool bridge_event_ack_rejected(int status) { return status == 400 || status == 404; }
 bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char *path, uint32_t gate_ms,
                                        uint32_t io_ms, char *body, size_t capacity)
 {
@@ -122,7 +124,7 @@ bridge_http_mutation_t bridge_http_json(const bridge_origin_t *origin, const cha
     ++acks;
     if (gate_callback != NULL) gate_callback();
     return fail_ack ? (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TIMEOUT} :
-                      (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = 204, .length = 0}};
+                      (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = ack_status, .length = 0}};
 }
 bridge_http_mutation_t bridge_snooze_send(const bridge_origin_t *origin, uint64_t alert_id,
                                           bridge_snooze_preset_t preset, const char *scheduled_at, char *body,
@@ -169,6 +171,7 @@ void setUp(void)
     saves = get_calls = acks = posts = holds = releases = publications = tones_enqueued = timer_starts = 0;
     fail_ack = busy_get = fail_save = fail_snooze_transport = unsent_snooze = deny_external_action = fail_worker_create = false;
     fake_snooze_result = BRIDGE_ACTION_SUCCESS;
+    ack_status = 204;
 }
 void tearDown(void) {}
 
@@ -205,6 +208,34 @@ static void lost_ack_response_keeps_id_until_retry(void)
     run(NULL);
     TEST_ASSERT_EQUAL_STRING("", durable.pending_ack);
     TEST_ASSERT_EQUAL_UINT(2, acks);
+}
+
+static void rejected_ack_clears_pending_and_waits_for_the_next_signal(void)
+{
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    ack_status = 404;
+    notifications_bridge_online(true);
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_STRING("", durable.pending_ack);
+    TEST_ASSERT_EQUAL_UINT(1, acks);
+    TEST_ASSERT_EQUAL_UINT(0, timer_starts);
+    TEST_ASSERT_EQUAL_UINT(1, get_calls);
+    TEST_ASSERT_FALSE(uncertain);
+    notifications_pending_events();
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(2, get_calls);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+}
+
+static void unavailable_ack_is_retried(void)
+{
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    ack_status = 503;
+    notifications_bridge_online(true);
+    run(NULL);
+    TEST_ASSERT_EQUAL_STRING(durable.cards[0].event_id, durable.pending_ack);
+    TEST_ASSERT_EQUAL_UINT(1, timer_starts);
 }
 
 static void busy_get_resumes_on_gate_release(void)
@@ -358,6 +389,8 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(receipt_is_saved_before_ack_and_close_is_local);
     RUN_TEST(lost_ack_response_keeps_id_until_retry);
+    RUN_TEST(rejected_ack_clears_pending_and_waits_for_the_next_signal);
+    RUN_TEST(unavailable_ack_is_retried);
     RUN_TEST(busy_get_resumes_on_gate_release);
     RUN_TEST(failed_journal_commit_blocks_ack_and_keeps_event);
     RUN_TEST(snooze_success_closes_locally_once);
