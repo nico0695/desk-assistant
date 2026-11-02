@@ -1,0 +1,9 @@
+menu "Desk Assistant bridge"
+
+    config BRIDGE_SNTP_SERVER
+        string "SNTP server"
+        default "pool.ntp.org"
+        help
+            Server for the test unit's automatic clock synchronization.
+
+endmenu

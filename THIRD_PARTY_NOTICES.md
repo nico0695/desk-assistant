@@ -38,6 +38,8 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 
 `components/connectivity/src/wifi_list.*` and `wifi_select.*` adapt the saved-network list and the station selection policy of the author's previous firmware, rewritten as modules with a setup pause and a wake time.
 
+`components/bridge/src/bridge_http.c` adapts the finite HTTP gate and deadline-bounded TLS transport from `main/app_http_gate.c` and `main/app_events.c` of the same revision.
+
 `components/bridge/src/bridge_sse.*` adapts the incremental event stream state, framing and reconnection timing, with strict JSON validation and expanded per-frame budgets.
 
 - Author: Schmidt Nicolás

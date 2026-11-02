@@ -1,0 +1,238 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "bridge_clock.h"
+#include "bridge_http.h"
+#include "fake_sdk.h"
+#include "unity.h"
+#include "../../components/bridge/src/bridge_http.c"
+
+typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL } fake_mode_t;
+struct fake_transport { void *context; connect_fn connect; read_fn read; write_fn write; close_fn close; bool tls; };
+struct fake_client { esp_http_client_config_t config; size_t offset; bool completed; };
+static fake_mode_t mode;
+static bool clock_ready;
+static int64_t now_us;
+static unsigned dispatches, created, destroyed, client_count, client_freed;
+static bool bundle_set, auth_set, finite_busy, handshake_busy;
+static unsigned fail_transport_call;
+static bool fail_client, fail_header;
+static char captured_url[BRIDGE_URL_SIZE + 160U];
+static struct fake_client *current;
+static const char payload[] = "{\"events\":[]}";
+static bridge_origin_t origin = {"https://example.test/prefix/", "01234567890123456789012345678901"};
+
+bool bridge_clock_ready(void) { return clock_ready; }
+int64_t esp_timer_get_time(void) { return now_us; }
+void vTaskDelay(TickType_t ticks) { now_us += (int64_t)ticks * 1000; }
+esp_err_t esp_crt_bundle_attach(void *context) { (void)context; return ESP_OK; }
+SemaphoreHandle_t xSemaphoreCreateMutex(void) { bool *gate = calloc(1, sizeof(*gate)); return gate; }
+int xSemaphoreTake(SemaphoreHandle_t gate, TickType_t wait)
+{
+    (void)wait;
+    if (*(bool *)gate || (gate == finite_gate && finite_busy) || (gate == handshake_gate && handshake_busy)) return 0;
+    *(bool *)gate = true;
+    return pdTRUE;
+}
+int xSemaphoreGive(SemaphoreHandle_t gate) { *(bool *)gate = false; return pdTRUE; }
+void vSemaphoreDelete(SemaphoreHandle_t gate) { free(gate); }
+esp_transport_handle_t esp_transport_init(void)
+{
+    if (fail_transport_call != 0U && --fail_transport_call == 0U) return NULL;
+    ++created; return calloc(1, sizeof(struct fake_transport));
+}
+esp_transport_handle_t esp_transport_ssl_init(void) { esp_transport_handle_t t = esp_transport_init(); if (t != NULL) t->tls = true; return t; }
+esp_err_t esp_transport_destroy(esp_transport_handle_t t) { ++destroyed; free(t); return ESP_OK; }
+void *esp_transport_get_context_data(esp_transport_handle_t t) { return t->context; }
+esp_err_t esp_transport_set_context_data(esp_transport_handle_t t, void *data) { t->context = data; return ESP_OK; }
+esp_err_t esp_transport_set_func(esp_transport_handle_t t, connect_fn c, read_fn r, write_fn w,
+                                close_fn close, void *a, void *b, void *d)
+{
+    (void)a; (void)b; (void)d; t->connect = c; t->read = r; t->write = w; t->close = close; return ESP_OK;
+}
+void esp_transport_ssl_crt_bundle_attach(esp_transport_handle_t t, esp_err_t (*attach)(void *))
+{
+    TEST_ASSERT_TRUE(t->tls); TEST_ASSERT_TRUE(attach == esp_crt_bundle_attach); bundle_set = true;
+}
+int esp_transport_connect_async(esp_transport_handle_t t, const char *host, int port, int timeout)
+{
+    (void)host; (void)port; TEST_ASSERT_TRUE(t->tls); TEST_ASSERT_GREATER_THAN(0, timeout);
+    return mode == CONNECT_STALL ? 0 : 1;
+}
+int esp_transport_write(esp_transport_handle_t t, const char *data, int length, int timeout)
+{
+    (void)t; (void)data; (void)timeout; return length;
+}
+int esp_transport_close(esp_transport_handle_t t) { (void)t; return 0; }
+int esp_transport_read(esp_transport_handle_t t, char *data, int length, int timeout)
+{
+    (void)t; (void)timeout;
+    if (mode == LONG_HEADERS || mode == FALSE_EOF) { memset(data, 'h', (size_t)length); return length; }
+    if (mode == SLOW) now_us += INT64_C(600000);
+    size_t available = strlen(payload) - current->offset;
+    if ((size_t)length > available) length = (int)available;
+    memcpy(data, payload + current->offset, (size_t)length);
+    current->offset += (size_t)length;
+    return length;
+}
+esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *config)
+{
+    if (fail_client) return NULL;
+    ++client_count;
+    TEST_ASSERT_TRUE(config->disable_auto_redirect);
+    TEST_ASSERT_EQUAL_INT(-1, config->max_authorization_retries);
+    TEST_ASSERT_TRUE(bundle_set);
+    snprintf(captured_url, sizeof(captured_url), "%s", config->url);
+    current = calloc(1, sizeof(*current)); current->config = *config; return current;
+}
+esp_err_t esp_http_client_set_header(esp_http_client_handle_t c, const char *key, const char *value)
+{
+    (void)c;
+    if (strcmp(key, "Authorization") == 0) {
+        if (fail_header) return ESP_FAIL;
+        TEST_ASSERT_EQUAL_STRING("Bearer 01234567890123456789012345678901", value); auth_set = true;
+    }
+    return ESP_OK;
+}
+esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
+{
+    TEST_ASSERT_EQUAL_INT(0, length); ++dispatches;
+    return c->config.transport->connect(c->config.transport, "example.test", 443, c->config.timeout_ms) == 0 ? ESP_OK : ESP_FAIL;
+}
+int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
+{
+    if (mode == LONG_HEADERS) {
+        char bytes[1024];
+        while (c->config.transport->read(c->config.transport, bytes, sizeof(bytes), 5000) > 0) {}
+        return -1;
+    }
+    if (mode == BAD_ENCODING) {
+        esp_http_client_event_t event = {.user_data = c->config.user_data, .event_id = HTTP_EVENT_ON_HEADER,
+                                         .header_key = "Content-Encoding", .header_value = "gzip"};
+        c->config.event_handler(&event);
+    }
+    return (int64_t)strlen(payload);
+}
+int esp_http_client_get_status_code(esp_http_client_handle_t c) { (void)c; return mode == DENIED ? 401 : 200; }
+int64_t esp_http_client_get_content_length(esp_http_client_handle_t c)
+{
+    (void)c; return mode == RESPONSE_OVERFLOW ? -1 : (int64_t)strlen(payload);
+}
+int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
+{
+    if (mode == FALSE_EOF) {
+        char framing[1024];
+        while (c->config.transport->read(c->config.transport, framing, sizeof(framing), 5000) > 0) {}
+        c->completed = true;
+        return 0;
+    }
+    if (c->offset == strlen(payload)) { c->completed = mode != TRUNCATED; return 0; }
+    if (mode == SLOW && length > 1) length = 1;
+    return c->config.transport->read(c->config.transport, data, length, c->config.timeout_ms);
+}
+bool esp_http_client_is_complete_data_received(esp_http_client_handle_t c) { return c->completed; }
+esp_err_t esp_http_client_cleanup(esp_http_client_handle_t c) { ++client_freed; free(c); current = NULL; return ESP_OK; }
+
+void setUp(void)
+{
+    mode = NORMAL; clock_ready = true; now_us = 0; dispatches = created = destroyed = client_count = client_freed = 0;
+    bundle_set = auth_set = finite_busy = handshake_busy = false;
+    fail_transport_call = 0; fail_client = fail_header = false;
+}
+void tearDown(void)
+{
+    TEST_ASSERT_EQUAL_UINT(created, destroyed);
+    TEST_ASSERT_EQUAL_UINT(client_count, client_freed);
+}
+
+static void complete_get_with_prefix_and_auth(void)
+{
+    char body[64];
+    bridge_http_response_t result = bridge_http_get(&origin, "/v1/device/events?limit=1", 5000, 5000, body, sizeof(body));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.result);
+    TEST_ASSERT_EQUAL_INT(200, result.status);
+    TEST_ASSERT_EQUAL_UINT(strlen(payload), result.length);
+    TEST_ASSERT_EQUAL_MEMORY(payload, body, result.length);
+    TEST_ASSERT_EQUAL_STRING("https://example.test/prefix/v1/device/events?limit=1", captured_url);
+    TEST_ASSERT_TRUE(auth_set); TEST_ASSERT_EQUAL_UINT(1, dispatches);
+}
+
+static void clock_and_gate_fail_before_dispatch(void)
+{
+    char body[64];
+    memset(body, 'x', sizeof(body));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_INVALID_ARGUMENT, bridge_http_get(NULL, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_INT(0, body[63]);
+    memset(body, 'x', sizeof(body));
+    clock_ready = false;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_CLOCK_NOT_READY, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_INT(0, body[63]);
+    clock_ready = true; finite_busy = true;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_BUSY, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(0, dispatches);
+}
+
+static void allocation_and_setup_failures_release_resources_and_gates(void)
+{
+    char body[64];
+    fail_transport_call = 1;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_NO_MEMORY, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    fail_transport_call = 2;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_NO_MEMORY, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    fail_transport_call = 0; fail_client = true;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_NO_MEMORY, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    fail_client = false; fail_header = true;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_NO_MEMORY, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    fail_header = false; handshake_busy = true;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(0, dispatches);
+    handshake_busy = false;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(1, dispatches);
+}
+
+static void errors_are_bounded_and_never_redispatched(void)
+{
+    char body[64];
+    mode = DENIED;
+    bridge_http_response_t denied = bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, denied.result); TEST_ASSERT_EQUAL_INT(401, denied.status);
+    TEST_ASSERT_EQUAL_UINT(1, dispatches);
+    mode = TRUNCATED;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_INCOMPLETE, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_INT(0, body[0]);
+    mode = RESPONSE_OVERFLOW;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TOO_LARGE, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, 4).result);
+    mode = BAD_ENCODING;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_INVALID_RESPONSE, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    mode = LONG_HEADERS;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TOO_LARGE, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    mode = FALSE_EOF;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TOO_LARGE, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(6, dispatches);
+}
+
+static void deadlines_bound_stalls_and_free_gates(void)
+{
+    char body[64];
+    mode = CONNECT_STALL;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, bridge_http_get(&origin, "/v1/device/events", 1, 20, body, sizeof(body)).result);
+    now_us = 0; mode = SLOW;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, bridge_http_get(&origin, "/v1/device/events", 1, 1000, body, sizeof(body)).result);
+    now_us = 0; mode = NORMAL;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(3, dispatches);
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, bridge_http_init());
+    RUN_TEST(complete_get_with_prefix_and_auth);
+    RUN_TEST(clock_and_gate_fail_before_dispatch);
+    RUN_TEST(allocation_and_setup_failures_release_resources_and_gates);
+    RUN_TEST(errors_are_bounded_and_never_redispatched);
+    RUN_TEST(deadlines_bound_stalls_and_free_gates);
+    return UNITY_END();
+}
