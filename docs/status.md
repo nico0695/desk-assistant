@@ -10,20 +10,21 @@
 | 3 | Wi-Fi and provisioning | Done (validated 2026-11-01) |
 | 4 | Bridge base | Done (validated 2026-11-01) |
 | 5a | Recording: local capture | Done (validated 2026-11-02) |
-| 5b | Recording: upload and result | Checkpoint, awaiting validation |
-| 6 | Notifications and sound | Pending |
+| 5b | Recording: upload and result | Done (validated 2026-11-02) |
+| 6 | Notifications and sound | Next |
 | 7 | Modules: read | Pending |
 | 8 | Modules: actions | Pending |
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 5b — Recording: upload and result
+## Active stage: 6 — Notifications and sound
 
-- **Status:** all steps done; checkpoint evidence below; waiting for the user's validation.
-- **Delivered:** one TLS transport shared by GET, PUT and SSE; the assistant response codec and request IDs; the single PUT with progress windows and the `unsent` boundary; a durable attempt record and an origin hold while an attempt exists; pure attempt phases with one job at a time; the owner's upload, query, close and discard jobs, the 180 s wait, restore at boot and the reply text for the UI; SSE result signals for the watched attempt; panel states with scroll, notes and the Home entry by state; fonts with general punctuation and the euro sign.
-- **Performance:** the upload was bound by the TCP send buffer; raising it to 23040 B cut a 30 s upload from 76.6 s to 28.4 s.
-- **Not run on the board, by user decision:** network cut during the upload, discard and Check on an unconfirmed attempt (all covered by host tests of the state). Also not run: a reply of the maximum size (8000 B).
-- **Open assumption:** the bridge never runs a request whose body arrived incomplete (S2) stays unverified; the client policy does not depend on more than that.
+- **Status:** not planned yet; next step `/stage plan 6`.
+- **Goal:** durable notifications with coordinated presentation and a tone.
+- **Scope (macro plan):** `limit=1` drain, validation, dedup, persistence before the ACK, a queue of eight and the full-queue case; overlay card with local Next/Close and Snooze from the card; deferral during capture, return to the previous context and panel wake-up; ES8311 tone with a RAM accumulator, capture priority and applied volume.
+- **Carry-overs from stage 2:** apply the stored volume to the tone (0 mutes); a public synchronous `storage` write to persist notifications and ACKs outside the UI.
+- **Carry-overs from stage 5b:** the drain shares the finite HTTP gate with the PUT (up to about 30 s), so tolerate `BUSY` without losing the intent; consume `pending_events` from the SSE parser; heap budget with SSE + PUT + notification GET (measured minimum 63.6 KB with SSE + PUT).
+- **Workflow:** commits, tests, builds and step reviews stay local per step; push and remote verification happen at stage close. Choose any deeper review according to the stage workflow and its risks.
 
 ## Closed stages
 
@@ -33,6 +34,7 @@
 - **3 — Wi-Fi and provisioning:** saved networks (5, most recent first), station selection with the V4 timings, USB provisioning with the host tool, phone setup over a temporary access point with a QR and a small form page, Wi-Fi screen with forget and add dialogs, and the Settings Wi-Fi button. Validated on `esp32-02` at `01ff8b4`; cases deferred by the user are listed in the stage 3 evidence.
 - **4 — Bridge base:** HTTPS client with validated CA/hostname/validity and Bearer only in the header, a clock gate before TLS, the authenticated SSE stream with heartbeat and dead-channel detection plus 5/10/30 s backoff, the status-bar icon driven by IP + SSE, bounded logs and diagnostics for memory and one finite read. Validated on `esp32-02` at `1eb669c`; IP-without-SSE and reconnection were deferred by the user.
 - **5a — Recording: local capture:** ES7210 microphone over I2S (stereo reads keeping MIC1) with the ALDO1 rail saved and restored; PCM16 clip in the audio partition with the WAV header synthesized on read, erased after each attempt and scanned at boot; capture state machine with 0.5–30 s limits, overrun and cleanup failures; recording panel from Home with the screen held on during capture. Validated on `esp32-02` at `0eccb5e`; no 4R review or smoke guide at close by user decision.
+- **5b — Recording: upload and result:** one TLS transport shared by GET, PUT and SSE; assistant codec; the single PUT with the `unsent` boundary and progress windows; a durable attempt record with an origin hold; one-job-at-a-time attempt phases; upload, query, close and discard jobs, the 180 s wait and restore after reboot; reply panel with scroll and notes; Home entry by state. Validated by the user on `esp32-02` at `6c30f19` (green CI on `0474820`); network cut, discard and Check on the board were skipped by the user and are in `.local/follow-up.md`.
 
 ## Evidence
 
@@ -120,7 +122,7 @@ Each checkpoint records one entry per image:
 
 ### Stage 5b — 2026-11-02
 
-- **Revision:** `6c30f19` (firmware content; later commits only change documentation), integrated profile (`sdkconfig.defaults`).
+- **Revision:** `6c30f19` (firmware content; later commits only change documentation), integrated profile (`sdkconfig.defaults`). CI on the close push `0474820` passed (host tests, build, lock unchanged).
 - **ELF SHA-256:** `8e37cd57c518c10f1499df1e0a080e96a686503cae62ecdead74527178187d2f` (the boot log prints its first 9 digits).
 - **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 30/30; preview built; `dependencies.lock` unchanged.
 - **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem1101`; flashed with verified hashes.
@@ -130,4 +132,5 @@ Each checkpoint records one entry per image:
   - Memory: heap minimum 63.6 KB with SSE and the upload together (83.5 KB with the old buffer); back to 151–159 KB free after closing. Recording worker minimum 4.2 KB free of 8192 B (fixed at 8192); `bridge_sse` minimum 2.8 KB of 8192 B. No audio, reply text, token, URL or request ID in the log.
   - Not run, by user decision: network cut during the upload, discard and Check on an unconfirmed attempt. Not run: maximum-size reply. Recorded in `.local/follow-up.md`.
   - Tooling: after a reset the USB log sometimes stops without an error; capturing without a reset or reconnecting the cable recovers it.
+- **Validation:** the user ran the smoke guide on the final image and reported everything working (2026-11-02).
 - **Reviews:** `standard-code-review` per step group (1, 3–4, 5–7), findings fixed in `0c8e030` and `0891c45`. 4R at close: four lenses, 0 severe, 8 warnings and 3 suggestions. Fixed in `6c30f19`: a discard queued during a query could erase a terminal that just arrived; an unreadable record lost its block if the boot cleanup worker failed to start; a held origin refused an identical save, which blocked Wi-Fi provisioning; an ambiguous upload armed no 180 s wait; a missing log on an allocation failure; misleading names and header comments. Details in `.local/stages/05b-grabacion-envio-resultado.md`.
