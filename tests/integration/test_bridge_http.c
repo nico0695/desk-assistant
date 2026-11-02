@@ -10,7 +10,8 @@
 #include "../../components/bridge/src/bridge_http.c"
 
 typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL,
-               STREAM_OK, STREAM_NO_TYPE, STREAM_DENIED, STREAM_IDLE } fake_mode_t;
+               STREAM_OK, STREAM_NO_TYPE, STREAM_DENIED, STREAM_IDLE, STREAM_ENCODED, STREAM_TWO_TYPES,
+               DEADLINE_CLOSE } fake_mode_t;
 struct fake_transport { void *context; connect_fn connect; read_fn read; write_fn write; close_fn close; bool tls; };
 struct fake_client { esp_http_client_config_t config; size_t offset; bool completed; };
 static fake_mode_t mode;
@@ -105,10 +106,17 @@ esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
 }
 int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
 {
-    if (mode == STREAM_OK || mode == STREAM_DENIED || mode == STREAM_IDLE) {
+    if (mode == STREAM_OK || mode == STREAM_DENIED || mode == STREAM_IDLE || mode == STREAM_ENCODED ||
+        mode == STREAM_TWO_TYPES) {
         esp_http_client_event_t event = {.user_data = c->config.user_data, .event_id = HTTP_EVENT_ON_HEADER,
                                          .header_key = "Content-Type", .header_value = "text/event-stream"};
         c->config.event_handler(&event);
+        if (mode == STREAM_TWO_TYPES) c->config.event_handler(&event);
+        if (mode == STREAM_ENCODED) {
+            event.header_key = "Content-Encoding";
+            event.header_value = "gzip";
+            c->config.event_handler(&event);
+        }
     }
     if (mode == LONG_HEADERS) {
         char bytes[1024];
@@ -125,7 +133,7 @@ int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
 int esp_http_client_get_status_code(esp_http_client_handle_t c) { (void)c; return mode == DENIED || mode == STREAM_DENIED ? 401 : 200; }
 int64_t esp_http_client_get_content_length(esp_http_client_handle_t c)
 {
-    (void)c; return mode == RESPONSE_OVERFLOW ? -1 : (int64_t)strlen(payload);
+    (void)c; return mode == RESPONSE_OVERFLOW || mode == DEADLINE_CLOSE ? -1 : (int64_t)strlen(payload);
 }
 int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
 {
@@ -145,6 +153,14 @@ int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
         }
         now_us += 1000000;
         return -ESP_ERR_HTTP_EAGAIN;
+    }
+    if (mode == DEADLINE_CLOSE) {
+        /* Close-delimited body whose last read reaches the deadline; the SDK reports it as a close. */
+        http_transport_t *transport = esp_transport_get_context_data(c->config.transport);
+        now_us = transport->deadline_us - 1000;
+        TEST_ASSERT_EQUAL_INT(-1, c->config.transport->read(c->config.transport, data, length, c->config.timeout_ms));
+        c->completed = true;
+        return 0;
     }
     if (mode == FALSE_EOF) {
         char framing[1024];
@@ -245,9 +261,12 @@ static void deadlines_bound_stalls_and_free_gates(void)
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, bridge_http_get(&origin, "/v1/device/events", 1, 20, body, sizeof(body)).result);
     now_us = 0; mode = SLOW;
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, bridge_http_get(&origin, "/v1/device/events", 1, 1000, body, sizeof(body)).result);
+    now_us = 0; mode = DEADLINE_CLOSE;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, bridge_http_get(&origin, "/v1/device/events", 1, 1000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_INT(0, body[0]);
     now_us = 0; mode = NORMAL;
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, bridge_http_get(&origin, "/v1/device/events", 1, 5000, body, sizeof(body)).result);
-    TEST_ASSERT_EQUAL_UINT(3, dispatches);
+    TEST_ASSERT_EQUAL_UINT(4, dispatches);
 }
 
 typedef struct { bool opened; unsigned checks; } stream_test_t;
@@ -273,7 +292,7 @@ static void stream_opens_with_auth_processes_frame_and_releases_resources(void)
     TEST_ASSERT_EQUAL_UINT(1, dispatches);
 }
 
-static void stream_rejects_missing_type_and_unauthorized_response(void)
+static void stream_rejects_invalid_headers_and_unauthorized_response(void)
 {
     bridge_sse_t state;
     bridge_sse_init(&state);
@@ -288,7 +307,12 @@ static void stream_rejects_missing_type_and_unauthorized_response(void)
     TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_HTTP_REJECTED, result.reason);
     TEST_ASSERT_EQUAL_INT(401, result.http_status);
     TEST_ASSERT_FALSE(context.opened);
-    TEST_ASSERT_EQUAL_UINT(2, dispatches);
+    mode = STREAM_ENCODED;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_INVALID_HEADERS, bridge_stream_run(&origin, &state, &hooks).reason);
+    mode = STREAM_TWO_TYPES;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_INVALID_HEADERS, bridge_stream_run(&origin, &state, &hooks).reason);
+    TEST_ASSERT_FALSE(context.opened);
+    TEST_ASSERT_EQUAL_UINT(4, dispatches);
 }
 
 static void stream_idle_times_out_after_sixty_seconds(void)
@@ -341,7 +365,7 @@ int main(void)
     RUN_TEST(errors_are_bounded_and_never_redispatched);
     RUN_TEST(deadlines_bound_stalls_and_free_gates);
     RUN_TEST(stream_opens_with_auth_processes_frame_and_releases_resources);
-    RUN_TEST(stream_rejects_missing_type_and_unauthorized_response);
+    RUN_TEST(stream_rejects_invalid_headers_and_unauthorized_response);
     RUN_TEST(stream_idle_times_out_after_sixty_seconds);
     RUN_TEST(stream_reports_connection_failure);
     RUN_TEST(stream_stale_open_does_not_publish_connected);

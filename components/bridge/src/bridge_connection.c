@@ -68,3 +68,10 @@ bool bridge_connection_is_online(const bridge_connection_t *state)
 {
     return !state->exhausted && state->has_ip && state->has_origin && state->stream_open;
 }
+
+bridge_stream_step_t bridge_stream_next_step(bool has_ip, bool has_origin, bool clock_ready, bool retry_due)
+{
+    if (!has_ip || !has_origin) return BRIDGE_STREAM_STEP_WAIT_INPUT;
+    if (!clock_ready) return BRIDGE_STREAM_STEP_WAIT_CLOCK;
+    return retry_due ? BRIDGE_STREAM_STEP_OPEN : BRIDGE_STREAM_STEP_WAIT_RETRY;
+}

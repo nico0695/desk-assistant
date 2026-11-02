@@ -284,7 +284,12 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
             goto cleanup;
         }
         if (received == 0) {
-            response.result = esp_http_client_is_complete_data_received(client) ? BRIDGE_HTTP_OK : BRIDGE_HTTP_INCOMPLETE;
+            /* The SDK reports a transport timeout as a close; a close-delimited body would look complete. */
+            if (transport.timed_out) {
+                response.result = BRIDGE_HTTP_TIMEOUT;
+            } else {
+                response.result = esp_http_client_is_complete_data_received(client) ? BRIDGE_HTTP_OK : BRIDGE_HTTP_INCOMPLETE;
+            }
             break;
         }
         if (room == 0U) {

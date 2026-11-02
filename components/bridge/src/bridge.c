@@ -128,6 +128,7 @@ static void stream_worker(void *unused)
     bridge_sse_init(&stream);
     uint64_t observed_revision = UINT64_MAX;
     bridge_stream_result_t previous_failure = {0};
+    bool clock_wait_logged = false;
     for (;;) {
         bridge_origin_t origin;
         bool has_ip;
@@ -147,19 +148,26 @@ static void stream_worker(void *unused)
             observed_revision = revision;
             online_callback(false, generation);
         }
-        if (!has_ip || !has_origin) {
+        uint64_t now = (uint64_t)esp_timer_get_time() / 1000U;
+        const bool clock_ready = bridge_clock_ready();
+        const bridge_stream_step_t step =
+            bridge_stream_next_step(has_ip, has_origin, clock_ready, bridge_sse_retry_due(&stream, now));
+        if (step == BRIDGE_STREAM_STEP_WAIT_INPUT) {
             clear_secret(&origin, sizeof(origin));
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             continue;
         }
-        if (!bridge_clock_ready()) {
+        if (step == BRIDGE_STREAM_STEP_WAIT_CLOCK) {
+            if (!clock_wait_logged) {
+                ESP_LOGI(TAG, "waiting for clock synchronization");
+                clock_wait_logged = true;
+            }
             esp_err_t error = bridge_clock_start(clock_synced, NULL);
             clear_secret(&origin, sizeof(origin));
             ulTaskNotifyTake(pdTRUE, error == ESP_OK ? portMAX_DELAY : pdMS_TO_TICKS(BRIDGE_SSE_RETRY_FIRST_MS));
             continue;
         }
-        uint64_t now = (uint64_t)esp_timer_get_time() / 1000U;
-        if (!bridge_sse_retry_due(&stream, now)) {
+        if (step == BRIDGE_STREAM_STEP_WAIT_RETRY) {
             uint64_t due = stream.disconnected_ms + stream.retry_delay_ms;
             uint64_t wait_ms = due > now ? due - now : 0U;
             clear_secret(&origin, sizeof(origin));

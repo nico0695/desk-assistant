@@ -23,3 +23,13 @@ bool bridge_connection_stream_opened(bridge_connection_t *state, uint64_t ticket
 bool bridge_connection_stream_closed(bridge_connection_t *state, uint64_t ticket);
 bool bridge_connection_is_current(const bridge_connection_t *state, uint64_t ticket);
 bool bridge_connection_is_online(const bridge_connection_t *state);
+
+typedef enum {
+    BRIDGE_STREAM_STEP_WAIT_INPUT,
+    BRIDGE_STREAM_STEP_WAIT_CLOCK,
+    BRIDGE_STREAM_STEP_WAIT_RETRY,
+    BRIDGE_STREAM_STEP_OPEN,
+} bridge_stream_step_t;
+
+/* TLS never starts without IP, a configured origin and a synchronized clock. */
+bridge_stream_step_t bridge_stream_next_step(bool has_ip, bool has_origin, bool clock_ready, bool retry_due);

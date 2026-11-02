@@ -67,11 +67,21 @@ static void generation_exhaustion_does_not_reuse_a_ticket(void)
     TEST_ASSERT_EQUAL_UINT64(0, bridge_connection_begin_stream(&state));
 }
 
+static void stream_step_never_opens_without_clock(void)
+{
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STEP_WAIT_INPUT, bridge_stream_next_step(false, true, true, true));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STEP_WAIT_INPUT, bridge_stream_next_step(true, false, true, true));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STEP_WAIT_CLOCK, bridge_stream_next_step(true, true, false, true));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STEP_WAIT_RETRY, bridge_stream_next_step(true, true, true, false));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STEP_OPEN, bridge_stream_next_step(true, true, true, true));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(stream_requires_ip_and_origin);
     RUN_TEST(origin_and_attempts_invalidate_old_results);
     RUN_TEST(generation_exhaustion_does_not_reuse_a_ticket);
+    RUN_TEST(stream_step_never_opens_without_clock);
     return UNITY_END();
 }
