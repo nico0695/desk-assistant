@@ -101,3 +101,10 @@ target_include_directories(test_bridge_diagnostic PRIVATE bridge_diagnostic_stub
 target_compile_options(test_bridge_diagnostic PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_bridge_diagnostic PRIVATE unity)
 add_test(NAME test_bridge_diagnostic COMMAND test_bridge_diagnostic)
+
+add_executable(test_recording_clip integration/test_recording_clip.c ${COMPONENTS_DIR}/features/recording/src/recording_clip.c)
+target_include_directories(test_recording_clip PRIVATE recording_clip_stubs
+    ${COMPONENTS_DIR}/features/recording/include ${COMPONENTS_DIR}/features/recording/src)
+target_compile_options(test_recording_clip PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_recording_clip PRIVATE unity)
+add_test(NAME test_recording_clip COMMAND test_recording_clip)
