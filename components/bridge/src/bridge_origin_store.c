@@ -56,13 +56,23 @@ void bridge_origin_set_changed_callback(bridge_origin_changed_fn callback)
     origin_changed = callback;
 }
 
+static bool same_as_stored(const char *url, const char *token)
+{
+    bridge_origin_t stored;
+    const bool same = bridge_origin_load(&stored) == ESP_OK && strcmp(stored.url, url) == 0 &&
+                      strcmp(stored.token, token) == 0;
+    memset(&stored, 0, sizeof(stored));
+    return same;
+}
+
 esp_err_t bridge_origin_save(const char *url, const char *token)
 {
     if (!bridge_url_valid(url) || !bridge_token_valid(token)) {
         return ESP_ERR_INVALID_ARG;
     }
     if (!begin_save()) {
-        return ESP_ERR_INVALID_STATE;
+        /* Saving the stored origin again changes nothing, so it does not fail a provisioning that also sets Wi-Fi. */
+        return same_as_stored(url, token) ? ESP_OK : ESP_ERR_INVALID_STATE;
     }
     bridge_origin_t origin = {0};
     memcpy(origin.url, url, strlen(url));

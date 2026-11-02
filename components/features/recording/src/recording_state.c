@@ -74,7 +74,7 @@ static void block_record(recording_state_t *state)
 static void return_to_idle(recording_state_t *state)
 {
     forget_attempt(state);
-    /* Reaching IDLE takes a successful record write, so the record is trustworthy again. */
+    /* record_failed is only set with an attempt, which reaches IDLE only after the record was cleared. */
     state->record_failed = false;
     state->notice = RECORDING_NOTICE_NONE;
     state->cleanup_pending = false;
@@ -184,8 +184,8 @@ void recording_state_start_failed(recording_state_t *state)
     state->running_job = RECORDING_JOB_NONE;
     if (job == RECORDING_JOB_CAPTURE) {
         recording_state_failed(state, RECORDING_FAILURE_START, true);
-    } else if (job == RECORDING_JOB_CLEANUP && has_attempt(state)) {
-        /* A restored attempt keeps its phase; the residue stays pending until a forget clears it. */
+    } else if (job == RECORDING_JOB_CLEANUP && (has_attempt(state) || record_blocked(state))) {
+        /* A restored attempt or a blocked record keeps its phase; the residue stays pending. */
         state->cleanup_pending = true;
     } else if (job == RECORDING_JOB_CLEANUP) {
         recording_state_failed(state, RECORDING_FAILURE_CLEANUP, false);
@@ -399,6 +399,10 @@ void recording_state_resolved(recording_state_t *state, const char *id, recordin
         (!pending(state) && !missing_text_of(state, reply))) {
         return;
     }
+    if (pending(state) && state->wanted_job == RECORDING_JOB_FORGET) {
+        /* A discard queued while this reply was read no longer applies: the attempt is not uncertain anymore. */
+        state->wanted_job = RECORDING_JOB_NONE;
+    }
     state->durable_pending = false;
     state->has_message = true;
     state->content_omitted = omitted;
@@ -415,11 +419,14 @@ void recording_state_store_failed(recording_state_t *state, const char *id)
 
 recording_effect_t recording_state_wait_expired(recording_state_t *state, uint64_t generation)
 {
-    if (!current(state, generation) || state->phase != RECORDING_PROCESSING) {
+    if (!current(state, generation) ||
+        (state->phase != RECORDING_PROCESSING && state->phase != RECORDING_UNCONFIRMED)) {
         return RECORDING_EFFECT_NONE;
     }
     state->query_wanted = true;
-    enter(state, RECORDING_UNCONFIRMED, RECORDING_FAILURE_NONE);
+    if (state->phase == RECORDING_PROCESSING) {
+        enter(state, RECORDING_UNCONFIRMED, RECORDING_FAILURE_NONE);
+    }
     return RECORDING_EFFECT_VIEW;
 }
 

@@ -471,9 +471,12 @@ static void upload_failed(const char *id, bool unsent)
     }
     taskENTER_CRITICAL(&lock);
     recording_state_upload_failed(&state, id, failure);
+    const uint64_t generation = state.generation;
     taskEXIT_CRITICAL(&lock);
     if (failure == RECORDING_UPLOAD_UNSENT) {
         attempt_ended();
+    } else {
+        arm_wait(generation);
     }
     publish_current();
 }
@@ -484,7 +487,9 @@ static void send_clip(const bridge_origin_t *origin, const char *id)
     char path[BRIDGE_ASSISTANT_PATH_SIZE];
     char *body = malloc(BRIDGE_ASSISTANT_JSON_MAX_BYTES);
     bridge_http_upload_t upload = {.response.result = BRIDGE_HTTP_NO_MEMORY, .unsent = true};
-    if (body != NULL && bridge_assistant_path(id, path, sizeof(path))) {
+    if (body == NULL) {
+        ESP_LOGE(TAG, "no memory for the upload reply");
+    } else if (bridge_assistant_path(id, path, sizeof(path))) {
         const int64_t started = esp_timer_get_time();
         upload = bridge_http_put_wav(origin, path, recording_clip_wav_size(), read_clip, NULL, body,
                                      BRIDGE_ASSISTANT_JSON_MAX_BYTES);

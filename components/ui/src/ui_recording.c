@@ -305,13 +305,13 @@ static void show_actions(const recording_view_t *view)
 {
     const bool capturing = view->phase == RECORDING_RECORDING;
     const bool ready = view->phase == RECORDING_READY_TO_SEND;
-    const bool attempt = view->phase != RECORDING_IDLE && view->phase != RECORDING_RECORDING &&
+    const bool closable = view->phase != RECORDING_IDLE && view->phase != RECORDING_RECORDING &&
                          view->phase != RECORDING_FINALIZING && view->phase != RECORDING_READY_TO_SEND &&
                          view->phase != RECORDING_CANCELLING;
     set_visible(cancel, !confirming_discard && (capturing || ready));
     set_visible(send, !confirming_discard && (capturing || ready));
     set_visible(discard, !confirming_discard && view->can_discard);
-    set_visible(close_button, !confirming_discard && attempt);
+    set_visible(close_button, !confirming_discard && closable);
     set_visible(check, !confirming_discard && view->can_check);
     set_visible(keep, confirming_discard);
     set_visible(confirm, confirming_discard);

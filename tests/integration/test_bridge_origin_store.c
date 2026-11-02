@@ -60,6 +60,13 @@ static void held_origin_cannot_change(void)
     bridge_origin_release();
     TEST_ASSERT_EQUAL_INT(ESP_OK, bridge_origin_save("https://example.test", token));
     TEST_ASSERT_EQUAL_UINT(1, callbacks);
+    /* Held again: the same origin is accepted without a write, another one is refused. */
+    TEST_ASSERT_TRUE(bridge_origin_hold());
+    TEST_ASSERT_EQUAL_INT(ESP_OK, bridge_origin_save("https://example.test", token));
+    TEST_ASSERT_EQUAL_INT(ESP_ERR_INVALID_STATE, bridge_origin_save("https://other.test", token));
+    TEST_ASSERT_EQUAL_UINT(1, callbacks);
+    TEST_ASSERT_EQUAL_STRING("https://example.test", persisted.url);
+    bridge_origin_release();
     TEST_ASSERT_EQUAL_UINT(0, bridge_test_critical_depth);
 }
 

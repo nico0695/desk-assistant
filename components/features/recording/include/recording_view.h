@@ -19,7 +19,7 @@ typedef enum {
     RECORDING_FINALIZING,
     RECORDING_READY_TO_SEND,
     RECORDING_CANCELLING,
-    /* Durable identity reserved; the single upload is running. */
+    /* Admission, reservation of the durable identity and the single upload. */
     RECORDING_UPLOADING,
     /* The bridge acknowledged the attempt; the result is pending. */
     RECORDING_PROCESSING,
@@ -47,7 +47,10 @@ typedef enum {
     RECORDING_FAILURE_NOT_SENT,
     /* The bridge reported the attempt as failed; its message is available. */
     RECORDING_FAILURE_REMOTE,
-    /* The attempt record could not be read or written safely; everything stays blocked until restart. */
+    /*
+     * The attempt record could not be read or written safely. As FAILED everything stays blocked until restart; as
+     * UNCONFIRMED (the reservation could not be cleared) the attempt can still be checked but not discarded.
+     */
     RECORDING_FAILURE_RECORD,
 } recording_failure_t;
 

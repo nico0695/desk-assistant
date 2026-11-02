@@ -118,6 +118,7 @@ void recording_state_cleaned(recording_state_t *state, bool cleaned);
 void recording_state_refused(recording_state_t *state);
 /* The identity was written durably, or the write failed and may have reached flash. */
 void recording_state_reserved(recording_state_t *state, const char *id, bool stored);
+/* An uncertain failure (not RECORDING_UPLOAD_UNSENT) arms the local wait, like a processing reply. */
 void recording_state_upload_failed(recording_state_t *state, const char *id, recording_upload_failure_t failure);
 /* A validated reply from the PUT or a GET. */
 recording_apply_t recording_state_reply(recording_state_t *state, const char *id, recording_reply_t reply);
@@ -125,7 +126,7 @@ recording_apply_t recording_state_reply(recording_state_t *state, const char *id
 void recording_state_resolved(recording_state_t *state, const char *id, recording_reply_t reply, bool omitted);
 /* Persisting a terminal phase failed. */
 void recording_state_store_failed(recording_state_t *state, const char *id);
-/* The local wait of the attempt shown with generation ended. */
+/* The local wait of the attempt shown with generation ended: a pending attempt becomes UNCONFIRMED and is queried. */
 recording_effect_t recording_state_wait_expired(recording_state_t *state, uint64_t generation);
 /* The event stream opened, or signaled a result for id (NULL for any attempt). */
 recording_effect_t recording_state_signal(recording_state_t *state, const char *id);

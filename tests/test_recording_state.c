@@ -249,6 +249,12 @@ static void test_ambiguous_upload_is_unconfirmed_until_a_terminal_reply(void)
     TEST_ASSERT_EQUAL(RECORDING_UNCONFIRMED, state.phase);
     TEST_ASSERT_TRUE(view().can_discard);
     TEST_ASSERT_EQUAL(RECORDING_JOB_QUERY, recording_state_next_job(&state));
+    /* The local wait armed after the upload ends with another query, without a phase change. */
+    const uint64_t unconfirmed = state.generation;
+    TEST_ASSERT_EQUAL(RECORDING_JOB_NONE, recording_state_next_job(&state));
+    TEST_ASSERT_EQUAL(RECORDING_EFFECT_VIEW, recording_state_wait_expired(&state, unconfirmed));
+    TEST_ASSERT_EQUAL_UINT64(unconfirmed, state.generation);
+    TEST_ASSERT_EQUAL(RECORDING_JOB_QUERY, recording_state_claim_job(&state));
     TEST_ASSERT_EQUAL(RECORDING_APPLY_IGNORE, recording_state_reply(&state, ID, RECORDING_REPLY_PROCESSING));
     TEST_ASSERT_EQUAL(RECORDING_APPLY_IGNORE, recording_state_reply(&state, OTHER_ID, RECORDING_REPLY_COMPLETED));
     TEST_ASSERT_EQUAL(RECORDING_APPLY_STORE, recording_state_reply(&state, ID, RECORDING_REPLY_COMPLETED));
@@ -378,6 +384,16 @@ static void test_discard_only_an_uncertain_pending_attempt(void)
     TEST_ASSERT_EQUAL(RECORDING_EFFECT_VIEW, recording_state_discard(&state, unconfirmed));
     TEST_ASSERT_EQUAL(RECORDING_NOTICE_NONE, view().notice);
 
+    /* A discard confirmed while a query reads a terminal does not erase it. */
+    start_processing();
+    recording_state_wait_expired(&state, state.generation);
+    TEST_ASSERT_EQUAL(RECORDING_JOB_QUERY, recording_state_claim_job(&state));
+    TEST_ASSERT_EQUAL(RECORDING_EFFECT_VIEW, recording_state_discard(&state, state.generation));
+    TEST_ASSERT_EQUAL(RECORDING_APPLY_STORE, recording_state_reply(&state, ID, RECORDING_REPLY_COMPLETED));
+    recording_state_resolved(&state, ID, RECORDING_REPLY_COMPLETED, false);
+    TEST_ASSERT_EQUAL(RECORDING_JOB_NONE, recording_state_next_job(&state));
+    TEST_ASSERT_EQUAL(RECORDING_COMPLETED, state.phase);
+
     /* A persisted terminal is no longer pending: only Close ends it. */
     start_processing();
     recording_state_resolved(&state, ID, RECORDING_REPLY_COMPLETED, false);
@@ -413,6 +429,14 @@ static void test_a_worker_that_cannot_start_touches_nothing(void)
     TEST_ASSERT_EQUAL_STRING(ID, state.id);
     TEST_ASSERT_TRUE(state.cleanup_pending);
     TEST_ASSERT_EQUAL(RECORDING_JOB_QUERY, recording_state_claim_job(&state));
+
+    /* An unreadable record stays blocking even when the boot cleanup cannot start. */
+    recording_state_init(&state);
+    recording_state_restore_failed(&state);
+    recording_state_claim_job(&state);
+    recording_state_start_failed(&state);
+    TEST_ASSERT_EQUAL(RECORDING_FAILURE_RECORD, state.failure);
+    TEST_ASSERT_EQUAL(RECORDING_EFFECT_NONE, recording_state_close(&state, state.generation));
 
     start_recording();
     recording_state_start_failed(&state);

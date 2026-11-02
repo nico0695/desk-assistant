@@ -18,7 +18,7 @@ void bridge_origin_set_changed_callback(bridge_origin_changed_fn callback);
 /*
  * Replaces the stored origin with one write, so URL and token change together or not at all. This is the single
  * point where the origin changes. ESP_ERR_INVALID_ARG when either value is invalid and ESP_ERR_INVALID_STATE while
- * the origin is held; nothing is written then.
+ * the origin is held, unless the values equal the stored origin (ESP_OK); nothing is written then.
  */
 esp_err_t bridge_origin_save(const char *url, const char *token);
 

@@ -73,5 +73,5 @@ typedef struct {
  * of bridge_assistant.h, writing blocks of BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES. The response is returned like a GET.
  */
 bridge_http_upload_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
-                                         bridge_http_body_reader_t read_body, void *context, char *body,
+                                         bridge_http_body_reader_t read_source, void *context, char *body,
                                          size_t capacity);
