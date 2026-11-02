@@ -139,3 +139,9 @@ void ui_status_bar_set_title_override(const char *title)
     title_override = title;
     if (title_label != NULL) lv_label_set_text_static(title_label, title != NULL ? title : base_title);
 }
+
+void ui_status_bar_set_title(const char *title)
+{
+    base_title = title;
+    if (title_label != NULL && title_override == NULL) lv_label_set_text_static(title_label, title);
+}

@@ -8,6 +8,8 @@ idf_component_register(SRCS "src/ui_task.c"
                             "src/ui_home.c"
                             "src/ui_recording.c"
                             "src/ui_notifications.c"
+                            "src/ui_modules.c"
+                            "src/ui_modules_control.c"
                             "src/ui_recording_control.c"
                             "src/ui_text_support.c"
                             "src/ui_navigation.c"
@@ -22,7 +24,7 @@ idf_component_register(SRCS "src/ui_task.c"
                             "src/fonts/ui_font_latin1_28.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
-                       REQUIRES connectivity esp_common notifications recording settings
+                       REQUIRES connectivity esp_common modules notifications recording settings
                        PRIV_REQUIRES board diagnostics esp_timer freertos log lvgl__lvgl)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

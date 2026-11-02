@@ -207,18 +207,8 @@ static lv_obj_t *create_wrapped_label(lv_obj_t *parent, lv_text_align_t align)
 /* Scrolls by swipe with a visible bar; the actions stay fixed below it. */
 static void create_body(lv_obj_t *parent)
 {
-    lv_obj_t *body = ui_box_create(parent, LV_FLEX_FLOW_COLUMN, UI_GAP_PX);
-    lv_obj_set_size(body, UI_CONTENT_WIDTH_PX, RECORDING_BODY_HEIGHT_PX);
+    lv_obj_t *body = ui_scroll_box_create(parent, UI_CONTENT_WIDTH_PX, RECORDING_BODY_HEIGHT_PX);
     lv_obj_set_pos(body, UI_SCREEN_MARGIN_PX, RECORDING_BODY_Y_PX);
-    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scroll_dir(body, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_width(body, UI_SCROLLBAR_WIDTH_PX, LV_PART_SCROLLBAR);
-    lv_obj_set_style_radius(body, UI_SCROLLBAR_WIDTH_PX / 2, LV_PART_SCROLLBAR);
-    lv_obj_set_style_bg_color(body, lv_color_hex(UI_COLOR_CONTROL_PRESSED), LV_PART_SCROLLBAR);
-    lv_obj_set_style_bg_opa(body, LV_OPA_COVER, LV_PART_SCROLLBAR);
-    lv_obj_set_style_pad_right(body, 2 * UI_SCROLLBAR_WIDTH_PX, LV_PART_MAIN);
 
     duration = lv_label_create(body);
     lv_obj_set_style_text_font(duration, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);

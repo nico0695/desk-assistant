@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "memory_report.h"
+#include "modules.h"
 #include "nvs.h"
 #include "notifications.h"
 #include "recording.h"
@@ -90,6 +91,7 @@ void app_main(void)
     if (board_error != ESP_OK) {
         ESP_LOGE(TAG, "board init failed: %s", esp_err_to_name(board_error));
     } else {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(modules_start(ui_show_modules));
         ESP_ERROR_CHECK_WITHOUT_ABORT(ui_start(&settings));
         ESP_ERROR_CHECK_WITHOUT_ABORT(recording_start(ui_show_recording));
         ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(show_battery, NULL));

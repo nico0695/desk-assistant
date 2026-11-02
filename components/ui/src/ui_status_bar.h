@@ -20,3 +20,5 @@ void ui_status_bar_set_battery(ui_battery_t battery);
 void ui_status_bar_set_bridge_online(bool online);
 /* UI owner only; NULL restores the active screen's title after an overlay closes. */
 void ui_status_bar_set_title_override(const char *title);
+/* Replaces the title of the newest bar; the text must outlive it. An overlay override keeps priority. */
+void ui_status_bar_set_title(const char *title);

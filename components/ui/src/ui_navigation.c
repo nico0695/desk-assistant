@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "ui_home.h"
+#include "ui_modules_control.h"
 #include "ui_recording_control.h"
 #include "ui_section.h"
 #include "ui_settings_control.h"
@@ -48,6 +49,11 @@ static void show_wifi(void *unused)
     replace_active_screen(ui_wifi_control_create_screen(request_settings));
 }
 
+static void leave_module(void)
+{
+    lv_async_call(show_home, NULL);
+}
+
 static void show_section(void *section_data)
 {
     const ui_section_t section = (ui_section_t)(uintptr_t)section_data;
@@ -55,7 +61,12 @@ static void show_section(void *section_data)
         show_settings(NULL);
         return;
     }
-    replace_active_screen(ui_section_screen_create(section, request_home));
+    static const bridge_resource_kind_t KINDS[UI_SECTION_COUNT] = {
+        [UI_SECTION_TASKS] = BRIDGE_RESOURCE_TASKS,
+        [UI_SECTION_NOTES] = BRIDGE_RESOURCE_NOTES,
+        [UI_SECTION_ALERTS] = BRIDGE_RESOURCE_ALERTS,
+    };
+    replace_active_screen(ui_modules_control_open(KINDS[section], leave_module));
 }
 
 static void request_section(ui_section_t section)

@@ -15,6 +15,7 @@
 #include "ui_bridge_status.h"
 #include "ui_navigation.h"
 #include "ui_recording_control.h"
+#include "ui_modules_control.h"
 #include "ui_notifications.h"
 #include "ui_settings_control.h"
 #include "ui_status_bar.h"
@@ -39,6 +40,7 @@ enum {
     EVENT_BRIDGE = 1U << 5,
     EVENT_RECORDING = 1U << 6,
     EVENT_NOTIFICATIONS = 1U << 7,
+    EVENT_MODULES = 1U << 8,
 };
 
 static const char *TAG = "ui";
@@ -265,6 +267,9 @@ static void run(void *unused)
         if (events & EVENT_RECORDING) {
             ui_recording_control_take_view();
         }
+        if (events & EVENT_MODULES) {
+            ui_modules_control_take_view();
+        }
         bool notification_arrived = false;
         const bool notification_blocked = ui_recording_control_holds_screen();
         if ((events & EVENT_NOTIFICATIONS) || notification_blocked != notification_was_blocked) {
@@ -364,4 +369,10 @@ void ui_show_notification(const notification_view_t *view, void (*close)(uint64_
     }
     taskEXIT_CRITICAL(&notification_lock);
     if (ui_task != NULL) xTaskNotify(ui_task, EVENT_NOTIFICATIONS, eSetBits);
+}
+
+void ui_show_modules(const modules_view_t *view)
+{
+    ui_modules_control_store_view(view);
+    if (ui_task != NULL) xTaskNotify(ui_task, EVENT_MODULES, eSetBits);
 }

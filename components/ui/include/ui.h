@@ -5,6 +5,7 @@
 
 #include "connectivity_view.h"
 #include "esp_err.h"
+#include "modules_view.h"
 #include "recording.h"
 #include "notification_view.h"
 #include "settings_values.h"
@@ -33,3 +34,6 @@ void ui_show_recording(const recording_view_t *view);
 /* Safe from any task; the UI owner applies the latest durable notification view. */
 void ui_show_notification(const notification_view_t *view, void (*close)(uint64_t, const char *),
                           bool (*snooze)(uint64_t, const char *, unsigned));
+
+/* Safe from any task and never blocks; the open module screen follows the newest view (copied). */
+void ui_show_modules(const modules_view_t *view);

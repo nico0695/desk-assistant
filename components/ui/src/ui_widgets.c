@@ -59,3 +59,19 @@ lv_obj_t *ui_box_create(lv_obj_t *parent, lv_flex_flow_t flow, int32_t gap)
     lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     return box;
 }
+
+lv_obj_t *ui_scroll_box_create(lv_obj_t *parent, int32_t width, int32_t height)
+{
+    lv_obj_t *box = ui_box_create(parent, LV_FLEX_FLOW_COLUMN, UI_GAP_PX);
+    lv_obj_set_size(box, width, height);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_add_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(box, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(box, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_width(box, UI_SCROLLBAR_WIDTH_PX, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(box, UI_SCROLLBAR_WIDTH_PX / 2, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_color(box, lv_color_hex(UI_COLOR_CONTROL_PRESSED), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_right(box, 2 * UI_SCROLLBAR_WIDTH_PX, LV_PART_MAIN);
+    return box;
+}

@@ -7,6 +7,7 @@
 #include "lodepng.h"
 #include "lvgl.h"
 #include "ui_home.h"
+#include "ui_modules.h"
 #include "ui_recording.h"
 #include "ui_notifications.h"
 #include "ui_recording_text.h"
@@ -16,6 +17,7 @@
 #include "ui_status_bar.h"
 #include "ui_text.h"
 #include "ui_theme.h"
+#include "ui_widgets.h"
 
 #define WIDTH BOARD_DISPLAY_WIDTH_PX
 #define HEIGHT BOARD_DISPLAY_HEIGHT_PX
@@ -316,12 +318,170 @@ static lv_obj_t *create_settings(uint8_t timeout_s, uint8_t volume, uint8_t brig
 
 static lv_obj_t *create_latin1_sample(void)
 {
-    lv_obj_t *screen = ui_section_screen_create(UI_SECTION_NOTES, ignore_back);
+    lv_obj_t *screen = ui_screen_create();
+    ui_status_bar_create(screen, UI_TEXT_NOTES);
     lv_obj_t *label = lv_label_create(screen);
     lv_label_set_text_static(label, LATIN1_SAMPLE_TEXT);
     lv_obj_set_width(label, UI_CONTENT_WIDTH_PX);
     lv_obj_align(label, LV_ALIGN_TOP_MID, 0, UI_STATUS_BAR_HEIGHT_PX + UI_GAP_PX);
     return screen;
+}
+
+
+/* Sample module data: the readers hand the screen whatever the current sample holds. */
+static bridge_resource_page_t sample_page;
+static bridge_resource_detail_t sample_detail;
+
+static bool read_sample_page(uint64_t ticket, void (*reader)(const bridge_resource_page_t *page, void *context),
+                             void *context)
+{
+    (void)ticket;
+    reader(&sample_page, context);
+    return true;
+}
+
+static bool read_sample_detail(uint64_t ticket, void (*reader)(const bridge_resource_detail_t *detail, void *context),
+                               void *context)
+{
+    (void)ticket;
+    reader(&sample_detail, context);
+    return true;
+}
+
+static void ignore_ticket(uint64_t ticket)
+{
+    (void)ticket;
+}
+
+static void ignore_open(uint64_t ticket, uint64_t id)
+{
+    (void)ticket;
+    (void)id;
+}
+
+static const ui_modules_handlers_t MODULES_HANDLERS = {
+    .on_leave = ignore_closed,
+    .on_previous = ignore_ticket,
+    .on_next = ignore_ticket,
+    .on_refresh = ignore_ticket,
+    .on_open = ignore_open,
+    .on_back = ignore_ticket,
+    .read_page = read_sample_page,
+    .read_detail = read_sample_detail,
+};
+
+static void sample_entry(bridge_resource_entry_t *entry, uint64_t id, const char *text, const char *created,
+                         const char *when)
+{
+    memset(entry, 0, sizeof(*entry));
+    entry->id = id;
+    entry->text = text;
+    snprintf(entry->created_at, sizeof(entry->created_at), "%s", created);
+    snprintf(entry->when_at, sizeof(entry->when_at), "%s", when);
+}
+
+static modules_view_t modules_view(bridge_resource_kind_t kind, modules_screen_t screen, modules_status_t status,
+                                   modules_error_t error)
+{
+    return (modules_view_t){.open = true, .kind = kind, .screen = screen, .status = status, .error = error,
+                            .ticket = 1, .page = 2, .has_previous = true, .has_next = true, .count = 5};
+}
+
+static lv_obj_t *create_modules(const modules_view_t *view)
+{
+    return ui_modules_screen_create(view, &MODULES_HANDLERS);
+}
+
+static void capture_module_lists(lv_display_t *display, const char *directory)
+{
+    memset(&sample_page, 0, sizeof(sample_page));
+    sample_page.count = 5;
+    sample_entry(&sample_page.entries[0], 41, "Ideas para el viaje a Córdoba y lista de cosas para llevar en la mochila — incluir cargadores",
+                 "2026-11-02T17:05:00Z", "");
+    sample_entry(&sample_page.entries[1], 40, "Receta de la abuela", "2026-11-01T01:30:00Z", "");
+    sample_entry(&sample_page.entries[2], 39, "Presupuesto", "2026-10-31T12:00:00Z", "");
+    sample_entry(&sample_page.entries[3], 38, "Reunión del jueves", "2026-10-30T12:00:00Z", "");
+    sample_entry(&sample_page.entries[4], 37, "Libros pendientes", "2026-10-29T12:00:00Z", "");
+    capture(display, create_modules(&(modules_view_t){.open = true, .kind = BRIDGE_RESOURCE_NOTES, .ticket = 1,
+                                                       .status = MODULES_READY, .page = 1, .has_next = true, .count = 5}),
+            directory, "modules-notes-first");
+    const modules_view_t notes = modules_view(BRIDGE_RESOURCE_NOTES, MODULES_SCREEN_LIST, MODULES_READY, MODULES_ERROR_NONE);
+    capture(display, create_modules(&notes), directory, "modules-notes-middle");
+
+    sample_entry(&sample_page.entries[0], 52, "Llamar al proveedor por la entrega", "2026-11-02T17:05:00Z",
+                 "2026-11-03T12:00:00Z");
+    sample_entry(&sample_page.entries[1], 51, "Pagar la factura de luz", "2026-11-01T17:05:00Z", "");
+    const modules_view_t tasks = modules_view(BRIDGE_RESOURCE_TASKS, MODULES_SCREEN_LIST, MODULES_READY, MODULES_ERROR_NONE);
+    capture(display, create_modules(&tasks), directory, "modules-tasks");
+
+    sample_entry(&sample_page.entries[0], 62, "Reunión con el equipo de diseño", "2026-11-02T17:05:00Z",
+                 "2026-11-03T13:00:00.250Z");
+    const modules_view_t alerts = modules_view(BRIDGE_RESOURCE_ALERTS, MODULES_SCREEN_LIST, MODULES_READY, MODULES_ERROR_NONE);
+    capture(display, create_modules(&alerts), directory, "modules-alerts");
+
+    sample_page.count = 0;
+    modules_view_t empty = modules_view(BRIDGE_RESOURCE_ALERTS, MODULES_SCREEN_LIST, MODULES_READY, MODULES_ERROR_NONE);
+    empty.page = 1;
+    empty.has_previous = empty.has_next = false;
+    empty.count = 0;
+    capture(display, create_modules(&empty), directory, "modules-empty");
+
+    modules_view_t loading = modules_view(BRIDGE_RESOURCE_NOTES, MODULES_SCREEN_LIST, MODULES_LOADING, MODULES_ERROR_NONE);
+    loading.has_previous = loading.has_next = false;
+    capture(display, create_modules(&loading), directory, "modules-loading");
+    modules_view_t failed = modules_view(BRIDGE_RESOURCE_NOTES, MODULES_SCREEN_LIST, MODULES_FAILED, MODULES_ERROR_NETWORK);
+    failed.has_previous = failed.has_next = false;
+    capture(display, create_modules(&failed), directory, "modules-error-network");
+    failed.error = MODULES_ERROR_BUSY_AUDIO;
+    capture(display, create_modules(&failed), directory, "modules-busy-recording");
+    failed.error = MODULES_ERROR_TOO_LARGE;
+    failed.screen = MODULES_SCREEN_DETAIL;
+    capture(display, create_modules(&failed), directory, "modules-detail-too-large");
+    failed.error = MODULES_ERROR_NOT_FOUND;
+    capture(display, create_modules(&failed), directory, "modules-detail-not-found");
+}
+
+static void sample_detail_base(bridge_resource_kind_t kind, uint64_t id, const char *text)
+{
+    memset(&sample_detail, 0, sizeof(sample_detail));
+    sample_detail.kind = kind;
+    sample_detail.id = id;
+    sample_detail.text = text;
+    snprintf(sample_detail.created_at, sizeof(sample_detail.created_at), "2026-11-02T17:05:00Z");
+}
+
+static void capture_module_details(lv_display_t *display, const char *directory)
+{
+    static const char LONG_DESCRIPTION[] =
+        "Confirmar el envío de los cables USB-C y pedir factura A.\n\nPuntos a tratar:\n"
+        "• Precio por cantidad (mínimo 50 unidades).\n• Plazo de entrega: 10 días hábiles.\n"
+        "• Garantía de 12 meses y cambio por defectos.\n• Forma de pago: transferencia a 30 días.\n"
+        "• Dirección de entrega: depósito central, puerta 4.\n\nSi no responde antes del viernes, "
+        "llamar de nuevo y consultar por la alternativa del otro proveedor.";
+    const modules_view_t detail = modules_view(BRIDGE_RESOURCE_TASKS, MODULES_SCREEN_DETAIL, MODULES_READY, MODULES_ERROR_NONE);
+
+    sample_detail_base(BRIDGE_RESOURCE_TASKS, 52, "Llamar al proveedor");
+    sample_detail.description = LONG_DESCRIPTION;
+    sample_detail.tag = "work";
+    sample_detail.task_status = BRIDGE_TASK_IN_PROGRESS;
+    snprintf(sample_detail.when_at, sizeof(sample_detail.when_at), "2026-11-03T12:00:00Z");
+    capture(display, create_modules(&detail), directory, "modules-detail-task");
+
+    sample_detail_base(BRIDGE_RESOURCE_TASKS, 53, "Comprar pan ✅");
+    sample_detail.description = "Sin alerta ni tag. Emoji ✅ sin glifo.";
+    modules_view_t task_view = detail;
+    capture(display, create_modules(&task_view), directory, "modules-detail-unsupported");
+
+    sample_detail_base(BRIDGE_RESOURCE_NOTES, 41, "Ideas para el viaje");
+    sample_detail.description = "";
+    snprintf(sample_detail.updated_at, sizeof(sample_detail.updated_at), "2026-11-02T18:30:00Z");
+    modules_view_t note_view = modules_view(BRIDGE_RESOURCE_NOTES, MODULES_SCREEN_DETAIL, MODULES_READY, MODULES_ERROR_NONE);
+    capture(display, create_modules(&note_view), directory, "modules-detail-note");
+
+    sample_detail_base(BRIDGE_RESOURCE_ALERTS, 62, "Reunión con el equipo de diseño en la sala 3");
+    snprintf(sample_detail.when_at, sizeof(sample_detail.when_at), "2026-11-03T13:00:00.250Z");
+    modules_view_t alert_view = modules_view(BRIDGE_RESOURCE_ALERTS, MODULES_SCREEN_DETAIL, MODULES_READY, MODULES_ERROR_NONE);
+    capture(display, create_modules(&alert_view), directory, "modules-detail-alert");
 }
 
 int main(int argc, char **argv)
@@ -350,7 +510,6 @@ int main(int argc, char **argv)
     ui_status_bar_set_battery((ui_battery_t){.known = false});
     capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORD), directory, "home-battery-unknown");
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
-    capture(display, ui_section_screen_create(UI_SECTION_TASKS, ignore_back), directory, "section");
     capture(display, create_latin1_sample(), directory, "latin1-sample");
     capture(display,
             create_settings(SETTINGS_SCREEN_TIMEOUT_DEFAULT_S, SETTINGS_VOLUME_DEFAULT_PERCENT,
@@ -402,6 +561,8 @@ int main(int argc, char **argv)
     capture(display, create_recording(RECORDING_FAILED, RECORDING_FAILURE_CLEANUP, 0), directory,
             "recording-cleanup-failed");
     capture_attempt_states(display, directory);
+    capture_module_lists(display, directory);
+    capture_module_details(display, directory);
     capture(display, ui_home_screen_create(ignore_section, ignore_back, UI_TEXT_RECORDING_ENTRY_PENDING), directory,
             "home-entry-pending");
 
