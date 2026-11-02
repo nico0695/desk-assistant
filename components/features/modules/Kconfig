@@ -1,0 +1,11 @@
+menu "Modules"
+    config MODULES_WORKER_STACK_SIZE
+        int "Module read worker stack bytes"
+        default 8192
+        range 4096 16384
+
+    config MODULES_WORKER_PRIORITY
+        int "Module read worker priority"
+        default 3
+        range 1 20
+endmenu

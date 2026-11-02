@@ -47,6 +47,8 @@ typedef struct {
     modules_status_t status;
     modules_error_t error;
     uint64_t ticket;
+    /* Grows with every published view: the UI keeps the newest and ignores any older one that arrives late. */
+    uint64_t revision;
     /* The list page, kept while its detail is shown. */
     uint64_t page;
     bool has_previous;

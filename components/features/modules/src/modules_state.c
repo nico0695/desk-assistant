@@ -17,6 +17,7 @@ void modules_state_view(const modules_state_t *state, modules_view_t *view)
     view->status = state->status;
     view->error = state->error;
     view->ticket = state->ticket;
+    view->revision = 0U;
     view->page = state->page;
     view->has_previous = state->has_previous;
     view->has_next = state->has_next;

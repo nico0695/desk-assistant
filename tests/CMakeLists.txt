@@ -163,3 +163,15 @@ target_include_directories(test_notification_tones PRIVATE ${COMPONENTS_DIR}/fea
 target_compile_options(test_notification_tones PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_notification_tones PRIVATE unity)
 add_test(NAME test_notification_tones COMMAND test_notification_tones)
+
+add_executable(test_modules integration/test_modules.c
+    ${COMPONENTS_DIR}/features/modules/src/modules_state.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_resources.c ${COMPONENTS_DIR}/bridge/src/bridge_json.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_text.c ${COMPONENTS_DIR}/bridge/src/bridge_time.c)
+target_include_directories(test_modules PRIVATE modules_stubs bridge_http_stubs
+    ${COMPONENTS_DIR}/features/modules/include ${COMPONENTS_DIR}/features/modules/src
+    ${COMPONENTS_DIR}/features/recording/include ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src
+    ${COMPONENTS_DIR}/diagnostics/include)
+target_compile_options(test_modules PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_modules PRIVATE unity cjson m)
+add_test(NAME test_modules COMMAND test_modules)
