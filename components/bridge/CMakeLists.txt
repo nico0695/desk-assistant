@@ -1,4 +1,5 @@
 idf_component_register(SRCS "src/bridge_origin.c"
+                            "src/bridge_connection.c"
                             "src/bridge_origin_store.c"
                             "src/bridge_sse.c"
                             "src/bridge_uuid.c"

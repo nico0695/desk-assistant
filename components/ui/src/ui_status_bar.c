@@ -12,8 +12,10 @@
 static const lv_point_precise_t WIFI_SLASH_POINTS[] = {{2, 26}, {30, 0}};
 
 static ui_battery_t battery_reading;
+static bool bridge_online;
 static lv_obj_t *battery_icon;
 static lv_obj_t *battery_text;
+static lv_obj_t *wifi_slash;
 
 static const char *battery_symbol(ui_battery_t battery)
 {
@@ -53,10 +55,23 @@ static void forget_deleted_bar(lv_event_t *event)
     if (battery_icon != NULL && lv_event_get_target(event) == lv_obj_get_parent(battery_icon)) {
         battery_icon = NULL;
         battery_text = NULL;
+        wifi_slash = NULL;
     }
 }
 
-static lv_obj_t *create_wifi_disconnected_icon(lv_obj_t *parent)
+static void show_bridge_status(void)
+{
+    if (wifi_slash == NULL) {
+        return;
+    }
+    if (bridge_online) {
+        lv_obj_add_flag(wifi_slash, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_remove_flag(wifi_slash, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static lv_obj_t *create_wifi_icon(lv_obj_t *parent)
 {
     lv_obj_t *container = lv_obj_create(parent);
     lv_obj_remove_style_all(container);
@@ -66,11 +81,12 @@ static lv_obj_t *create_wifi_disconnected_icon(lv_obj_t *parent)
     lv_label_set_text_static(icon, LV_SYMBOL_WIFI);
     lv_obj_set_style_text_color(icon, lv_color_hex(UI_COLOR_TEXT_SECONDARY), LV_PART_MAIN);
 
-    lv_obj_t *slash = lv_line_create(container);
-    lv_line_set_points(slash, WIFI_SLASH_POINTS, sizeof(WIFI_SLASH_POINTS) / sizeof(WIFI_SLASH_POINTS[0]));
-    lv_obj_set_style_line_color(slash, lv_color_hex(UI_COLOR_TEXT), LV_PART_MAIN);
-    lv_obj_set_style_line_width(slash, UI_WIFI_SLASH_WIDTH_PX, LV_PART_MAIN);
-    lv_obj_set_style_line_rounded(slash, true, LV_PART_MAIN);
+    wifi_slash = lv_line_create(container);
+    lv_line_set_points(wifi_slash, WIFI_SLASH_POINTS, sizeof(WIFI_SLASH_POINTS) / sizeof(WIFI_SLASH_POINTS[0]));
+    lv_obj_set_style_line_color(wifi_slash, lv_color_hex(UI_COLOR_TEXT), LV_PART_MAIN);
+    lv_obj_set_style_line_width(wifi_slash, UI_WIFI_SLASH_WIDTH_PX, LV_PART_MAIN);
+    lv_obj_set_style_line_rounded(wifi_slash, true, LV_PART_MAIN);
+    show_bridge_status();
     return container;
 }
 
@@ -91,7 +107,7 @@ lv_obj_t *ui_status_bar_create(lv_obj_t *screen, const char *title)
     lv_obj_set_style_text_font(title_label, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);
     lv_obj_set_flex_grow(title_label, 1);
 
-    create_wifi_disconnected_icon(bar);
+    create_wifi_icon(bar);
 
     battery_icon = lv_label_create(bar);
     battery_text = lv_label_create(bar);
@@ -105,4 +121,10 @@ void ui_status_bar_set_battery(ui_battery_t battery)
 {
     battery_reading = battery;
     show_battery();
+}
+
+void ui_status_bar_set_bridge_online(bool online)
+{
+    bridge_online = online;
+    show_bridge_status();
 }

@@ -226,6 +226,10 @@ int main(int argc, char **argv)
 
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
     capture(display, ui_home_screen_create(ignore_section), directory, "home");
+    ui_status_bar_set_bridge_online(true);
+    capture(display, ui_home_screen_create(ignore_section), directory, "home-wifi-online");
+    ui_status_bar_set_bridge_online(false);
+    capture(display, ui_home_screen_create(ignore_section), directory, "home-wifi-offline");
     ui_status_bar_set_battery((ui_battery_t){.known = false});
     capture(display, ui_home_screen_create(ignore_section), directory, "home-battery-unknown");
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});

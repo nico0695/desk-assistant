@@ -33,12 +33,15 @@ enum {
     EVENT_KEY = 1U << 2,
     EVENT_SETTINGS_CHANGED = 1U << 3,
     EVENT_CONNECTIVITY = 1U << 4,
+    EVENT_BRIDGE = 1U << 5,
 };
 
 static const char *TAG = "ui";
 static TaskHandle_t ui_task;
 static portMUX_TYPE battery_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_battery_t latest_battery;
+static portMUX_TYPE bridge_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool latest_bridge_online;
 
 static settings_loaded_t initial_settings;
 static screen_power_t screen;
@@ -85,6 +88,14 @@ static void show_latest_battery(void)
     const ui_battery_t battery = latest_battery;
     taskEXIT_CRITICAL(&battery_lock);
     ui_status_bar_set_battery(battery);
+}
+
+static void show_latest_bridge(void)
+{
+    taskENTER_CRITICAL(&bridge_lock);
+    const bool online = latest_bridge_online;
+    taskEXIT_CRITICAL(&bridge_lock);
+    ui_status_bar_set_bridge_online(online);
 }
 
 static void apply_screen_action(screen_action_t action, const screen_power_t *previous, uint64_t now_ms)
@@ -196,6 +207,7 @@ static esp_err_t start_ui(void)
     ui_theme_init();
     ui_settings_control_init(&initial_settings, &SETTINGS_HOOKS);
     show_latest_battery();
+    show_latest_bridge();
     ui_navigation_start();
     return ESP_OK;
 }
@@ -230,6 +242,9 @@ static void run(void *unused)
         }
         if (events & EVENT_BATTERY) {
             show_latest_battery();
+        }
+        if (events & EVENT_BRIDGE) {
+            show_latest_bridge();
         }
         if (events & EVENT_SETTINGS_CHANGED) {
             ui_settings_control_take_changes();
@@ -268,6 +283,16 @@ void ui_show_battery(bool known, uint8_t percent)
     taskEXIT_CRITICAL(&battery_lock);
     if (ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_BATTERY, eSetBits);
+    }
+}
+
+void ui_show_bridge_online(bool online)
+{
+    taskENTER_CRITICAL(&bridge_lock);
+    latest_bridge_online = online;
+    taskEXIT_CRITICAL(&bridge_lock);
+    if (ui_task != NULL) {
+        xTaskNotify(ui_task, EVENT_BRIDGE, eSetBits);
     }
 }
 

@@ -35,6 +35,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/connectivity/src/setup_page.c
     ${COMPONENTS_DIR}/connectivity/src/provision_apply.c
     ${COMPONENTS_DIR}/bridge/src/bridge_origin.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_connection.c
     ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 set(HOST_MODULE_INCLUDE_DIRS

@@ -15,3 +15,6 @@ lv_obj_t *ui_status_bar_create(lv_obj_t *screen, const char *title);
 
 /* Shows the reading on the most recent bar and keeps it for bars created later. */
 void ui_status_bar_set_battery(ui_battery_t battery);
+
+/* The UI owner updates the newest bar and retains the state for later bars. */
+void ui_status_bar_set_bridge_online(bool online);
