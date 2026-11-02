@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "bridge_sse_contract.h"
+#include "bridge_text.h"
 #include "bridge_uuid.h"
 
 /* Owned by the stream task; no pointer escapes the owner. Times are monotonic ms. */
@@ -16,9 +17,7 @@ typedef struct {
     bool pending_events;
     bool assistant_result;
     uint8_t retry_step;
-    uint8_t utf8_remaining;
-    uint32_t utf8_value;
-    uint32_t utf8_min;
+    bridge_utf8_t utf8;
     uint64_t last_bytes_ms;
     uint64_t disconnected_ms;
     uint64_t retry_delay_ms;

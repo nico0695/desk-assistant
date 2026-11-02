@@ -40,6 +40,8 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/bridge/src/bridge_connection.c
     ${COMPONENTS_DIR}/bridge/src/bridge_http_common.c
     ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_text.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_assistant.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/board/include
@@ -72,7 +74,7 @@ add_test(NAME test_bridge_clock COMMAND test_bridge_clock)
 
 add_executable(test_bridge_http integration/test_bridge_http.c
     ${COMPONENTS_DIR}/bridge/src/bridge_http_common.c ${COMPONENTS_DIR}/bridge/src/bridge_origin.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_stream.c ${COMPONENTS_DIR}/bridge/src/bridge_tls.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_stream.c ${COMPONENTS_DIR}/bridge/src/bridge_tls.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c ${COMPONENTS_DIR}/bridge/src/bridge_text.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 target_include_directories(test_bridge_http PRIVATE bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
 target_compile_options(test_bridge_http PRIVATE -Wall -Wextra -Werror)
@@ -80,7 +82,7 @@ target_link_libraries(test_bridge_http PRIVATE unity cjson m)
 add_test(NAME test_bridge_http COMMAND test_bridge_http)
 
 add_executable(test_bridge_service integration/test_bridge_service.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_connection.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_connection.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c ${COMPONENTS_DIR}/bridge/src/bridge_text.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c ${COMPONENTS_DIR}/bridge/src/bridge_diagnostic.c
     ${COMPONENTS_DIR}/ui/src/ui_bridge_status.c)
 target_include_directories(test_bridge_service PRIVATE bridge_service_stubs bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src ${COMPONENTS_DIR}/ui/src)

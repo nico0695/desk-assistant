@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "bridge_text.h"
 #include "cJSON.h"
 
 void bridge_sse_init(bridge_sse_t *state)
@@ -48,49 +49,6 @@ bool bridge_sse_dead(const bridge_sse_t *state, uint64_t now_ms)
            now_ms - state->last_bytes_ms >= BRIDGE_SSE_DEAD_MS;
 }
 
-/* cJSON exposes decoded strings without their lengths. Reject embedded NUL and
- * limit the accepted schema to a single shallow object before allocating. */
-static bool json_input_valid(const char *data, size_t length)
-{
-    bool quoted = false;
-    bool root_seen = false;
-    unsigned members = 0;
-    for (size_t i = 0; i < length; ++i) {
-        const unsigned char c = (unsigned char)data[i];
-        if (quoted) {
-            if (c < 0x20U) {
-                return false;
-            }
-            if (c == '\\') {
-                if (++i == length) {
-                    return false;
-                }
-                if (data[i] == 'u' && length - i >= 5U && memcmp(data + i + 1U, "0000", 4U) == 0) {
-                    return false;
-                }
-            } else if (c == '"') {
-                quoted = false;
-            }
-        } else if (c == '"') {
-            quoted = true;
-        } else if (c == '{') {
-            if (root_seen) {
-                return false;
-            }
-            root_seen = true;
-        } else if (c == '[' || c == ']') {
-            return false;
-        } else if (c == ':') {
-            if (++members > 1U) {
-                return false;
-            }
-        } else if (c < 0x20U && c != '\t' && c != '\r' && c != '\n') {
-            return false;
-        }
-    }
-    return root_seen && !quoted;
-}
-
 static bool dispatch_frame(bridge_sse_t *state)
 {
     const bool pending = strcmp(state->event, "pending_events") == 0;
@@ -98,7 +56,8 @@ static bool dispatch_frame(bridge_sse_t *state)
     if ((!pending && !assistant) || !state->has_data) {
         return true;
     }
-    if (!json_input_valid(state->data, state->data_length)) {
+    /* One shallow object with at most one member. */
+    if (!bridge_json_bounded(state->data, state->data_length, 1U, 1U)) {
         return false;
     }
     const char *end = NULL;
@@ -170,42 +129,6 @@ static bool finish_line(bridge_sse_t *state)
     return true;
 }
 
-static bool utf8_byte(bridge_sse_t *state, unsigned char byte)
-{
-    if (state->utf8_remaining != 0U) {
-        if ((byte & 0xC0U) != 0x80U) {
-            return false;
-        }
-        state->utf8_value = (state->utf8_value << 6U) | (uint32_t)(byte & 0x3FU);
-        --state->utf8_remaining;
-        if (state->utf8_remaining == 0U &&
-            (state->utf8_value < state->utf8_min || state->utf8_value > 0x10FFFFU ||
-             (state->utf8_value >= 0xD800U && state->utf8_value <= 0xDFFFU))) {
-            return false;
-        }
-        return true;
-    }
-    if (byte < 0x80U) {
-        return true;
-    }
-    if (byte >= 0xC2U && byte <= 0xDFU) {
-        state->utf8_remaining = 1;
-        state->utf8_value = byte & 0x1FU;
-        state->utf8_min = 0x80U;
-    } else if (byte >= 0xE0U && byte <= 0xEFU) {
-        state->utf8_remaining = 2;
-        state->utf8_value = byte & 0x0FU;
-        state->utf8_min = 0x800U;
-    } else if (byte >= 0xF0U && byte <= 0xF4U) {
-        state->utf8_remaining = 3;
-        state->utf8_value = byte & 0x07U;
-        state->utf8_min = 0x10000U;
-    } else {
-        return false;
-    }
-    return true;
-}
-
 bool bridge_sse_feed(bridge_sse_t *state, const void *bytes, size_t length, uint64_t now_ms)
 {
     if (!state->connected || state->invalid || (bytes == NULL && length != 0U)) {
@@ -222,7 +145,7 @@ bool bridge_sse_feed(bridge_sse_t *state, const void *bytes, size_t length, uint
             continue;
         }
         state->after_cr = false;
-        if (c == 0U || ++state->frame_length > BRIDGE_SSE_FRAME_MAX_BYTES || !utf8_byte(state, c)) {
+        if (c == 0U || ++state->frame_length > BRIDGE_SSE_FRAME_MAX_BYTES || !bridge_utf8_step(&state->utf8, c)) {
             goto invalid;
         }
         if (c == '\r' || c == '\n') {

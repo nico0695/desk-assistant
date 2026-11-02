@@ -9,6 +9,8 @@ idf_component_register(SRCS "src/bridge.c"
                             "src/bridge_tls.c"
                             "src/bridge_origin_store.c"
                             "src/bridge_sse.c"
+                            "src/bridge_text.c"
+                            "src/bridge_assistant.c"
                             "src/bridge_uuid.c"
                        INCLUDE_DIRS "include"
                        REQUIRES esp_common
