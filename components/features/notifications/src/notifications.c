@@ -193,7 +193,7 @@ static bool close_front(const char *event_id)
 
 static void format_local_time(const char *utc)
 {
-    if (!bridge_time_format_local(utc, snoozed_at_text, sizeof(snoozed_at_text))) snoozed_at_text[0] = '\0';
+    bridge_time_format_local(utc, snoozed_at_text, sizeof(snoozed_at_text));
 }
 
 static bridge_snooze_result_t send_snooze(const bridge_event_t *event, bridge_snooze_preset_t preset,

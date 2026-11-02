@@ -10,7 +10,7 @@
 /* Earlier years keep an explicit UTC label: the server clock was not meaningful then. */
 #define BRIDGE_TIME_LOCAL_FIRST_YEAR 2010U
 /* "YYYY-MM-DD HH:MM UTC-3" and its terminator. */
-#define BRIDGE_TIME_LOCAL_SIZE 24U
+#define BRIDGE_TIME_LOCAL_SIZE 23U
 
 /* Exact bridge UTC timestamp: YYYY-MM-DDTHH:MM:SS[.fraction]Z with a real calendar date. */
 bool bridge_time_valid(const char *text);

@@ -17,7 +17,7 @@ void modules_state_view(const modules_state_t *state, modules_view_t *view)
     view->status = state->status;
     view->error = state->error;
     view->ticket = state->ticket;
-    view->revision = 0U;
+    view->revision = 0U; /* Set by the owner when it publishes. */
     view->page = state->page;
     view->has_previous = state->has_previous;
     view->has_next = state->has_next;
@@ -46,6 +46,7 @@ static void forget_list(modules_state_t *state)
 unsigned modules_state_enter(modules_state_t *state, bridge_resource_kind_t kind)
 {
     if (kind >= BRIDGE_RESOURCE_KIND_COUNT) return MODULES_EFFECT_NONE;
+    /* A worker may still be reading a request from before this entry; its identity survives the reset. */
     const bool running = state->running;
     const uint64_t ticket = state->ticket + 1U;
     const modules_request_t running_request = state->running_request;

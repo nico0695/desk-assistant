@@ -51,6 +51,20 @@ static void test_rejects_invalid_text_and_small_buffers(void)
     TEST_ASSERT_FALSE(bridge_time_format_local("2026-11-02T12:00:00Z", text, 0));
 }
 
+static void test_validation_rejects_calendar_and_shape_errors(void)
+{
+    TEST_ASSERT_TRUE(bridge_time_valid("2024-02-29T00:00:00Z"));
+    TEST_ASSERT_TRUE(bridge_time_valid("2000-02-29T23:59:59.999999999Z"));
+    TEST_ASSERT_TRUE(bridge_time_valid("2026-04-30T12:00:00Z"));
+    static const char *const invalid[] = {
+        "2026-04-31T12:00:00Z", "2026-02-30T12:00:00Z", "2025-02-29T12:00:00Z", "1900-02-29T12:00:00Z",
+        "2026-00-10T12:00:00Z", "2026-11-00T12:00:00Z", "2026-11-02T24:00:00Z", "2026-11-02T12:60:00Z",
+        "2026-11-02T12:00:60Z", "2026-11-02T12:00:00.Z", "2026-11-02T12:00:00",   "2026-11-02T12:00:00z",
+        "2026-11-02T12:00:00.1234567890123456Z", ""};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+        TEST_ASSERT_FALSE_MESSAGE(bridge_time_valid(invalid[i]), invalid[i]);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -58,5 +72,6 @@ int main(void)
     RUN_TEST(test_crosses_day_month_and_year_backwards);
     RUN_TEST(test_years_before_2010_keep_explicit_utc);
     RUN_TEST(test_rejects_invalid_text_and_small_buffers);
+    RUN_TEST(test_validation_rejects_calendar_and_shape_errors);
     return UNITY_END();
 }

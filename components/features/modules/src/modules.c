@@ -233,6 +233,14 @@ static void deliver_detail(const modules_request_t *request, modules_error_t err
     commit(effects);
 }
 
+/* The transport result of a request that was sent; NO_TRANSPORT_RESULT when the read failed before sending. */
+#define NO_TRANSPORT_RESULT (-1)
+
+static int transport_result(const bridge_http_response_t *response)
+{
+    return response->result == BRIDGE_HTTP_OK ? NO_TRANSPORT_RESULT : (int)response->result;
+}
+
 static void read_list(const modules_request_t *request)
 {
     char path[BRIDGE_RESOURCE_PATH_SIZE];
@@ -252,7 +260,7 @@ static void read_list(const modules_request_t *request)
                      (unsigned long long)request->number, response.status, (unsigned)response.length, (int)error);
         } else {
             ESP_LOGW(TAG, "%s page %llu: error %d (transport %d)", KIND_NAMES[request->kind],
-                     (unsigned long long)request->number, (int)error, (int)response.result);
+                     (unsigned long long)request->number, (int)error, transport_result(&response));
         }
     }
     free(body);
@@ -278,7 +286,7 @@ static void read_detail(const modules_request_t *request)
                      (unsigned)response.length, (int)error);
         } else {
             ESP_LOGW(TAG, "%s detail: error %d (transport %d)", KIND_NAMES[request->kind], (int)error,
-                     (int)response.result);
+                     transport_result(&response));
         }
     }
     free(body);

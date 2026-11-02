@@ -415,6 +415,18 @@ static void test_media_is_active_only_while_capturing_or_uploading(void)
     TEST_ASSERT_FALSE(recording_state_media_active(&state));
 }
 
+static void test_media_is_active_while_finalizing_or_cancelling(void)
+{
+    start_recording();
+    TEST_ASSERT_TRUE(recording_state_captured(&state, RECORDING_MAX_SAMPLES));
+    TEST_ASSERT_EQUAL(RECORDING_FINALIZING, state.phase);
+    TEST_ASSERT_TRUE(recording_state_media_active(&state));
+    const uint64_t attempt = start_recording();
+    recording_state_cancel(&state, attempt);
+    TEST_ASSERT_EQUAL(RECORDING_CANCELLING, state.phase);
+    TEST_ASSERT_TRUE(recording_state_media_active(&state));
+}
+
 static void test_queries_coalesce_while_the_worker_runs(void)
 {
     start_processing();
@@ -488,6 +500,7 @@ int main(void)
     RUN_TEST(test_close_terminal_ends_only_after_forgetting);
     RUN_TEST(test_discard_only_an_uncertain_pending_attempt);
     RUN_TEST(test_media_is_active_only_while_capturing_or_uploading);
+    RUN_TEST(test_media_is_active_while_finalizing_or_cancelling);
     RUN_TEST(test_queries_coalesce_while_the_worker_runs);
     RUN_TEST(test_a_worker_that_cannot_start_touches_nothing);
     return UNITY_END();

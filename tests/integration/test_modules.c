@@ -92,6 +92,9 @@ static void reply(int status, const char *body)
 static const char *NOTES_PAGE =
     "{\"items\":[{\"id\":11,\"title\":\"One\",\"created_at\":\"" T0 "\"},{\"id\":12,\"title\":\"Two\",\"created_at\":\"" T0 "\"}],"
     "\"page\":1,\"page_size\":5,\"has_previous\":false,\"has_next\":false}";
+static const char *ALERTS_PAGE =
+    "{\"items\":[{\"id\":7,\"message\":\"Call\",\"scheduled_at\":\"" T0 "\",\"created_at\":\"" T0 "\"}],"
+    "\"page\":1,\"page_size\":5,\"has_previous\":false,\"has_next\":false}";
 static const char *NOTE_DETAIL =
     "{\"item\":{\"id\":12,\"title\":\"Two\",\"description\":\"Body\",\"tag\":null,\"channel_id\":null,"
     "\"created_at\":\"" T0 "\",\"updated_at\":\"" T0 "\"}}";
@@ -109,7 +112,6 @@ static void reset(void)
     get_calls = 0U;
     view_count = 0U;
     deferred_task = NULL;
-    TEST_ASSERT_EQUAL(ESP_OK, ESP_OK);
 }
 
 static void copy_first_entry(const bridge_resource_page_t *page, void *context)
@@ -169,7 +171,7 @@ static void audio_in_use_prevents_the_request_and_refresh_retries(void)
 {
     reset();
     audio_blocked = true;
-    modules_enter(BRIDGE_RESOURCE_TASKS);
+    modules_enter(BRIDGE_RESOURCE_NOTES);
     TEST_ASSERT_EQUAL_UINT(0U, get_calls);
     TEST_ASSERT_EQUAL(MODULES_FAILED, latest()->status);
     TEST_ASSERT_EQUAL(MODULES_ERROR_BUSY_AUDIO, latest()->error);
@@ -177,6 +179,7 @@ static void audio_in_use_prevents_the_request_and_refresh_retries(void)
     reply(200, NOTES_PAGE);
     modules_refresh(latest()->ticket);
     TEST_ASSERT_EQUAL_UINT(1U, get_calls);
+    TEST_ASSERT_EQUAL(MODULES_READY, latest()->status);
 }
 
 static void transport_and_codec_failures_map_to_distinct_errors(void)
@@ -233,12 +236,15 @@ static void the_newest_request_runs_after_the_one_in_flight(void)
     reply(200, NOTES_PAGE);
     modules_enter(BRIDGE_RESOURCE_NOTES);
     modules_leave();
+    reply(200, ALERTS_PAGE);
     modules_enter(BRIDGE_RESOURCE_ALERTS);
     TEST_ASSERT_EQUAL_UINT(0U, get_calls);
     deferred_task(NULL);
     /* The first request was stale and is skipped; the newest one is read by the same worker. */
     TEST_ASSERT_EQUAL_UINT(1U, get_calls);
     TEST_ASSERT_EQUAL_STRING("/v1/device/alerts?page=1", last_path);
+    TEST_ASSERT_EQUAL(MODULES_READY, latest()->status);
+    TEST_ASSERT_EQUAL(BRIDGE_RESOURCE_ALERTS, latest()->kind);
     TEST_ASSERT_FALSE(state.running);
 }
 

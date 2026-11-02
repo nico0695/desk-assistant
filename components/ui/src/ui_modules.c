@@ -19,7 +19,7 @@
 #define ROW_PAD_PX 12
 #define FACT_LINE_SPACE_PX 6
 #define TITLE_SIZE 32
-#define DATE_SIZE 48
+#define DATE_SIZE BRIDGE_TIME_LOCAL_SIZE
 #define ID_SIZE 24
 /* Status line, three dates, sent line and the ID, each with its label. */
 #define FACTS_SIZE 384
@@ -149,8 +149,8 @@ static void forget_screen(lv_event_t *event)
 static lv_obj_t *create_icon_button(lv_obj_t *row, const char *symbol, lv_event_cb_t on_click)
 {
     lv_obj_t *button = ui_button_create(row, UI_BUTTON_STANDARD, symbol, "");
-    lv_obj_t *label = lv_obj_get_child(button, -1);
-    lv_obj_delete(label);
+    /* The button always appends its text label after the icon; an icon-only button drops it. */
+    lv_obj_delete(lv_obj_get_child(button, -1));
     lv_obj_set_size(button, ICON_BUTTON_WIDTH_PX, UI_BUTTON_HEIGHT_PX);
     lv_obj_add_event_cb(button, on_click, LV_EVENT_CLICKED, NULL);
     return button;
@@ -183,15 +183,11 @@ lv_obj_t *ui_modules_screen_create(const modules_view_t *view, const ui_modules_
     return screen_object;
 }
 
-/* Centered headline and message in place of the content. */
-static void show_message(const char *headline, const char *message)
+/* Centered headline in place of the content. */
+static void show_headline(const char *headline)
 {
     lv_obj_t *head = create_label(content, UI_FONT_BODY, LV_TEXT_ALIGN_CENTER);
     lv_label_set_text_static(head, headline);
-    if (message == NULL) return;
-    lv_obj_t *text = create_label(content, UI_FONT_SECONDARY, LV_TEXT_ALIGN_CENTER);
-    lv_obj_add_style(text, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
-    lv_label_set_text_static(text, message);
 }
 
 static void show_failure(void)
@@ -201,8 +197,7 @@ static void show_failure(void)
     const char *headline = busy                                       ? UI_TEXT_MODULES_BUSY
                            : shown.screen == MODULES_SCREEN_DETAIL ? UI_TEXT_MODULES_FAILED_DETAIL
                                                                    : UI_TEXT_MODULES_FAILED_LIST;
-    lv_obj_t *head = create_label(content, UI_FONT_BODY, LV_TEXT_ALIGN_CENTER);
-    lv_label_set_text_static(head, headline);
+    show_headline(headline);
     lv_obj_t *text = create_label(content, UI_FONT_SECONDARY, LV_TEXT_ALIGN_CENTER);
     lv_obj_add_style(text, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
     snprintf(hint, sizeof(hint), "%s\n%s", error_text(shown.error), UI_TEXT_MODULES_REFRESH_HINT);
@@ -251,7 +246,7 @@ static void show_rows(const bridge_resource_page_t *page, void *unused)
 {
     (void)unused;
     if (page->count == 0U) {
-        show_message(UI_TEXT_MODULES_EMPTY, NULL);
+        show_headline(UI_TEXT_MODULES_EMPTY);
         return;
     }
     for (uint8_t i = 0; i < page->count; ++i) create_row(&page->entries[i], i);
@@ -259,11 +254,11 @@ static void show_rows(const bridge_resource_page_t *page, void *unused)
 
 static void show_list(void)
 {
-    if (shown.status == MODULES_LOADING) show_message(UI_TEXT_MODULES_LOADING, NULL);
+    if (shown.status == MODULES_LOADING) show_headline(UI_TEXT_MODULES_LOADING);
     else if (shown.status == MODULES_FAILED) show_failure();
     else if (handlers->read_page == NULL || !handlers->read_page(shown.ticket, show_rows, NULL))
         /* The view is already stale and a newer one follows: neither empty nor failed. */
-        show_message(UI_TEXT_MODULES_LOADING, NULL);
+        show_headline(UI_TEXT_MODULES_LOADING);
     snprintf(title_text, sizeof(title_text), UI_TEXT_MODULES_PAGE_TITLE_FORMAT, module_title(shown.kind),
              (unsigned)shown.page);
     ui_status_bar_set_title(title_text);
@@ -331,10 +326,10 @@ static void show_detail_content(const bridge_resource_detail_t *detail, void *un
 
 static void show_detail(void)
 {
-    if (shown.status == MODULES_LOADING) show_message(UI_TEXT_MODULES_LOADING, NULL);
+    if (shown.status == MODULES_LOADING) show_headline(UI_TEXT_MODULES_LOADING);
     else if (shown.status == MODULES_FAILED) show_failure();
     else if (handlers->read_detail == NULL || !handlers->read_detail(shown.ticket, show_detail_content, NULL))
-        show_message(UI_TEXT_MODULES_LOADING, NULL);
+        show_headline(UI_TEXT_MODULES_LOADING);
     ui_status_bar_set_title(module_title(shown.kind));
 }
 
