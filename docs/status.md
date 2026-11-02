@@ -13,16 +13,16 @@
 | 5b | Recording: upload and result | Done (validated 2026-11-02) |
 | 6 | Notifications and sound | Done (validated 2026-11-02) |
 | 7 | Modules: read | Done (validated 2026-11-02) |
-| 8 | Modules: actions | Next |
+| 8 | Modules: actions | Waiting for validation |
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
 ## Active stage: 8 — Modules: actions
 
-- **Status:** next, not started.
+- **Status:** implemented and flashed on `esp32-02` at `7a2d452`; waiting for the user's smoke test.
 - **Goal:** safe mutations on remote resources.
-- **Scope (macro plan):** Delete with confirmation, Complete for pending, Snooze from the detail; frozen target, a single dispatch and error mapping; uncertainty that requires a fresh detail, and a success that survives a failed refresh; notification deferral during the confirmation.
-- **Open:** the Complete deadline. The bridge makes up to three bot calls and asks the device to wait at least 55 s; the 40 s used for the other actions covers their 35 s minimum.
+- **Done:** Delete (DELETE, no body) and Complete (empty POST) with a `not sent` boundary before the request is written; one action outcome shared with the card Snooze; Delete, Complete and Snooze from the detail with a frozen ticket, one dispatch and controls blocked until the result; a fresh origin page after Delete or Complete, a detail reread after Snooze; uncertain, missing or changed outcomes allow no action until a fresh detail; a result line that stays until the next user command; Delete and Snooze dialogs on a modal shared with Wi-Fi; notifications held during a dialog or an action.
+- **Deadlines:** Complete waits up to 60 s for the bridge (it asks for at least 55 s); Delete and Snooze 40 s; every action waits up to 5 s for the HTTP gate, then it is not sent.
 - **Carry-overs from stage 7:** a direct module-to-module path would need `forget_screen` to tell screens apart; the other items are in `.local/follow-up.md`.
 
 ## Closed stages
@@ -161,3 +161,13 @@ Each checkpoint records one entry per image:
   - Not run, by user decision: a read during a Wi-Fi outage (error state and Refresh recovery). Not reported: the received body lengths and a module with more than five items on the final image.
 - **Validation:** the user ran the reduced smoke guide on the final image and reported the executed cases working (2026-11-02).
 - **Reviews:** `standard-code-review` per step group (findings fixed in `6c81f34`, the V4 attribution and the step 5 UI). 4R at close: four lenses, 0 severe, 14 warnings and suggestions. Fixed in `4769531`: tests for the shared timestamp validator, for the finalizing and cancelling capture phases that block reads and for the refresh and newest-request cases; the read log no longer shows a transport code for reads that were never sent; dead UI parameter, redundant clear, time buffer size and comments. Deferred or discarded with their reason in `.local/stages/07-modulos-lectura.md`.
+
+### Stage 8 — 2026-11-02
+
+- **Revision:** `7a2d452`, integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `b64fdb0b7cea746601215cd6b814a65d59b3d7cc6337cf7fa7f2dd81be5d9cd1` (the boot log prints its first 9 digits). Application image 1657984 bytes, 60% of the 4 MB app partition free.
+- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41; preview built and reviewed (Wi-Fi dialogs pixel-identical after the extraction); `dependencies.lock` unchanged.
+- **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
+  - Final image `7a2d452`: boot log shows the version and ELF digits above; Wi-Fi connected 5 s and event stream open 13 s after boot; heap 166 KB free, minimum 153 KB at UI ready; no errors. Only the boot was observed; no action has run against the real bridge yet.
+  - Pending: the user's smoke test with disposable records (guide in `.local/stages/08-modulos-acciones.md`).
+- **Reviews:** `standard-code-review` on steps 1, 2–3 and 5, all clean; step 4 skipped (extraction with identical pixels). 4R at close: four lenses, 0 severe, 6 warnings and suggestions. Fixed in `7a2d452`: the action error mapping duplicated between Snooze and Delete/Complete, the Snooze request built twice (card and detail), a header comment about confirmation, and a test for an outcome that arrives after leaving the module. Snooze now also reads a missing route (404 `not_found`) as rejected. Discarded with their reason in the stage document: the two copies of the allowed-action rule, and an open dialog that holds notifications without a time limit (the spec defers notifications during a confirmation).
