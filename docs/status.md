@@ -19,7 +19,7 @@
 
 ## Active stage: 7 — Modules: read
 
-- **Status:** not started; the stage document and its open definitions come next.
+- **Status:** in progress. Spec, design and mini plan approved; the read codec, the browsing state, the read worker and the list and detail screens are built and flashed on `esp32-02` (`6c81f34`). Validation with real data is next.
 - **Goal:** Tasks, Notes and Alerts browsable with recoverable memory.
 - **Scope (macro plan):** paged lists, Refresh, a valid empty page, detail by ID, Back with the list kept once; generation tickets for stale results; dates in UTC-3, read errors distinct from empty, busy during capture and upload; memory released on exit.
 - **Open:** body budget (4096 B provisional) to measure.
