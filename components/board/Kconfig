@@ -15,6 +15,14 @@ menu "Desk Assistant board"
         help
             Two buffers let rendering overlap the transfer of the previous one.
 
+    config BOARD_AUDIO_DMA_DESC_COUNT
+        int "Audio capture DMA descriptors"
+        range 2 16
+        default 6
+        help
+            Each descriptor holds one block of 256 samples (16 ms at 16 kHz). They absorb
+            the moments when flash writes pause the reading task.
+
     config BOARD_BATTERY_READ_PERIOD_S
         int "Battery reading period (seconds)"
         range 5 600

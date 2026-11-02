@@ -18,6 +18,14 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 - License: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
 - Sources: [esp-iot-solution esp_lcd_sh8601 @ 4962410](https://github.com/espressif/esp-iot-solution/blob/4962410c80a51cd5822da1d8d2041eb4285265f1/components/display/lcd/esp_lcd_sh8601/esp_lcd_sh8601.c), [Waveshare board example @ 2945437](https://github.com/waveshareteam/ESP32-C6-Touch-AMOLED-2.16/blob/294543798f1a44e2f2c4d2976522323f2beee11d/02_Example/ESP-IDF-v5.5.3/09_LVGL_V9_Test/components/port_bsp/display_bsp.cpp)
 
+## ES7210 capture sequence
+
+`components/board/src/board_audio.c` uses ES7210 register sequences reduced from `esp_codec_dev` as distributed in the board manufacturer's examples, by way of the author's previous firmware (V4).
+
+- Authors: Espressif Systems (Shanghai) CO LTD
+- License: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
+- Source: [Waveshare board example @ 2945437](https://github.com/waveshareteam/ESP32-C6-Touch-AMOLED-2.16/blob/294543798f1a44e2f2c4d2976522323f2beee11d/02_Example/Arduino-v3.3.3/07_Audio_Test/src/esp_codec_dev/device/es7210/es7210.c)
+
 ## AXP2101 register facts
 
 `components/board/src/board_power.c` uses register addresses and bit meanings consulted in XPowersLib and the X-Powers datasheet. No XPowersLib code is included.

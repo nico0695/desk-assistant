@@ -19,19 +19,25 @@ enum {
     REGISTER_CHIP_ID = 0x03,
     REGISTER_BATTERY_DETECT = 0x68,
     REGISTER_LDO_ENABLE = 0x90,
+    REGISTER_ALDO1_VOLTAGE = 0x92,
     REGISTER_ALDO3_VOLTAGE = 0x94,
     REGISTER_BATTERY_PERCENT = 0xa4,
 };
 
 #define STATUS_BATTERY_PRESENT_MASK (1U << 3)
 #define BATTERY_DETECT_ENABLED_MASK 1U
+#define LDO_ALDO1_ENABLE_MASK (1U << 0)
 #define LDO_ALDO3_ENABLE_MASK (1U << 2)
-#define ALDO3_VOLTAGE_MASK 0x1fU
-/* ALDO3 output is 500 mV plus 100 mV per step. */
-#define ALDO3_VOLTAGE_3300MV ((3300 - 500) / 100)
+#define ALDO_VOLTAGE_MASK 0x1fU
+/* ALDO outputs are 500 mV plus 100 mV per step. */
+#define ALDO_VOLTAGE_3300MV ((3300 - 500) / 100)
 
 static const char *TAG = "board_power";
 static i2c_master_dev_handle_t pmic;
+/* ALDO1 bits as found before the audio rail was turned on; valid while audio_rail_saved. */
+static bool audio_rail_saved;
+static uint8_t saved_ldo_enable;
+static uint8_t saved_aldo1_voltage;
 
 static esp_err_t read_register(uint8_t reg, uint8_t *value)
 {
@@ -60,7 +66,7 @@ static esp_err_t check_identity(void)
 
 static esp_err_t pulse_panel_reset(void)
 {
-    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO3_VOLTAGE, ALDO3_VOLTAGE_MASK, ALDO3_VOLTAGE_3300MV), TAG,
+    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO3_VOLTAGE, ALDO_VOLTAGE_MASK, ALDO_VOLTAGE_3300MV), TAG,
                         "ALDO3 voltage");
     const uint8_t reset_levels[] = {LDO_ALDO3_ENABLE_MASK, 0, LDO_ALDO3_ENABLE_MASK};
     esp_err_t error = ESP_OK;
@@ -111,4 +117,39 @@ esp_err_t board_power_read_battery(board_battery_reading_t *reading)
         *reading = (board_battery_reading_t){.known = true, .percent = percent};
     }
     return ESP_OK;
+}
+
+esp_err_t board_power_audio_rail_on(void)
+{
+    ESP_RETURN_ON_FALSE(pmic != NULL && !audio_rail_saved, ESP_ERR_INVALID_STATE, TAG, "audio rail state");
+    ESP_RETURN_ON_ERROR(read_register(REGISTER_LDO_ENABLE, &saved_ldo_enable), TAG, "LDO enable");
+    ESP_RETURN_ON_ERROR(read_register(REGISTER_ALDO1_VOLTAGE, &saved_aldo1_voltage), TAG, "ALDO1 voltage");
+    audio_rail_saved = true;
+    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO1_VOLTAGE, ALDO_VOLTAGE_MASK, ALDO_VOLTAGE_3300MV), TAG,
+                        "ALDO1 voltage");
+    return update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO1_ENABLE_MASK, LDO_ALDO1_ENABLE_MASK);
+}
+
+esp_err_t board_power_audio_rail_restore(bool *powered_off)
+{
+    *powered_off = false;
+    if (!audio_rail_saved) {
+        return ESP_OK;
+    }
+    /* Enable first: a rail that was off is turned off before its old voltage is written back. */
+    const esp_err_t enable_error = update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO1_ENABLE_MASK, saved_ldo_enable);
+    const bool was_on = (saved_ldo_enable & LDO_ALDO1_ENABLE_MASK) != 0;
+    *powered_off = enable_error == ESP_OK && !was_on;
+    /* If turning it off failed, keep 3.3 V rather than give a live rail the voltage it had while off. */
+    if (enable_error != ESP_OK && !was_on) {
+        return enable_error;
+    }
+    const esp_err_t voltage_error = update_register_bits(REGISTER_ALDO1_VOLTAGE, ALDO_VOLTAGE_MASK, saved_aldo1_voltage);
+    if (enable_error != ESP_OK) {
+        return enable_error;
+    }
+    if (voltage_error == ESP_OK) {
+        audio_rail_saved = false;
+    }
+    return voltage_error;
 }
