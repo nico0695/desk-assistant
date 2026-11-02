@@ -10,6 +10,10 @@ endif()
 
 add_library(unity STATIC ${UNITY_DIR}/unity.c)
 target_include_directories(unity PUBLIC ${UNITY_DIR})
+get_filename_component(IDF_COMPONENTS_DIR "${UNITY_DIR}/../../.." ABSOLUTE)
+set(CJSON_DIR "${IDF_COMPONENTS_DIR}/json/cJSON")
+add_library(cjson STATIC ${CJSON_DIR}/cJSON.c)
+target_include_directories(cjson PUBLIC ${CJSON_DIR})
 
 set(COMPONENTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../components)
 
@@ -30,7 +34,9 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/connectivity/src/setup_form.c
     ${COMPONENTS_DIR}/connectivity/src/setup_page.c
     ${COMPONENTS_DIR}/connectivity/src/provision_apply.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_origin.c)
+    ${COMPONENTS_DIR}/bridge/src/bridge_origin.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/board/include
     ${COMPONENTS_DIR}/board/src
@@ -38,7 +44,8 @@ set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/features/settings/include
     ${COMPONENTS_DIR}/connectivity/include
     ${COMPONENTS_DIR}/connectivity/src
-    ${COMPONENTS_DIR}/bridge/include)
+    ${COMPONENTS_DIR}/bridge/include
+    ${COMPONENTS_DIR}/bridge/src)
 
 enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.c)
@@ -47,6 +54,6 @@ foreach(test_source ${TEST_SOURCES})
     add_executable(${test_name} ${test_source} ${HOST_MODULE_SOURCES})
     target_include_directories(${test_name} PRIVATE ${HOST_MODULE_INCLUDE_DIRS})
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Werror)
-    target_link_libraries(${test_name} PRIVATE unity)
+    target_link_libraries(${test_name} PRIVATE unity cjson m)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()

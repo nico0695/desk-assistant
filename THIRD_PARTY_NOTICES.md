@@ -38,6 +38,8 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 
 `components/connectivity/src/wifi_list.*` and `wifi_select.*` adapt the saved-network list and the station selection policy of the author's previous firmware, rewritten as modules with a setup pause and a wake time.
 
+`components/bridge/src/bridge_sse.*` adapts the incremental event stream state, framing and reconnection timing, with strict JSON validation and expanded per-frame budgets.
+
 - Author: Schmidt Nicolás
 - License: none declared in the source repository; same author as this project
 - Source: [slack_bot_esp32 @ 7e84ac0](https://github.com/nico0695/slack_bot_esp32/tree/7e84ac0f4150d0af49f5735fda3c1c50da87ed39/main)
