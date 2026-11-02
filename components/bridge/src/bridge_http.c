@@ -15,6 +15,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "sdkconfig.h"
+
+#if CONFIG_BRIDGE_DIAGNOSTIC_PROBE
+#include "memory_report.h"
+#endif
 
 #define BEARER_PREFIX "Bearer "
 typedef struct {
@@ -233,6 +238,9 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
         response.result = failure_result(&transport);
         goto cleanup;
     }
+#if CONFIG_BRIDGE_DIAGNOSTIC_PROBE
+    memory_report_log("bridge HTTPS open");
+#endif
     if (esp_http_client_fetch_headers(client) < 0) {
         response.result = failure_result(&transport);
         goto cleanup;

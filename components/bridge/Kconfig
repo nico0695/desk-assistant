@@ -16,4 +16,24 @@ menu "Desk Assistant bridge"
         range 1 10
         default 4
 
+    config BRIDGE_DIAGNOSTIC_PROBE
+        bool "Run one read-only bridge memory probe after SSE opens"
+        depends on DESK_MEMORY_DIAGNOSTICS
+        default n
+        help
+            Performs one non-consuming event read on the first SSE connection.
+            Records technical memory checkpoints without logging the response.
+
+    config BRIDGE_DIAGNOSTIC_TASK_STACK_SIZE
+        int "Bridge memory probe task stack size (bytes)"
+        depends on BRIDGE_DIAGNOSTIC_PROBE
+        range 6144 16384
+        default 8192
+
+    config BRIDGE_DIAGNOSTIC_TASK_PRIORITY
+        int "Bridge memory probe task priority"
+        depends on BRIDGE_DIAGNOSTIC_PROBE
+        range 1 10
+        default 3
+
 endmenu

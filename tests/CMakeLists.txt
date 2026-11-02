@@ -78,7 +78,8 @@ add_test(NAME test_bridge_http COMMAND test_bridge_http)
 
 add_executable(test_bridge_service integration/test_bridge_service.c
     ${COMPONENTS_DIR}/bridge/src/bridge_connection.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c ${COMPONENTS_DIR}/ui/src/ui_bridge_status.c)
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c ${COMPONENTS_DIR}/bridge/src/bridge_diagnostic.c
+    ${COMPONENTS_DIR}/ui/src/ui_bridge_status.c)
 target_include_directories(test_bridge_service PRIVATE bridge_service_stubs bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src ${COMPONENTS_DIR}/ui/src)
 target_compile_options(test_bridge_service PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_bridge_service PRIVATE unity cjson m)
@@ -90,3 +91,10 @@ target_include_directories(test_bridge_origin_store PRIVATE bridge_service_stubs
 target_compile_options(test_bridge_origin_store PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_bridge_origin_store PRIVATE unity)
 add_test(NAME test_bridge_origin_store COMMAND test_bridge_origin_store)
+
+add_executable(test_bridge_diagnostic integration/test_bridge_diagnostic.c)
+target_include_directories(test_bridge_diagnostic PRIVATE bridge_diagnostic_stubs bridge_http_stubs
+    ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
+target_compile_options(test_bridge_diagnostic PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_bridge_diagnostic PRIVATE unity)
+add_test(NAME test_bridge_diagnostic COMMAND test_bridge_diagnostic)

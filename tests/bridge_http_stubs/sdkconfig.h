@@ -1,0 +1,2 @@
+#pragma once
+#define CONFIG_BRIDGE_DIAGNOSTIC_PROBE 0

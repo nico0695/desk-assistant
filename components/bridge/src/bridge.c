@@ -4,6 +4,7 @@
 
 #include "bridge_clock.h"
 #include "bridge_connection.h"
+#include "bridge_diagnostic.h"
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
 #include "bridge_stream.h"
@@ -23,6 +24,7 @@ static bridge_online_fn online_callback;
 
 typedef struct {
     uint64_t ticket;
+    const bridge_origin_t *origin;
 } stream_context_t;
 
 static void wake_stream(void)
@@ -81,6 +83,14 @@ static bool stream_current(void *context)
     return current;
 }
 
+static bool diagnostic_current(uint64_t ticket)
+{
+    taskENTER_CRITICAL(&state_lock);
+    bool current = bridge_connection_is_current(&connection, ticket) && connection.stream_open;
+    taskEXIT_CRITICAL(&state_lock);
+    return current;
+}
+
 static bool stream_opened(void *context)
 {
     const stream_context_t *stream = context;
@@ -90,6 +100,7 @@ static bool stream_opened(void *context)
     if (opened) {
         online_callback(true, stream->ticket);
         ESP_LOGI(TAG, "event stream open");
+        bridge_diagnostic_start(stream->origin, stream->ticket, diagnostic_current);
     }
     return opened;
 }
@@ -138,6 +149,7 @@ static void stream_worker(void *unused)
             continue;
         }
         stream_context_t context;
+        context.origin = &origin;
         taskENTER_CRITICAL(&state_lock);
         context.ticket = revision == input_revision ? bridge_connection_begin_stream(&connection) : 0;
         taskEXIT_CRITICAL(&state_lock);
