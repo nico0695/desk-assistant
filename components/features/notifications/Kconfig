@@ -13,4 +13,24 @@ menu "Notifications"
         int "Pending ACK retry delay in milliseconds"
         default 5000
         range 1000 60000
+
+    config NOTIFICATIONS_SOUND_WORKER_STACK_SIZE
+        int "Tone worker stack bytes"
+        default 4096
+        range 3072 8192
+
+    config NOTIFICATIONS_SOUND_WORKER_PRIORITY
+        int "Tone worker priority"
+        default 4
+        range 1 20
+
+    config NOTIFICATIONS_SOUND_WAIT_MS
+        int "Tone wait while audio is owned, in milliseconds"
+        default 50
+        range 10 500
+
+    config NOTIFICATIONS_SOUND_CLEANUP_RETRY_MS
+        int "Tone cleanup retry interval in milliseconds"
+        default 500
+        range 100 5000
 endmenu

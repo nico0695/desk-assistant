@@ -1,6 +1,8 @@
 idf_component_register(SRCS "src/board.c"
                             "src/board_power.c"
                             "src/board_audio.c"
+                            "src/board_tone.c"
+                            "src/audio_arbiter.c"
                             "src/board_battery.c"
                             "src/board_key.c"
                             "src/board_display.c"

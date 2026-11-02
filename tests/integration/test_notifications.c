@@ -10,7 +10,7 @@
 #include "../../components/features/notifications/src/notifications.c"
 
 static notification_state_t durable;
-static unsigned saves, get_calls, acks, posts, holds, releases, publications;
+static unsigned saves, get_calls, acks, posts, holds, releases, publications, tones_enqueued;
 static bool fail_ack, busy_get, fail_save, fail_snooze_transport, deny_external_action, fail_worker_create;
 static unsigned timer_starts;
 static bridge_snooze_result_t fake_snooze_result;
@@ -150,6 +150,7 @@ bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t
 }
 bool recording_external_action_begin(void) { return !deny_external_action; }
 void recording_external_action_end(void) {}
+void notification_sound_enqueue(void) { ++tones_enqueued; }
 
 static void show_view(const notification_view_t *view)
 {
@@ -167,7 +168,7 @@ void setUp(void)
     gate_epoch = 0; generation = arrival_sequence = 0; notice = NOTIFICATION_VIEW_OK;
     view_callback = NULL; gate_callback = NULL;
     notification_state_init(&durable);
-    saves = get_calls = acks = posts = holds = releases = publications = timer_starts = 0;
+    saves = get_calls = acks = posts = holds = releases = publications = tones_enqueued = timer_starts = 0;
     fail_ack = busy_get = fail_save = fail_snooze_transport = deny_external_action = fail_worker_create = false;
     fake_snooze_result = BRIDGE_SNOOZE_SUCCESS;
 }
@@ -182,6 +183,7 @@ static void receipt_is_saved_before_ack_and_close_is_local(void)
     TEST_ASSERT_EQUAL_STRING("", durable.pending_ack);
     TEST_ASSERT_EQUAL_UINT(2, saves);
     TEST_ASSERT_EQUAL_UINT(1, acks);
+    TEST_ASSERT_EQUAL_UINT(1, tones_enqueued);
     TEST_ASSERT_EQUAL_UINT(2, get_calls);
     TEST_ASSERT_EQUAL_UINT(1, holds);
     notifications_close(generation, durable.cards[0].event_id);
@@ -257,7 +259,7 @@ static void snooze_success_closes_locally_once(void)
     TEST_ASSERT_EQUAL_UINT(1, posts);
     TEST_ASSERT_EQUAL_UINT(0, durable.count);
     TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_SNOOZE_CONFIRMED, notice);
-    TEST_ASSERT_EQUAL_STRING("2026-11-02 09:00", snoozed_at_text);
+    TEST_ASSERT_EQUAL_STRING("2026-11-02 09:00 UTC-3", snoozed_at_text);
     notifications_close(generation, "");
     run(NULL);
     TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_OK, notice);
@@ -320,9 +322,11 @@ static void capture_owns_action_slot_before_post(void)
 static void local_time_crosses_previous_month_and_leap_day(void)
 {
     format_local_time("2024-03-01T01:15:00Z");
-    TEST_ASSERT_EQUAL_STRING("2024-02-29 22:15", snoozed_at_text);
+    TEST_ASSERT_EQUAL_STRING("2024-02-29 22:15 UTC-3", snoozed_at_text);
     format_local_time("2026-01-01T00:05:00Z");
-    TEST_ASSERT_EQUAL_STRING("2025-12-31 21:05", snoozed_at_text);
+    TEST_ASSERT_EQUAL_STRING("2025-12-31 21:05 UTC-3", snoozed_at_text);
+    format_local_time("2009-12-31T23:59:00Z");
+    TEST_ASSERT_EQUAL_STRING("2009-12-31 23:59 UTC", snoozed_at_text);
 }
 
 static void worker_creation_failure_keeps_one_snooze_command(void)

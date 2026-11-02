@@ -28,6 +28,11 @@ menu "Desk Assistant board"
         range 5 600
         default 30
 
+    config BOARD_AUDIO_ACQUIRE_WAIT_MS
+        int "Capture wait for a finishing tone in milliseconds"
+        range 100 5000
+        default 1000
+
     config BOARD_BATTERY_TASK_STACK_SIZE
         int "Battery task stack size (bytes)"
         range 1536 8192

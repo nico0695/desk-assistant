@@ -15,6 +15,6 @@
 #define UI_TEXT_NOTIFICATION_SNOOZE_SCHEDULE_CHANGED "Alert time changed. Check it before snoozing."
 #define UI_TEXT_NOTIFICATION_SNOOZE_NOT_SENT "Snooze was not sent. Try again later."
 #define UI_TEXT_NOTIFICATION_SNOOZE_UNCONFIRMED "Snooze not confirmed. The alert may have changed."
-#define UI_TEXT_NOTIFICATION_SNOOZE_CONFIRMED "Snoozed until %s (Argentina)."
+#define UI_TEXT_NOTIFICATION_SNOOZE_CONFIRMED "Snoozed until %s."
 #define UI_TEXT_NOTIFICATION_SNOOZE_CLOSE_PENDING "Snoozed until %s. Close to save locally."
 #define UI_TEXT_NOTIFICATION_OK "OK"

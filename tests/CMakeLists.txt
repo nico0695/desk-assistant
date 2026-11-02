@@ -143,3 +143,16 @@ target_include_directories(test_notifications PRIVATE notifications_stubs bridge
 target_compile_options(test_notifications PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_notifications PRIVATE unity)
 add_test(NAME test_notifications COMMAND test_notifications)
+
+add_executable(test_audio_arbiter integration/test_audio_arbiter.c ${COMPONENTS_DIR}/board/src/audio_arbiter.c)
+target_include_directories(test_audio_arbiter PRIVATE ${COMPONENTS_DIR}/board/src)
+target_compile_options(test_audio_arbiter PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_audio_arbiter PRIVATE unity)
+add_test(NAME test_audio_arbiter COMMAND test_audio_arbiter)
+
+add_executable(test_notification_tones integration/test_notification_tones.c
+    ${COMPONENTS_DIR}/features/notifications/src/notification_tones.c)
+target_include_directories(test_notification_tones PRIVATE ${COMPONENTS_DIR}/features/notifications/src)
+target_compile_options(test_notification_tones PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_notification_tones PRIVATE unity)
+add_test(NAME test_notification_tones COMMAND test_notification_tones)

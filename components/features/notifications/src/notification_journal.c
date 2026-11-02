@@ -7,10 +7,13 @@
 #include "nvs.h"
 #include "storage.h"
 
-#define NOTIFICATION_NAMESPACE "notifications_v1"
+#define NOTIFICATION_NAMESPACE "notif_v1"
 #define NOTIFICATION_KEY "journal"
 #define NOTIFICATION_MAGIC UINT32_C(0x4e4f5446)
 #define NOTIFICATION_VERSION 1U
+
+_Static_assert(sizeof(NOTIFICATION_NAMESPACE) <= NVS_NS_NAME_MAX_SIZE, "notification NVS namespace too long");
+_Static_assert(sizeof(NOTIFICATION_KEY) <= NVS_KEY_NAME_MAX_SIZE, "notification NVS key too long");
 
 typedef struct {
     uint32_t magic;

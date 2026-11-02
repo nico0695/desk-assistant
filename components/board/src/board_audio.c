@@ -13,6 +13,7 @@
 
 #include "board_bus.h"
 #include "board_power.h"
+#include "audio_arbiter.h"
 #include "driver/i2s_std.h"
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
@@ -22,6 +23,7 @@
 #define ADC_ADDRESS 0x40
 #define ADC_SCL_SPEED_HZ 100000
 #define AUDIO_RAIL_SETTLE_MS 10
+#define AUDIO_ACQUIRE_POLL_MS 10U
 #define I2S_MCLK_GPIO GPIO_NUM_19
 #define I2S_BCLK_GPIO GPIO_NUM_20
 #define I2S_WS_GPIO GPIO_NUM_22
@@ -62,6 +64,7 @@ static i2s_chan_handle_t receiver;
 static bool receiver_enabled;
 static bool adc_configured;
 static bool rail_owned;
+static bool arbiter_owned;
 static volatile uint32_t overruns;
 /* Interleaved left/right frames of one read; cleared after each read so no audio stays behind. */
 static int16_t frames[BOARD_AUDIO_BLOCK_SAMPLES * SLOTS_PER_FRAME];
@@ -146,9 +149,16 @@ static esp_err_t add_adc_device(void)
 
 esp_err_t board_audio_start(void)
 {
-    ESP_RETURN_ON_FALSE(receiver == NULL && !adc_configured && !rail_owned, ESP_ERR_INVALID_STATE, TAG,
+    ESP_RETURN_ON_FALSE(receiver == NULL && !adc_configured && !rail_owned && !arbiter_owned,
+                        ESP_ERR_INVALID_STATE, TAG,
                         "already started or not released");
     ESP_RETURN_ON_ERROR(add_adc_device(), TAG, "ES7210 device");
+    for (unsigned waited = 0U; waited <= CONFIG_BOARD_AUDIO_ACQUIRE_WAIT_MS; waited += AUDIO_ACQUIRE_POLL_MS) {
+        if (audio_arbiter_try_capture(board_audio_arbiter())) { arbiter_owned = true; break; }
+        if (waited == CONFIG_BOARD_AUDIO_ACQUIRE_WAIT_MS) break;
+        vTaskDelay(pdMS_TO_TICKS(AUDIO_ACQUIRE_POLL_MS));
+    }
+    ESP_RETURN_ON_FALSE(arbiter_owned, ESP_ERR_TIMEOUT, TAG, "I2S busy");
     overruns = 0;
     rail_owned = true;
     esp_err_t error = board_power_audio_rail_on();
@@ -233,10 +243,19 @@ esp_err_t board_audio_stop(void)
             adc_configured = false;
         }
     }
+    if (arbiter_owned && receiver == NULL && !adc_configured && !rail_owned) {
+        audio_arbiter_release(board_audio_arbiter());
+        arbiter_owned = false;
+    }
     return first;
 }
 
 uint32_t board_audio_overruns(void)
 {
     return overruns;
+}
+
+void board_audio_capture_intent(bool active)
+{
+    audio_arbiter_capture_intent(board_audio_arbiter(), active);
 }

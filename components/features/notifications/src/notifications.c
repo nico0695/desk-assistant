@@ -16,6 +16,7 @@
 #include "freertos/task.h"
 #include "notification_journal.h"
 #include "notification_state.h"
+#include "notification_sound.h"
 #include "recording.h"
 #include "sdkconfig.h"
 
@@ -208,6 +209,11 @@ static void format_local_time(const char *utc)
 {
     unsigned year = decimal(utc, 4U), month = decimal(utc + 5U, 2U), day = decimal(utc + 8U, 2U);
     unsigned hour = decimal(utc + 11U, 2U), minute = decimal(utc + 14U, 2U);
+    if (year < NOTIFICATIONS_LOCAL_TIME_FIRST_YEAR) {
+        (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u UTC",
+                       year % 10000U, month % 100U, day % 100U, hour % 100U, minute % 100U);
+        return;
+    }
     if (hour < NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS) {
         hour += 24U - NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
         if (--day == 0U) {
@@ -215,8 +221,8 @@ static void format_local_time(const char *utc)
             day = days_in_month(year, month);
         }
     } else hour -= NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
-    (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u",
-                   year, month, day, hour, minute);
+    (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u UTC-3",
+                   year % 10000U, month % 100U, day % 100U, hour % 100U, minute % 100U);
 }
 
 static bridge_snooze_result_t send_snooze(const bridge_event_t *event, bridge_snooze_preset_t preset,
@@ -398,6 +404,7 @@ static bool receive_one(void)
         if (saved && received == NOTIFICATION_RECEIVED) {
             ++arrival_sequence;
             publish();
+            notification_sound_enqueue();
         }
     }
     free(candidate);

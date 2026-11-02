@@ -438,7 +438,7 @@ int main(int argc, char **argv)
     write_png(directory, "notification-snooze-unconfirmed");
     notification.notice = NOTIFICATION_VIEW_SNOOZE_CONFIRMED;
     notification.snooze_close_pending = true;
-    strcpy(notification.snoozed_at_text, "2026-11-02 10:00");
+    strcpy(notification.snoozed_at_text, "2026-11-02 10:00 UTC-3");
     ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
     lv_refr_now(display);
     write_png(directory, "notification-snooze-close-pending");

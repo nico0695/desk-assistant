@@ -12,7 +12,7 @@ static esp_err_t write_result;
 
 esp_err_t storage_set_blob(const char *name_space, const char *key, const void *data, size_t size)
 {
-    TEST_ASSERT_EQUAL_STRING("notifications_v1", name_space);
+    TEST_ASSERT_EQUAL_STRING("notif_v1", name_space);
     TEST_ASSERT_EQUAL_STRING("journal", key);
     TEST_ASSERT_TRUE(size <= sizeof(stored));
     memcpy(stored, data, size);
@@ -22,7 +22,7 @@ esp_err_t storage_set_blob(const char *name_space, const char *key, const void *
 
 esp_err_t storage_get_blob(const char *name_space, const char *key, void *data, size_t size)
 {
-    TEST_ASSERT_EQUAL_STRING("notifications_v1", name_space);
+    TEST_ASSERT_EQUAL_STRING("notif_v1", name_space);
     TEST_ASSERT_EQUAL_STRING("journal", key);
     if (stored_size == 0U) return ESP_ERR_NVS_NOT_FOUND;
     if (size != stored_size) return ESP_ERR_INVALID_ARG;

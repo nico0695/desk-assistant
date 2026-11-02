@@ -19,3 +19,9 @@ esp_err_t board_power_audio_rail_on(void);
  * are unpowered. On failure the saved values stay for a retry.
  */
 esp_err_t board_power_audio_rail_restore(bool *powered_off);
+
+/* Prepare ES8311 analog power with PA disabled when originally off, then enable PA after codec setup. */
+esp_err_t board_power_tone_prepare(void);
+esp_err_t board_power_tone_amplifier_on(void);
+/* Restore only ALDO1/ALDO2 bits and voltages changed for the tone; retry after failure. */
+esp_err_t board_power_tone_restore(bool *codec_powered_off);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -29,3 +30,6 @@ esp_err_t board_audio_stop(void);
 
 /* DMA receive-queue overruns since the last start: at least one block of samples was lost. */
 uint32_t board_audio_overruns(void);
+
+/* Reserve capture before its worker starts, so a new tone cannot take I2S0 first. */
+void board_audio_capture_intent(bool active);

@@ -204,6 +204,7 @@ static bool run_capture(void)
     if (error == ESP_OK) {
         error = board_audio_start();
     }
+    board_audio_capture_intent(false);
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "capture start: %s", esp_err_to_name(error));
         report_failed(RECORDING_FAILURE_START, release_and_clear());
@@ -631,6 +632,7 @@ static void start_job(void)
         return;
     }
     ESP_LOGE(TAG, "worker could not start");
+    if (job == RECORDING_JOB_CAPTURE) board_audio_capture_intent(false);
     taskENTER_CRITICAL(&lock);
     recording_state_start_failed(&state);
     taskEXIT_CRITICAL(&lock);
@@ -662,7 +664,15 @@ static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t
 
 void recording_record(uint64_t generation)
 {
-    dispatch(recording_state_record, generation, true);
+    recording_view_t view;
+    taskENTER_CRITICAL(&lock);
+    const bool admitted = !external_action_busy && generation == state.generation &&
+                          state.phase == RECORDING_IDLE && !state.cleanup_pending;
+    if (admitted) board_audio_capture_intent(true);
+    const recording_effect_t effect = admitted ? recording_state_record(&state, generation) : RECORDING_EFFECT_NONE;
+    snapshot(&view);
+    taskEXIT_CRITICAL(&lock);
+    apply_effect(effect, &view);
 }
 
 void recording_send(uint64_t generation)

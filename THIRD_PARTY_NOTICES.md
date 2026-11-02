@@ -26,6 +26,14 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 - License: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
 - Source: [Waveshare board example @ 2945437](https://github.com/waveshareteam/ESP32-C6-Touch-AMOLED-2.16/blob/294543798f1a44e2f2c4d2976522323f2beee11d/02_Example/Arduino-v3.3.3/07_Audio_Test/src/esp_codec_dev/device/es7210/es7210.c)
 
+## ES8311 tone sequence
+
+`components/board/src/board_tone.c` adapts the ES8311 register sequence from Espressif's codec driver through the author's previous firmware (V4). I2S and power ownership are local to this project.
+
+- Authors: Espressif Systems (Shanghai) CO LTD, Schmidt Nicolás
+- License: Apache-2.0 (`LICENSES/Apache-2.0.txt`) for the register sequence
+- Source: [esp-adf es8311 @ release/v2.x](https://github.com/espressif/esp-adf/blob/release/v2.x/components/esp_codec_dev/device/es8311/es8311.c), [slack_bot_esp32 @ 7e84ac0](https://github.com/nico0695/slack_bot_esp32/tree/7e84ac0f4150d0af49f5735fda3c1c50da87ed39/main)
+
 ## AXP2101 register facts
 
 `components/board/src/board_power.c` uses register addresses and bit meanings consulted in XPowersLib and the X-Powers datasheet. No XPowersLib code is included.
@@ -53,6 +61,8 @@ The project is MIT licensed (see `LICENSE`). The pieces below keep their own lic
 `components/bridge/src/bridge_events.c` adapts the strict event response codec from `main/event_codec.c`.
 
 `components/bridge/src/bridge_snooze.c` adapts the Snooze request and response codec from `main/snooze_codec.c`.
+
+`components/features/notifications/src/notification_tones.c` adapts the RAM tone saturation policy from `main/notification_tones.c`.
 
 `components/bridge/src/bridge_sse.*` adapts the incremental event stream state, framing and reconnection timing, with strict JSON validation and expanded per-frame budgets.
 
