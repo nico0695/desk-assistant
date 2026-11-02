@@ -11,20 +11,19 @@
 | 4 | Bridge base | Done (validated 2026-11-01) |
 | 5a | Recording: local capture | Done (validated 2026-11-02) |
 | 5b | Recording: upload and result | Done (validated 2026-11-02) |
-| 6 | Notifications and sound | Next |
-| 7 | Modules: read | Pending |
+| 6 | Notifications and sound | Done (validated 2026-11-02) |
+| 7 | Modules: read | Next |
 | 8 | Modules: actions | Pending |
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 6 — Notifications and sound
+## Active stage: 7 — Modules: read
 
-- **Status:** implementation, 4R review and fixes done; awaiting the user's validation on the final image `25af727` after the push and CI check.
-- **Goal:** durable notifications with coordinated presentation and a tone.
-- **Scope (macro plan):** `limit=1` drain, validation, dedup, persistence before the ACK, a queue of eight and the full-queue case; overlay card with local Next/Close and Snooze from the card; deferral during capture, return to the previous context and panel wake-up; ES8311 tone with a RAM accumulator, capture priority and applied volume.
-- **Carry-overs from stage 2:** apply the stored volume to the tone (0 mutes); a public synchronous `storage` write to persist notifications and ACKs outside the UI.
-- **Carry-overs from stage 5b:** the drain shares the finite HTTP gate with the PUT (up to about 30 s), so tolerate `BUSY` without losing the intent; consume `pending_events` from the SSE parser; heap budget with SSE + PUT + notification GET (measured minimum 63.6 KB with SSE + PUT).
-- **Workflow:** commits, tests, builds and step reviews stay local per step; push and remote verification happen at stage close. Choose any deeper review according to the stage workflow and its risks.
+- **Status:** not started; the stage document and its open definitions come next.
+- **Goal:** Tasks, Notes and Alerts browsable with recoverable memory.
+- **Scope (macro plan):** paged lists, Refresh, a valid empty page, detail by ID, Back with the list kept once; generation tickets for stale results; dates in UTC-3, read errors distinct from empty, busy during capture and upload; memory released on exit.
+- **Open:** body budget (4096 B provisional) to measure.
+- **Carry-overs from stage 6:** Snooze from the Alerts detail belongs to stage 8; the tone-volume intensity and the stage 6 gaps are in `.local/follow-up.md`.
 
 ## Closed stages
 
@@ -35,6 +34,7 @@
 - **4 — Bridge base:** HTTPS client with validated CA/hostname/validity and Bearer only in the header, a clock gate before TLS, the authenticated SSE stream with heartbeat and dead-channel detection plus 5/10/30 s backoff, the status-bar icon driven by IP + SSE, bounded logs and diagnostics for memory and one finite read. Validated on `esp32-02` at `1eb669c`; IP-without-SSE and reconnection were deferred by the user.
 - **5a — Recording: local capture:** ES7210 microphone over I2S (stereo reads keeping MIC1) with the ALDO1 rail saved and restored; PCM16 clip in the audio partition with the WAV header synthesized on read, erased after each attempt and scanned at boot; capture state machine with 0.5–30 s limits, overrun and cleanup failures; recording panel from Home with the screen held on during capture. Validated on `esp32-02` at `0eccb5e`; no 4R review or smoke guide at close by user decision.
 - **5b — Recording: upload and result:** one TLS transport shared by GET, PUT and SSE; assistant codec; the single PUT with the `unsent` boundary and progress windows; a durable attempt record with an origin hold; one-job-at-a-time attempt phases; upload, query, close and discard jobs, the 180 s wait and restore after reboot; reply panel with scroll and notes; Home entry by state. Validated by the user on `esp32-02` at `6c30f19` (green CI on `0474820`); network cut, discard and Check on the board were skipped by the user and are in `.local/follow-up.md`.
+- **6 — Notifications and sound:** a durable FIFO of eight and a pending-ACK journal in one NVS blob; `limit=1` drain on demand with persistence before the ACK and an idempotent ACK retry; an overlay card with local Next and Close, Snooze with presets and a durable close, panel wake-up and deferral during capture; an atomic audio arbiter between capture and playback and an ES8311 tone with a RAM accumulator. Validated by the user on `esp32-02` at `25af727` (green CI on `2396ba9`); the tone intensity does not follow the volume (only 0 mutes), and several cases are deferred in `.local/follow-up.md`.
 
 ## Evidence
 
@@ -146,3 +146,4 @@ Each checkpoint records one entry per image:
   - Known gap: the tone intensity does not change between 5% and 36% (only 0 mutes); deferred in `.local/follow-up.md`.
   - Not run: full queue (8), an ACK interrupted by a network cut, a capture started during a tone, tone at 100%, volume 25%. Covered by host tests except the audio cases.
 - **Reviews:** `standard-code-review` after steps 1–6 (findings fixed in the step substeps). 4R at close: four lenses, 0 severe, 17 warnings and suggestions. Fixed in `25af727`: a command sent while the notification worker exits could stay queued, and both workers could be notified after the lock was released; the tone worker polled NVS while waiting for a capture; the I2S pins were duplicated; the time zone label was a literal. Deferred: unbounded tone cleanup retry, an ACK answered with a permanent error retrying forever, a journal save failing on memory blocking notifications until reboot, single-slot queue in the notification tests, and readability suggestions. Details in `.local/follow-up.md`.
+- **Validation:** the user ran the smoke guide on the final image and reported everything working (2026-11-02).
