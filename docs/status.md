@@ -9,20 +9,21 @@
 | 2 | Storage and settings | Done (validated 2026-11-01) |
 | 3 | Wi-Fi and provisioning | Done (validated 2026-11-01) |
 | 4 | Bridge base | Done (validated 2026-11-01) |
-| 5a | Recording: local capture | Next |
-| 5b | Recording: upload and result | Pending |
+| 5a | Recording: local capture | Done (validated 2026-11-02) |
+| 5b | Recording: upload and result | Next |
 | 6 | Notifications and sound | Pending |
 | 7 | Modules: read | Pending |
 | 8 | Modules: actions | Pending |
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 5a — Recording: local capture
+## Active stage: 5b — Recording: upload and result
 
-- **Status:** steps 1–8 done on 2026-11-02; waiting for user validation. Evidence below. Decisions: audio partition erased after each attempt and scanned at boot; one tap starts capture; Send stays disabled until 5b; KEY does not turn the panel off during capture; audio arbitration in stage 6; I2S stereo keeping the left slot (MIC1), because mono RX delivered both slots at twice the rate on the board.
-- **Goal:** reliable audio capture without depending on the bridge.
-- **Scope (macro plan):** ES7210/I2S, mono PCM16 in the audio partition and WAV synthesized on read; minimum and maximum limits with overrun handling; states through READY_TO_SEND, CANCELLING and local failure; cleanup and blocking on release failures; panel on during capture; recording screen and home entry.
-- **Carry-overs from stage 4:** connect the durable origin guard to recording and notification records in 5b/6. Triage these deferred 4R findings at the next stage and fix only those that are real defects: stalled close-delimited GET reported as OK with a truncated body; TLS/Bearer transport duplicated between `bridge_http` and `bridge_stream`; long `bridge_http_get`; long `bridge_stream_run` and `stream_worker`; unused `BRIDGE_SSE_HEARTBEAT_EXPECTED_MS`; missing host test for the SSE clock gate; missing host test for SSE `Content-Encoding` and duplicate `Content-Type`; unexplained equal-generation tie-break; silent path when NTP never synchronizes. Also in `.local/follow-up.md`: on-device IP-without-SSE and reconnection, and setup open with TLS.
+- **Status:** not planned yet; next step `/stage plan 5b`.
+- **Goal:** the full main flow, with no resends and no loss of identity.
+- **Scope (macro plan):** durable identity before the PUT, one PUT with progress windows and the `unsent` policy; remote states and local uncertainty; queries over SSE, reconnection, Check and the 180 s wait, without polling; terminal result persisted before it is shown; result panel with scroll and `content_omitted`; close, discard with confirmation, recovery after reboot and the home entry by state.
+- **Carry-overs from stage 4:** connect the durable origin guard to the recording record; extract the TLS/Bearer transport shared by `bridge_http` and `bridge_stream` and split the long `bridge_http_get`, `bridge_stream_run` and `stream_worker` (first step); measure the real audio + SSE budget; confirm independently the bridge assumption about incomplete bodies.
+- **Carry-overs from stage 5a:** enable Send in READY_TO_SEND for the upload; review the recording worker stack once it runs HTTP (1648 of 4096 B free during capture today); recording views are computed under the lock and published outside it, so a newer view could in theory be overtaken by an older one (CR-002, recorded without change).
 - **Workflow:** commits, tests, builds and `standard-code-review` stay local per step; push and remote verification happen at stage close. Deeper step reviews need a reason based on size, complexity or risk; stage close uses `4r-review` by default or `judgment-day` when blind corroboration is more useful.
 
 ## Closed stages
@@ -32,6 +33,7 @@
 - **2 — Storage and settings:** NVS storage that never erases, with one write worker; settings for screen timeout, volume and brightness with defaults and per-row errors; Settings screen with live brightness and timeout. Validated on `esp32-02` at `aebffa7`.
 - **3 — Wi-Fi and provisioning:** saved networks (5, most recent first), station selection with the V4 timings, USB provisioning with the host tool, phone setup over a temporary access point with a QR and a small form page, Wi-Fi screen with forget and add dialogs, and the Settings Wi-Fi button. Validated on `esp32-02` at `01ff8b4`; cases deferred by the user are listed in the stage 3 evidence.
 - **4 — Bridge base:** HTTPS client with validated CA/hostname/validity and Bearer only in the header, a clock gate before TLS, the authenticated SSE stream with heartbeat and dead-channel detection plus 5/10/30 s backoff, the status-bar icon driven by IP + SSE, bounded logs and diagnostics for memory and one finite read. Validated on `esp32-02` at `1eb669c`; IP-without-SSE and reconnection were deferred by the user.
+- **5a — Recording: local capture:** ES7210 microphone over I2S (stereo reads keeping MIC1) with the ALDO1 rail saved and restored; PCM16 clip in the audio partition with the WAV header synthesized on read, erased after each attempt and scanned at boot; capture state machine with 0.5–30 s limits, overrun and cleanup failures; recording panel from Home with the screen held on during capture. Validated on `esp32-02` at `0eccb5e`; no 4R review or smoke guide at close by user decision.
 
 ## Evidence
 
