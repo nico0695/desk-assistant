@@ -12,17 +12,17 @@
 | 5a | Recording: local capture | Done (validated 2026-11-02) |
 | 5b | Recording: upload and result | Done (validated 2026-11-02) |
 | 6 | Notifications and sound | Done (validated 2026-11-02) |
-| 7 | Modules: read | Next |
+| 7 | Modules: read | Checkpoint, waiting for validation |
 | 8 | Modules: actions | Pending |
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
 ## Active stage: 7 — Modules: read
 
-- **Status:** in progress. Spec, design and mini plan approved; the read codec, the browsing state, the read worker and the list and detail screens are built and flashed on `esp32-02` (`6c81f34`). Validation with real data is next.
+- **Status:** checkpoint reached. The read codec, the browsing state, the read worker and the list and detail screens are built, reviewed (4R) and flashed on `esp32-02` (`4769531`). Waiting for the user's validation of the smoke guide.
 - **Goal:** Tasks, Notes and Alerts browsable with recoverable memory.
 - **Scope (macro plan):** paged lists, Refresh, a valid empty page, detail by ID, Back with the list kept once; generation tickets for stale results; dates in UTC-3, read errors distinct from empty, busy during capture and upload; memory released on exit.
-- **Open:** body budget (4096 B provisional) to measure.
+- **Open:** body budget (4096 B provisional): the received lengths are logged per read but were not recorded; measure them with real data.
 - **Carry-overs from stage 6:** Snooze from the Alerts detail belongs to stage 8; the tone-volume intensity and the stage 6 gaps are in `.local/follow-up.md`.
 
 ## Closed stages
@@ -147,3 +147,14 @@ Each checkpoint records one entry per image:
   - Not run: full queue (8), an ACK interrupted by a network cut, a capture started during a tone, tone at 100%, volume 25%. Covered by host tests except the audio cases.
 - **Reviews:** `standard-code-review` after steps 1–6 (findings fixed in the step substeps). 4R at close: four lenses, 0 severe, 17 warnings and suggestions. Fixed in `25af727`: a command sent while the notification worker exits could stay queued, and both workers could be notified after the lock was released; the tone worker polled NVS while waiting for a capture; the I2S pins were duplicated; the time zone label was a literal. Deferred: unbounded tone cleanup retry, an ACK answered with a permanent error retrying forever, a journal save failing on memory blocking notifications until reboot, single-slot queue in the notification tests, and readability suggestions. Details in `.local/follow-up.md`.
 - **Validation:** the user ran the smoke guide on the final image and reported everything working (2026-11-02).
+
+### Stage 7 — 2026-11-02
+
+- **Revision:** `4769531` (firmware content; later commits only change documentation), integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `56d244cb604c6b23f120bdd0014f73ec2ad0e23104f688073fb08a3a2ed7b326` (the boot log prints its first 9 digits). Application image 1652720 bytes, 61% of the 4 MB app partition free.
+- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41; `dependencies.lock` unchanged. CI on the close push: pending.
+- **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
+  - Final image `4769531`: boot log shows the version and ELF digits above; heap 166 KB free, minimum 153 KB at UI ready; event stream open 10 s after boot; no errors. Only the boot was observed on this image; the modules were not exercised on it.
+  - Image `6c81f34` (same module logic; the final image only adds tests, a log field and cosmetic UI cleanups): the user opened Tasks, Notes and Alerts with real data and reported everything working. The per-read lengths in the `modules` log were not recorded, so the 4096 B budget stays provisional.
+  - Not run: a network cut or an unconfigured origin during a read, a read refused during a recording or upload, a notification over a module, and a module with more than five items were not individually reported by the user.
+- **Reviews:** `standard-code-review` per step group (findings fixed in `6c81f34`, the V4 attribution and the step 5 UI). 4R at close: four lenses, 0 severe, 14 warnings and suggestions. Fixed in `4769531`: tests for the shared timestamp validator, for the finalizing and cancelling capture phases that block reads and for the refresh and newest-request cases; the read log no longer shows a transport code for reads that were never sent; dead UI parameter, redundant clear, time buffer size and comments. Deferred or discarded with their reason in `.local/stages/07-modulos-lectura.md`.
