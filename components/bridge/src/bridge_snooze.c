@@ -30,22 +30,22 @@ bool bridge_snooze_request(bridge_snooze_preset_t preset, const char *scheduled_
     return length > 0 && (size_t)length < capacity;
 }
 
-bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t length,
+bridge_action_result_t bridge_snooze_decode(int status, const char *body, size_t length,
                                             uint64_t alert_id, char confirmed_at[BRIDGE_EVENT_TIME_SIZE])
 {
     if (confirmed_at != NULL) confirmed_at[0] = '\0';
     if (body == NULL || confirmed_at == NULL || alert_id == 0U || alert_id > UINT64_C(9007199254740991) ||
         length == 0U || length > BRIDGE_EVENT_RESPONSE_MAX_BYTES ||
         !bridge_json_bounded(body, length, 2U, 3U) || !bridge_utf8_valid(body, length))
-        return BRIDGE_SNOOZE_UNCONFIRMED;
+        return BRIDGE_ACTION_UNCONFIRMED;
     char *terminated = malloc(length + 1U);
-    if (terminated == NULL) return BRIDGE_SNOOZE_UNCONFIRMED;
+    if (terminated == NULL) return BRIDGE_ACTION_UNCONFIRMED;
     memcpy(terminated, body, length);
     terminated[length] = '\0';
     cJSON *root = cJSON_ParseWithLengthOpts(terminated, length + 1U, NULL, true);
     free(terminated);
-    if (root == NULL) return BRIDGE_SNOOZE_UNCONFIRMED;
-    bridge_snooze_result_t result = BRIDGE_SNOOZE_UNCONFIRMED;
+    if (root == NULL) return BRIDGE_ACTION_UNCONFIRMED;
+    bridge_action_result_t result = BRIDGE_ACTION_UNCONFIRMED;
     if (status == 200) {
         static const char *const names[] = {"alert_id", "scheduled_at"};
         const cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "alert_id");
@@ -55,7 +55,7 @@ bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t
             cJSON_IsString(time) && time->valuestring != NULL &&
             bridge_time_valid(time->valuestring)) {
             memcpy(confirmed_at, time->valuestring, strlen(time->valuestring) + 1U);
-            result = BRIDGE_SNOOZE_SUCCESS;
+            result = BRIDGE_ACTION_SUCCESS;
         }
     } else {
         static const char *const wrapper[] = {"error"};
@@ -67,16 +67,16 @@ bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t
             cJSON_IsString(code) && cJSON_IsString(message) && code->valuestring != NULL) {
             const char *name = code->valuestring;
             if (status == 409 && strcmp(name, "alert_schedule_changed") == 0)
-                result = BRIDGE_SNOOZE_SCHEDULE_CHANGED;
+                result = BRIDGE_ACTION_CHANGED;
             else if (status == 404 && strcmp(name, "alert_not_found") == 0)
-                result = BRIDGE_SNOOZE_NOT_FOUND;
+                result = BRIDGE_ACTION_NOT_FOUND;
             else if (status == 503 && strcmp(name, "temporarily_unavailable") == 0)
-                result = BRIDGE_SNOOZE_NOT_SENT;
+                result = BRIDGE_ACTION_NOT_SENT;
             else if ((status == 400 && strcmp(name, "invalid_request") == 0) ||
                      (status == 401 && strcmp(name, "unauthorized") == 0) ||
                      (status == 502 && (strcmp(name, "bot_auth_rejected") == 0 ||
                                         strcmp(name, "bot_access_denied") == 0)))
-                result = BRIDGE_SNOOZE_REJECTED;
+                result = BRIDGE_ACTION_REJECTED;
         }
     }
     cJSON_Delete(root);

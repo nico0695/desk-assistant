@@ -252,3 +252,70 @@ bridge_resource_result_t bridge_resource_decode_detail(bridge_resource_kind_t ki
     *result = decoded;
     return BRIDGE_RESOURCE_OK;
 }
+
+bool bridge_resource_complete_path(uint64_t id, char *path, size_t capacity)
+{
+    if (path == NULL || capacity == 0U || id == 0U || id > BRIDGE_RESOURCE_ID_MAX) return false;
+    const int length = snprintf(path, capacity, "/v1/device/tasks/%llu/complete", (unsigned long long)id);
+    return length > 0 && (size_t)length < capacity;
+}
+
+/* An action error decided by the HTTP/code pair. Anything unknown after dispatch may have been applied. */
+static bridge_action_result_t action_error(int status, const cJSON *root, bool complete)
+{
+    static const char *const wrapper[] = {"error"};
+    static const char *const fields[] = {"code", "message"};
+    const cJSON *error = cJSON_GetObjectItemCaseSensitive(root, "error");
+    const cJSON *code = cJSON_GetObjectItemCaseSensitive(error, "code");
+    const cJSON *message = cJSON_GetObjectItemCaseSensitive(error, "message");
+    if (!bridge_json_fields_exact(root, wrapper, 1U) || !bridge_json_fields_exact(error, fields, 2U) ||
+        !cJSON_IsString(code) || code->valuestring == NULL || !cJSON_IsString(message))
+        return BRIDGE_ACTION_UNCONFIRMED;
+    const char *name = code->valuestring;
+    const bool bot_rejection = strcmp(name, "bot_auth_rejected") == 0 || strcmp(name, "bot_access_denied") == 0;
+    /* Complete reads the task before updating it: a failed read means no update was sent. */
+    const bool read_failed = strcmp(name, "upstream_unavailable") == 0 || strcmp(name, "invalid_upstream_response") == 0;
+    if (status == 503 && strcmp(name, "temporarily_unavailable") == 0) return BRIDGE_ACTION_NOT_SENT;
+    if (complete && status == 502 && read_failed) return BRIDGE_ACTION_NOT_SENT;
+    if (status == 404 && strcmp(name, "resource_not_found") == 0) return BRIDGE_ACTION_NOT_FOUND;
+    if (complete && status == 409 && strcmp(name, "task_state_changed") == 0) return BRIDGE_ACTION_CHANGED;
+    if ((status == 400 && strcmp(name, "invalid_request") == 0) || (status == 401 && strcmp(name, "unauthorized") == 0) ||
+        (status == 404 && strcmp(name, "not_found") == 0) || (status == 502 && bot_rejection))
+        return BRIDGE_ACTION_REJECTED;
+    return BRIDGE_ACTION_UNCONFIRMED;
+}
+
+/* Success is exactly {"id": id, <field>: expected}; expected is a string, or NULL for boolean true. */
+static bridge_action_result_t decode_action(uint64_t id, int status, const char *body, size_t length,
+                                            const char *field, const char *expected, bool complete)
+{
+    if (id == 0U || id > BRIDGE_RESOURCE_ID_MAX) return BRIDGE_ACTION_UNCONFIRMED;
+    cJSON *root = parse(body, length);
+    if (root == NULL) return BRIDGE_ACTION_UNCONFIRMED;
+    bridge_action_result_t result = BRIDGE_ACTION_UNCONFIRMED;
+    if (status == 200) {
+        const char *const names[] = {"id", field};
+        const cJSON *value = cJSON_GetObjectItemCaseSensitive(root, field);
+        uint64_t answered = 0U;
+        const bool matches = expected == NULL ? cJSON_IsTrue(value)
+                                              : cJSON_IsString(value) && value->valuestring != NULL &&
+                                                    strcmp(value->valuestring, expected) == 0;
+        if (bridge_json_fields_exact(root, names, 2U) &&
+            safe_integer(cJSON_GetObjectItemCaseSensitive(root, "id"), &answered) && answered == id && matches)
+            result = BRIDGE_ACTION_SUCCESS;
+    } else {
+        result = action_error(status, root, complete);
+    }
+    cJSON_Delete(root);
+    return result;
+}
+
+bridge_action_result_t bridge_resource_decode_delete(uint64_t id, int status, const char *body, size_t length)
+{
+    return decode_action(id, status, body, length, "deleted", NULL, false);
+}
+
+bridge_action_result_t bridge_resource_decode_complete(uint64_t id, int status, const char *body, size_t length)
+{
+    return decode_action(id, status, body, length, "status", "completed", true);
+}

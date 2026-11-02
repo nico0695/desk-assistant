@@ -291,6 +291,66 @@ static void errors_are_classified_by_status_and_code(void)
 #undef ERR
 }
 
+static bridge_action_result_t delete_of(uint64_t id, int status, const char *body)
+{
+    return bridge_resource_decode_delete(id, status, body, strlen(body));
+}
+
+static bridge_action_result_t complete_of(uint64_t id, int status, const char *body)
+{
+    return bridge_resource_decode_complete(id, status, body, strlen(body));
+}
+
+static void action_paths_are_canonical(void)
+{
+    char path[BRIDGE_RESOURCE_PATH_SIZE];
+    TEST_ASSERT_TRUE(bridge_resource_complete_path(7U, path, sizeof(path)));
+    TEST_ASSERT_EQUAL_STRING("/v1/device/tasks/7/complete", path);
+    TEST_ASSERT_FALSE(bridge_resource_complete_path(0U, path, sizeof(path)));
+    TEST_ASSERT_FALSE(bridge_resource_complete_path(BRIDGE_RESOURCE_ID_MAX + 1U, path, sizeof(path)));
+    TEST_ASSERT_FALSE(bridge_resource_complete_path(7U, path, 10U));
+}
+
+static void action_success_is_exact(void)
+{
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_SUCCESS, delete_of(7U, 200, "{\"id\":7,\"deleted\":true}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_SUCCESS, complete_of(7U, 200, "{\"status\":\"completed\",\"id\":7}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 200, "{\"id\":8,\"deleted\":true}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 200, "{\"id\":7,\"deleted\":false}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 200, "{\"id\":7,\"deleted\":true,\"x\":1}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 200, "{\"id\":\"7\",\"deleted\":true}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(7U, 200, "{\"id\":7,\"status\":\"pending\"}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(7U, 200, "{\"id\":7,\"deleted\":true}"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(7U, 200, "{\"id\":7,\"status\":\"completed\""));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(7U, 204, ""));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(0U, 200, "{\"id\":0,\"status\":\"completed\"}"));
+}
+
+static void action_errors_follow_the_status_and_code(void)
+{
+#define ERR(status, code) "{\"error\":{\"code\":\"" code "\",\"message\":\"m\"}}"
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_NOT_SENT, delete_of(7U, 503, ERR(503, "temporarily_unavailable")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_NOT_SENT, complete_of(7U, 503, ERR(503, "temporarily_unavailable")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_NOT_SENT, complete_of(7U, 502, ERR(502, "upstream_unavailable")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_NOT_SENT, complete_of(7U, 502, ERR(502, "invalid_upstream_response")));
+    /* Delete has no read before its mutation: a read failure code there stays uncertain. */
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 502, ERR(502, "upstream_unavailable")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_NOT_FOUND, delete_of(7U, 404, ERR(404, "resource_not_found")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_CHANGED, complete_of(7U, 409, ERR(409, "task_state_changed")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 409, ERR(409, "task_state_changed")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_REJECTED, delete_of(7U, 400, ERR(400, "invalid_request")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_REJECTED, delete_of(7U, 401, ERR(401, "unauthorized")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_REJECTED, delete_of(7U, 404, ERR(404, "not_found")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_REJECTED, complete_of(7U, 502, ERR(502, "bot_auth_rejected")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_REJECTED, delete_of(7U, 502, ERR(502, "bot_access_denied")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 502, ERR(502, "action_unconfirmed")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(7U, 500, ERR(500, "internal_error")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, complete_of(7U, 503, ERR(503, "unauthorized")));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 502, "<html>bad gateway</html>"));
+    TEST_ASSERT_EQUAL(BRIDGE_ACTION_UNCONFIRMED, delete_of(7U, 503, "{\"error\":{\"code\":\"temporarily_unavailable\"}}"));
+#undef ERR
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -310,5 +370,8 @@ int main(void)
     RUN_TEST(alert_detail_requires_unsent);
     RUN_TEST(detail_identity_and_shape_must_match);
     RUN_TEST(errors_are_classified_by_status_and_code);
+    RUN_TEST(action_paths_are_canonical);
+    RUN_TEST(action_success_is_exact);
+    RUN_TEST(action_errors_follow_the_status_and_code);
     return UNITY_END();
 }

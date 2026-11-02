@@ -24,16 +24,16 @@ static void success_requires_exact_identity_and_utc_time(void)
 {
     char confirmed[BRIDGE_EVENT_TIME_SIZE];
     const char *good = "{\"alert_id\":42,\"scheduled_at\":\"2026-11-02T13:00:00Z\"}";
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_SUCCESS,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_SUCCESS,
         bridge_snooze_decode(200, good, strlen(good), 42, confirmed));
     TEST_ASSERT_EQUAL_STRING("2026-11-02T13:00:00Z", confirmed);
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_UNCONFIRMED,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_UNCONFIRMED,
         bridge_snooze_decode(200, good, strlen(good), 43, confirmed));
     TEST_ASSERT_EQUAL_STRING("", confirmed);
     const char *extra = "{\"alert_id\":42,\"scheduled_at\":\"2026-11-02T13:00:00Z\",\"extra\":true}";
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_UNCONFIRMED,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_UNCONFIRMED,
         bridge_snooze_decode(200, extra, strlen(extra), 42, confirmed));
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_UNCONFIRMED,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_UNCONFIRMED,
         bridge_snooze_decode(200, good, strlen(good) - 1U, 42, confirmed));
 }
 
@@ -41,15 +41,15 @@ static void known_errors_are_classified_without_message_text(void)
 {
     char confirmed[BRIDGE_EVENT_TIME_SIZE];
     const char *changed = "{\"error\":{\"code\":\"alert_schedule_changed\",\"message\":\"private\"}}";
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_SCHEDULE_CHANGED,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_CHANGED,
         bridge_snooze_decode(409, changed, strlen(changed), 42, confirmed));
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_UNCONFIRMED,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_UNCONFIRMED,
         bridge_snooze_decode(500, changed, strlen(changed), 42, confirmed));
     const char *missing = "{\"error\":{\"code\":\"alert_not_found\",\"message\":\"private\"}}";
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_NOT_FOUND,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_NOT_FOUND,
         bridge_snooze_decode(404, missing, strlen(missing), 42, confirmed));
     const char *not_sent = "{\"error\":{\"code\":\"temporarily_unavailable\",\"message\":\"private\"}}";
-    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_NOT_SENT,
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_NOT_SENT,
         bridge_snooze_decode(503, not_sent, strlen(not_sent), 42, confirmed));
 }
 

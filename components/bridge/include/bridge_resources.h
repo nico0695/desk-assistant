@@ -55,6 +55,21 @@ typedef enum {
     BRIDGE_RESOURCE_REJECTED,
 } bridge_resource_result_t;
 
+/* Outcome of an action (Delete, Complete or Snooze) once the request was handed to the transport. */
+typedef enum {
+    BRIDGE_ACTION_SUCCESS,
+    /* The bridge did not dispatch it, or the request never reached the bridge: a new explicit action is safe. */
+    BRIDGE_ACTION_NOT_SENT,
+    /* Refused (400, 401, route unavailable or a bot rejection); never a success. */
+    BRIDGE_ACTION_REJECTED,
+    /* 404: absent or inaccessible; it does not prove deletion. */
+    BRIDGE_ACTION_NOT_FOUND,
+    /* The task state or alert time changed: read it again before another action. */
+    BRIDGE_ACTION_CHANGED,
+    /* It may have been applied: read it again before another action, never resend. */
+    BRIDGE_ACTION_UNCONFIRMED,
+} bridge_action_result_t;
+
 /* Strings point into the arena handed to the decoder and live as long as it does. */
 typedef struct {
     uint64_t id;
@@ -107,3 +122,11 @@ bridge_resource_result_t bridge_resource_decode_page(bridge_resource_kind_t kind
 bridge_resource_result_t bridge_resource_decode_detail(bridge_resource_kind_t kind, uint64_t id, int status,
                                                        const char *body, size_t length, char *arena,
                                                        size_t arena_capacity, bridge_resource_detail_t *result);
+
+/* Complete route of a task; Delete uses the detail path of its resource. */
+bool bridge_resource_complete_path(uint64_t id, char *path, size_t capacity);
+
+/* A complete Delete response: success only for exactly {"id": id, "deleted": true}. */
+bridge_action_result_t bridge_resource_decode_delete(uint64_t id, int status, const char *body, size_t length);
+/* A complete Complete response: success only for exactly {"id": id, "status": "completed"}. */
+bridge_action_result_t bridge_resource_decode_complete(uint64_t id, int status, const char *body, size_t length);

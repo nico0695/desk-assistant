@@ -13,7 +13,7 @@ static notification_state_t durable;
 static unsigned saves, get_calls, acks, posts, holds, releases, publications, tones_enqueued;
 static bool fail_ack, busy_get, fail_save, fail_snooze_transport, unsent_snooze, deny_external_action, fail_worker_create;
 static unsigned timer_starts;
-static bridge_snooze_result_t fake_snooze_result;
+static bridge_action_result_t fake_snooze_result;
 static void (*gate_callback)(void);
 
 typedef struct { close_command_t item; bool has_item; } fake_queue_t;
@@ -140,13 +140,13 @@ bool bridge_snooze_request(bridge_snooze_preset_t preset, const char *scheduled_
     TEST_ASSERT_EQUAL_STRING("2026-11-02T12:00:00Z", scheduled_at);
     snprintf(body, capacity, "snooze"); return true;
 }
-bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t length,
+bridge_action_result_t bridge_snooze_decode(int status, const char *body, size_t length,
                                             uint64_t alert_id, char confirmed_at[BRIDGE_EVENT_TIME_SIZE])
 {
     (void)body; (void)length;
     TEST_ASSERT_EQUAL_INT(200, status);
     TEST_ASSERT_EQUAL_UINT64(42, alert_id);
-    if (fake_snooze_result == BRIDGE_SNOOZE_SUCCESS) strcpy(confirmed_at, "2026-11-02T12:00:00Z");
+    if (fake_snooze_result == BRIDGE_ACTION_SUCCESS) strcpy(confirmed_at, "2026-11-02T12:00:00Z");
     return fake_snooze_result;
 }
 bool recording_external_action_begin(void) { return !deny_external_action; }
@@ -171,7 +171,7 @@ void setUp(void)
     notification_state_init(&durable);
     saves = get_calls = acks = posts = holds = releases = publications = tones_enqueued = timer_starts = 0;
     fail_ack = busy_get = fail_save = fail_snooze_transport = unsent_snooze = deny_external_action = fail_worker_create = false;
-    fake_snooze_result = BRIDGE_SNOOZE_SUCCESS;
+    fake_snooze_result = BRIDGE_ACTION_SUCCESS;
 }
 void tearDown(void) {}
 
@@ -287,7 +287,7 @@ static void rejected_snooze_preserves_card(void)
 {
     seed_card();
     TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
-    fake_snooze_result = BRIDGE_SNOOZE_SCHEDULE_CHANGED;
+    fake_snooze_result = BRIDGE_ACTION_CHANGED;
     TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
     run(NULL);
     TEST_ASSERT_EQUAL_UINT(1, durable.count);
