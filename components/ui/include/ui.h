@@ -5,6 +5,7 @@
 
 #include "connectivity_view.h"
 #include "esp_err.h"
+#include "recording.h"
 #include "settings_values.h"
 
 /*
@@ -24,3 +25,6 @@ void ui_apply_stored_setting(settings_id_t id, uint8_t value);
 
 /* Safe from any task and never blocks; the Wi-Fi screen and the Settings button show the latest view (copied). */
 void ui_show_connectivity(const connectivity_view_t *view);
+
+/* Safe from any task and never blocks; the recording panel and the screen hold follow the latest view (copied). */
+void ui_show_recording(const recording_view_t *view);

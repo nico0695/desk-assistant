@@ -125,6 +125,8 @@ esp_err_t board_power_audio_rail_on(void)
     ESP_RETURN_ON_ERROR(read_register(REGISTER_LDO_ENABLE, &saved_ldo_enable), TAG, "LDO enable");
     ESP_RETURN_ON_ERROR(read_register(REGISTER_ALDO1_VOLTAGE, &saved_aldo1_voltage), TAG, "ALDO1 voltage");
     audio_rail_saved = true;
+    ESP_LOGI(TAG, "audio rail on; ALDO1 was %s at step 0x%02x", (saved_ldo_enable & LDO_ALDO1_ENABLE_MASK) ? "on" : "off",
+             (unsigned)(saved_aldo1_voltage & ALDO_VOLTAGE_MASK));
     ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO1_VOLTAGE, ALDO_VOLTAGE_MASK, ALDO_VOLTAGE_3300MV), TAG,
                         "ALDO1 voltage");
     return update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO1_ENABLE_MASK, LDO_ALDO1_ENABLE_MASK);

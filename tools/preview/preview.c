@@ -243,13 +243,13 @@ int main(int argc, char **argv)
     ui_theme_init();
 
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
-    capture(display, ui_home_screen_create(ignore_section), directory, "home");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home");
     ui_status_bar_set_bridge_online(true);
-    capture(display, ui_home_screen_create(ignore_section), directory, "home-wifi-online");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home-wifi-online");
     ui_status_bar_set_bridge_online(false);
-    capture(display, ui_home_screen_create(ignore_section), directory, "home-wifi-offline");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home-wifi-offline");
     ui_status_bar_set_battery((ui_battery_t){.known = false});
-    capture(display, ui_home_screen_create(ignore_section), directory, "home-battery-unknown");
+    capture(display, ui_home_screen_create(ignore_section, ignore_back), directory, "home-battery-unknown");
     ui_status_bar_set_battery((ui_battery_t){.known = true, .percent = SAMPLE_BATTERY_PERCENT});
     capture(display, ui_section_screen_create(UI_SECTION_TASKS, ignore_back), directory, "section");
     capture(display, create_latin1_sample(), directory, "latin1-sample");

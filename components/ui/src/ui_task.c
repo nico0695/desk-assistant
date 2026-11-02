@@ -14,6 +14,7 @@
 #include "ui_display_port.h"
 #include "ui_bridge_status.h"
 #include "ui_navigation.h"
+#include "ui_recording_control.h"
 #include "ui_settings_control.h"
 #include "ui_status_bar.h"
 #include "ui_theme.h"
@@ -35,6 +36,7 @@ enum {
     EVENT_SETTINGS_CHANGED = 1U << 3,
     EVENT_CONNECTIVITY = 1U << 4,
     EVENT_BRIDGE = 1U << 5,
+    EVENT_RECORDING = 1U << 6,
 };
 
 static const char *TAG = "ui";
@@ -253,6 +255,10 @@ static void run(void *unused)
         if (events & EVENT_CONNECTIVITY) {
             ui_wifi_control_take_view();
         }
+        if (events & EVENT_RECORDING) {
+            ui_recording_control_take_view();
+        }
+        screen_power_set_held(&screen, ui_recording_control_holds_screen(), now_ms);
         uint32_t screen_events = 0;
         if (ui_display_port_take_touch_activity()) {
             screen_events |= SCREEN_EVENT_TOUCH;
@@ -310,5 +316,13 @@ void ui_show_connectivity(const connectivity_view_t *view)
     ui_wifi_control_store_view(view);
     if (ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_CONNECTIVITY, eSetBits);
+    }
+}
+
+void ui_show_recording(const recording_view_t *view)
+{
+    ui_recording_control_store_view(view);
+    if (ui_task != NULL) {
+        xTaskNotify(ui_task, EVENT_RECORDING, eSetBits);
     }
 }

@@ -9,6 +9,7 @@
 #include "esp_system.h"
 #include "memory_report.h"
 #include "nvs.h"
+#include "recording.h"
 #include "settings.h"
 #include "storage.h"
 #include "ui.h"
@@ -71,6 +72,7 @@ void app_main(void)
         ESP_LOGE(TAG, "board init failed: %s", esp_err_to_name(board_error));
     } else {
         ESP_ERROR_CHECK_WITHOUT_ABORT(ui_start(&settings));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(recording_start(ui_show_recording));
         ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(show_battery, NULL));
     }
     ESP_ERROR_CHECK_WITHOUT_ABORT(bridge_start(ui_show_bridge_online));

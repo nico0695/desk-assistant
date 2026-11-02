@@ -1,0 +1,39 @@
+menu "Desk Assistant recording"
+
+    config RECORDING_WORKER_STACK_SIZE
+        int "Recording worker stack size (bytes)"
+        range 3072 16384
+        default 4096
+        help
+            The worker exists only during the boot cleanup, a capture or a cancellation.
+
+    config RECORDING_WORKER_PRIORITY
+        int "Recording worker priority"
+        range 1 20
+        default 5
+        help
+            Above the UI and the event stream so I2S reads keep up with the microphone.
+
+    config RECORDING_READ_TIMEOUT_MS
+        int "Microphone block read timeout (ms)"
+        range 20 1000
+        default 100
+        help
+            A block arrives every 16 ms; a longer wait means the capture stalled.
+
+    config RECORDING_WARMUP_MS
+        int "Discarded audio at capture start (ms)"
+        range 0 500
+        default 100
+        help
+            The ADC output settles after power-up; this audio is read and dropped.
+
+    config RECORDING_DURATION_GUARD_MS
+        int "Capture wall-time margin over the maximum duration (ms)"
+        range 500 10000
+        default 2000
+        help
+            A capture still running after the maximum duration plus this margin is
+            treated as interrupted.
+
+endmenu

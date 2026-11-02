@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "ui_home.h"
+#include "ui_recording_control.h"
 #include "ui_section.h"
 #include "ui_settings_control.h"
 #include "ui_wifi_control.h"
@@ -62,10 +63,30 @@ static void request_section(ui_section_t section)
     lv_async_call(show_section, (void *)(uintptr_t)section);
 }
 
+static void leave_recording(void)
+{
+    lv_async_call(show_home, NULL);
+}
+
+static void show_recording(void *unused)
+{
+    (void)unused;
+    lv_obj_t *panel = ui_recording_control_open(leave_recording);
+    if (panel != NULL) {
+        replace_active_screen(panel);
+    }
+}
+
+static void request_recording(lv_event_t *event)
+{
+    (void)event;
+    lv_async_call(show_recording, NULL);
+}
+
 static void show_home(void *unused)
 {
     (void)unused;
-    replace_active_screen(ui_home_screen_create(request_section));
+    replace_active_screen(ui_home_screen_create(request_section, request_recording));
 }
 
 void ui_navigation_start(void)

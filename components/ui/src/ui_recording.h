@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "lvgl.h"
-#include "recording.h"
+#include "recording_view.h"
 
 /* Each command carries the generation of the view the user saw. */
 typedef struct {

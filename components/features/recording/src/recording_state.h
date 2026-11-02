@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "recording.h"
+#include "recording_view.h"
 
 /* Pure attempt state. The owner applies the returned effect and reports worker outcomes back. */
 typedef struct {

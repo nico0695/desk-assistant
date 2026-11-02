@@ -57,7 +57,7 @@ static void create_section_grid(lv_obj_t *content)
     }
 }
 
-lv_obj_t *ui_home_screen_create(ui_open_section_cb_t on_open_section)
+lv_obj_t *ui_home_screen_create(ui_open_section_cb_t on_open_section, lv_event_cb_t on_record)
 {
     open_section_callback = on_open_section;
     lv_obj_t *screen = ui_screen_create();
@@ -68,6 +68,7 @@ lv_obj_t *ui_home_screen_create(ui_open_section_cb_t on_open_section)
     lv_obj_set_size(record, lv_pct(100), UI_PRIMARY_BUTTON_HEIGHT_PX);
     lv_obj_set_style_text_font(record, ui_theme_font(UI_FONT_TITLE), LV_PART_MAIN);
     add_record_dot(record);
+    lv_obj_add_event_cb(record, on_record, LV_EVENT_CLICKED, NULL);
 
     create_section_grid(content);
     return screen;

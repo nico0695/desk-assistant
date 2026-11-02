@@ -6,7 +6,7 @@
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "recording.h"
+#include "recording_view.h"
 
 #define CLIP_PARTITION_LABEL "audio_tmp"
 #define CLIP_PARTITION_SUBTYPE 0x40

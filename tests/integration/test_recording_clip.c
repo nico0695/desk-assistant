@@ -3,7 +3,7 @@
 
 #include "esp_partition.h"
 #include "freertos/task.h"
-#include "recording.h"
+#include "recording_view.h"
 #include "recording_clip.h"
 #include "unity.h"
 
