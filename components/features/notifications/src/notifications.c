@@ -76,17 +76,16 @@ static void run(void *unused);
 
 static void schedule(bool drain)
 {
-    TaskHandle_t active;
     bool create = false;
     taskENTER_CRITICAL(&lock);
     if (drain) drain_requested = true;
-    active = worker;
-    if (active == NULL && !starting) {
+    /* Notified under the lock: the worker clears its handle under the same lock before it deletes itself. */
+    if (worker != NULL) xTaskNotifyGive(worker);
+    else if (!starting) {
         starting = true;
         create = true;
     }
     taskEXIT_CRITICAL(&lock);
-    if (active != NULL) xTaskNotifyGive(active);
     if (!create) return;
     TaskHandle_t created = NULL;
     if (xTaskCreate(run, WORKER_NAME, CONFIG_NOTIFICATIONS_WORKER_STACK_SIZE, NULL,
@@ -221,7 +220,7 @@ static void format_local_time(const char *utc)
             day = days_in_month(year, month);
         }
     } else hour -= NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
-    (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u UTC-3",
+    (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u " NOTIFICATIONS_LOCAL_ZONE_LABEL,
                    year % 10000U, month % 100U, day % 100U, hour % 100U, minute % 100U);
 }
 
@@ -462,9 +461,9 @@ static void run(void *unused)
                 continue;
             }
         }
-        const bool queued = uxQueueMessagesWaiting(commands) != 0U;
         taskENTER_CRITICAL(&lock);
-        const bool again = queued || (drain_requested && !waiting_gate && !uncertain && stream_online &&
+        /* Counted under the lock so a command sent just before the exit is never stranded. */
+        const bool again = uxQueueMessagesWaiting(commands) != 0U || (drain_requested && !waiting_gate && !uncertain && stream_online &&
                                       state.count < BRIDGE_EVENT_QUEUE_CAPACITY);
         if (!again) worker = NULL;
         taskEXIT_CRITICAL(&lock);

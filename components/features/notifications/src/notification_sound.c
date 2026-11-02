@@ -26,19 +26,12 @@ static void run(void *unused)
         if (!pending) worker = NULL;
         taskEXIT_CRITICAL(&lock);
         if (!pending) break;
-        settings_loaded_t settings;
-        settings_load(&settings);
-        if (settings.values[SETTINGS_VOLUME] == 0U) {
-            taskENTER_CRITICAL(&lock);
-            (void)notification_tones_take(&tones);
-            taskEXIT_CRITICAL(&lock);
-            continue;
-        }
         if (!board_tone_try_claim()) {
             vTaskDelay(pdMS_TO_TICKS(CONFIG_NOTIFICATIONS_SOUND_WAIT_MS));
             continue;
         }
-        /* The stored value may have changed while this tone waited for a capture. */
+        /* The volume is read once the tone owns the audio, so a wait for a capture does not poll NVS. */
+        settings_loaded_t settings;
         settings_load(&settings);
         taskENTER_CRITICAL(&lock);
         (void)notification_tones_take(&tones);
@@ -57,14 +50,13 @@ static void run(void *unused)
 
 void notification_sound_enqueue(void)
 {
-    TaskHandle_t active;
     bool create = false;
     taskENTER_CRITICAL(&lock);
     notification_tones_add(&tones);
-    active = worker;
-    if (active == NULL && !starting) { starting = true; create = true; }
+    /* Notified under the lock: the worker clears its handle under the same lock before it deletes itself. */
+    if (worker != NULL) xTaskNotifyGive(worker);
+    else if (!starting) { starting = true; create = true; }
     taskEXIT_CRITICAL(&lock);
-    if (active != NULL) { xTaskNotifyGive(active); return; }
     if (!create) return;
     TaskHandle_t created = NULL;
     if (xTaskCreate(run, SOUND_WORKER_NAME, CONFIG_NOTIFICATIONS_SOUND_WORKER_STACK_SIZE, NULL,

@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "board_bus.h"
+#include "board_i2s_pins.h"
 #include "board_power.h"
 #include "audio_arbiter.h"
 #include "driver/i2s_std.h"
@@ -24,10 +25,6 @@
 #define ADC_SCL_SPEED_HZ 100000
 #define AUDIO_RAIL_SETTLE_MS 10
 #define AUDIO_ACQUIRE_POLL_MS 10U
-#define I2S_MCLK_GPIO GPIO_NUM_19
-#define I2S_BCLK_GPIO GPIO_NUM_20
-#define I2S_WS_GPIO GPIO_NUM_22
-#define I2S_DIN_GPIO GPIO_NUM_21
 #define BYTES_PER_SAMPLE sizeof(int16_t)
 #define SLOTS_PER_FRAME 2U
 #define BYTES_PER_FRAME (SLOTS_PER_FRAME * BYTES_PER_SAMPLE)
@@ -119,11 +116,11 @@ static esp_err_t start_receiver(void)
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg =
             {
-                .mclk = I2S_MCLK_GPIO,
-                .bclk = I2S_BCLK_GPIO,
-                .ws = I2S_WS_GPIO,
+                .mclk = BOARD_I2S_MCLK_GPIO,
+                .bclk = BOARD_I2S_BCLK_GPIO,
+                .ws = BOARD_I2S_WS_GPIO,
                 .dout = I2S_GPIO_UNUSED,
-                .din = I2S_DIN_GPIO,
+                .din = BOARD_I2S_DIN_GPIO,
             },
     };
     ESP_RETURN_ON_ERROR(i2s_channel_init_std_mode(receiver, &config), TAG, "I2S mode");

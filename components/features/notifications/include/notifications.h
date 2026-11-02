@@ -8,6 +8,7 @@
 typedef void (*notification_view_fn)(const notification_view_t *view);
 
 #define NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS 3U
+#define NOTIFICATIONS_LOCAL_ZONE_LABEL "UTC-3"
 #define NOTIFICATIONS_LOCAL_TIME_FIRST_YEAR 2010U
 
 /* Restore durable work before opening the bridge stream. Publishes a copied view from the owner task. */

@@ -10,6 +10,7 @@
 #include "audio_arbiter.h"
 #include "board_audio.h"
 #include "board_bus.h"
+#include "board_i2s_pins.h"
 #include "board_power.h"
 #include "driver/i2s_std.h"
 #include "esp_log.h"
@@ -140,8 +141,8 @@ static esp_err_t start_transmitter(void)
     const i2s_std_config_t config = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(BOARD_AUDIO_SAMPLE_RATE_HZ),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
-        .gpio_cfg = {.mclk = GPIO_NUM_19, .bclk = GPIO_NUM_20, .ws = GPIO_NUM_22,
-                     .dout = GPIO_NUM_23, .din = I2S_GPIO_UNUSED},
+        .gpio_cfg = {.mclk = BOARD_I2S_MCLK_GPIO, .bclk = BOARD_I2S_BCLK_GPIO, .ws = BOARD_I2S_WS_GPIO,
+                     .dout = BOARD_I2S_DOUT_GPIO, .din = I2S_GPIO_UNUSED},
     };
     error = i2s_channel_init_std_mode(transmitter, &config);
     if (error == ESP_OK) error = i2s_channel_enable(transmitter);
