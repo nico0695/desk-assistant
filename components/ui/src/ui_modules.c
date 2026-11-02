@@ -21,6 +21,8 @@
 #define TITLE_SIZE 32
 #define DATE_SIZE 48
 #define ID_SIZE 24
+/* Status line, three dates, sent line and the ID, each with its label. */
+#define FACTS_SIZE 384
 
 /* State of the open screen; cleared when it is deleted. */
 static const ui_modules_handlers_t *handlers;
@@ -260,7 +262,8 @@ static void show_list(void)
     if (shown.status == MODULES_LOADING) show_message(UI_TEXT_MODULES_LOADING, NULL);
     else if (shown.status == MODULES_FAILED) show_failure();
     else if (handlers->read_page == NULL || !handlers->read_page(shown.ticket, show_rows, NULL))
-        show_message(UI_TEXT_MODULES_EMPTY, NULL);
+        /* The view is already stale and a newer one follows: neither empty nor failed. */
+        show_message(UI_TEXT_MODULES_LOADING, NULL);
     snprintf(title_text, sizeof(title_text), UI_TEXT_MODULES_PAGE_TITLE_FORMAT, module_title(shown.kind),
              (unsigned)shown.page);
     ui_status_bar_set_title(title_text);
@@ -272,12 +275,20 @@ static void add_meta_line(char *meta, size_t capacity, const char *format, const
     snprintf(meta + used, capacity - used, format, value);
 }
 
+static lv_obj_t *create_fact_label(void)
+{
+    lv_obj_t *facts = create_label(content, UI_FONT_SECONDARY, LV_TEXT_ALIGN_LEFT);
+    lv_obj_add_style(facts, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
+    lv_obj_set_style_text_line_space(facts, FACT_LINE_SPACE_PX, LV_PART_MAIN);
+    return facts;
+}
+
 static void show_detail_content(const bridge_resource_detail_t *detail, void *unused)
 {
     (void)unused;
-    char meta[512] = "";
+    /* Only bounded values go here: dates, status and the ID. Free text has a label of its own. */
+    char meta[FACTS_SIZE] = "";
     char date[DATE_SIZE], id[ID_SIZE];
-    const char *tag = detail->tag != NULL ? detail->tag : UI_TEXT_MODULES_NOT_AVAILABLE;
     snprintf(id, sizeof(id), "%llu", (unsigned long long)detail->id);
 
     lv_obj_t *heading = create_label(content, UI_FONT_TITLE, LV_TEXT_ALIGN_LEFT);
@@ -288,7 +299,7 @@ static void show_detail_content(const bridge_resource_detail_t *detail, void *un
         lv_label_set_text(description, detail->description);
         supported = supported && ui_text_support_covers(ui_theme_font(UI_FONT_BODY), detail->description);
     }
-    if (detail->tag != NULL) supported = supported && ui_text_support_covers(ui_theme_font(UI_FONT_SECONDARY), tag);
+    if (detail->tag != NULL) supported = supported && ui_text_support_covers(ui_theme_font(UI_FONT_SECONDARY), detail->tag);
     if (!supported) {
         lv_obj_t *note = create_label(content, UI_FONT_SECONDARY, LV_TEXT_ALIGN_LEFT);
         lv_obj_set_style_text_color(note, lv_color_hex(UI_COLOR_WARNING_TEXT), LV_PART_MAIN);
@@ -310,12 +321,12 @@ static void show_detail_content(const bridge_resource_detail_t *detail, void *un
         format_date(detail->updated_at, date);
         add_meta_line(meta, sizeof(meta), UI_TEXT_MODULES_DETAIL_UPDATED "\n", date);
     }
-    if (detail->kind != BRIDGE_RESOURCE_ALERTS) add_meta_line(meta, sizeof(meta), UI_TEXT_MODULES_DETAIL_TAG "\n", tag);
     add_meta_line(meta, sizeof(meta), UI_TEXT_MODULES_DETAIL_ID, id);
-    lv_obj_t *facts = create_label(content, UI_FONT_SECONDARY, LV_TEXT_ALIGN_LEFT);
-    lv_obj_add_style(facts, &ui_theme_styles()->text_secondary, LV_PART_MAIN);
-    lv_obj_set_style_text_line_space(facts, FACT_LINE_SPACE_PX, LV_PART_MAIN);
-    lv_label_set_text(facts, meta);
+    lv_label_set_text(create_fact_label(), meta);
+    if (detail->kind == BRIDGE_RESOURCE_ALERTS) return;
+    /* The tag has no length limit in the contract: it wraps in its own label and is never cut. */
+    lv_obj_t *tag = create_fact_label();
+    lv_label_set_text_fmt(tag, UI_TEXT_MODULES_DETAIL_TAG, detail->tag != NULL ? detail->tag : UI_TEXT_MODULES_NOT_AVAILABLE);
 }
 
 static void show_detail(void)
@@ -323,7 +334,7 @@ static void show_detail(void)
     if (shown.status == MODULES_LOADING) show_message(UI_TEXT_MODULES_LOADING, NULL);
     else if (shown.status == MODULES_FAILED) show_failure();
     else if (handlers->read_detail == NULL || !handlers->read_detail(shown.ticket, show_detail_content, NULL))
-        show_message(UI_TEXT_MODULES_ERROR_INVALID, NULL);
+        show_message(UI_TEXT_MODULES_LOADING, NULL);
     ui_status_bar_set_title(module_title(shown.kind));
 }
 

@@ -462,7 +462,7 @@ static void capture_module_details(lv_display_t *display, const char *directory)
 
     sample_detail_base(BRIDGE_RESOURCE_TASKS, 52, "Llamar al proveedor");
     sample_detail.description = LONG_DESCRIPTION;
-    sample_detail.tag = "work";
+    sample_detail.tag = "work-with-a-very-long-tag-name-that-wraps-over-several-lines-and-must-never-be-cut-short-by-the-screen";
     sample_detail.task_status = BRIDGE_TASK_IN_PROGRESS;
     snprintf(sample_detail.when_at, sizeof(sample_detail.when_at), "2026-11-03T12:00:00Z");
     capture(display, create_modules(&detail), directory, "modules-detail-task");
