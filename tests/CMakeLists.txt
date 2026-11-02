@@ -29,6 +29,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/features/settings/src/settings_values.c
     ${COMPONENTS_DIR}/features/settings/src/settings_row.c
     ${COMPONENTS_DIR}/features/recording/src/recording_state.c
+    ${COMPONENTS_DIR}/features/notifications/src/notification_state.c
     ${COMPONENTS_DIR}/connectivity/src/wifi_list.c
     ${COMPONENTS_DIR}/connectivity/src/wifi_select.c
     ${COMPONENTS_DIR}/connectivity/src/setup_credentials.c
@@ -51,6 +52,7 @@ set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/features/settings/include
     ${COMPONENTS_DIR}/features/recording/include
     ${COMPONENTS_DIR}/features/recording/src
+    ${COMPONENTS_DIR}/features/notifications/include
     ${COMPONENTS_DIR}/connectivity/include
     ${COMPONENTS_DIR}/connectivity/src
     ${COMPONENTS_DIR}/bridge/include
@@ -119,3 +121,14 @@ target_include_directories(test_recording_record PRIVATE recording_record_stubs 
 target_compile_options(test_recording_record PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_recording_record PRIVATE unity)
 add_test(NAME test_recording_record COMMAND test_recording_record)
+
+add_executable(test_notification_journal integration/test_notification_journal.c
+    ${COMPONENTS_DIR}/features/notifications/src/notification_journal.c
+    ${COMPONENTS_DIR}/features/notifications/src/notification_state.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_events.c ${COMPONENTS_DIR}/bridge/src/bridge_text.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
+target_include_directories(test_notification_journal PRIVATE recording_record_stubs bridge_http_stubs
+    ${COMPONENTS_DIR}/features/notifications/include ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
+target_compile_options(test_notification_journal PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_notification_journal PRIVATE unity cjson m)
+add_test(NAME test_notification_journal COMMAND test_notification_journal)

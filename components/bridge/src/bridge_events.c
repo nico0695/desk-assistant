@@ -40,8 +40,9 @@ static bool timestamp_valid(const char *text)
            digits(text + 17U, 2U) < 60U;
 }
 
-static bool event_valid(const bridge_event_t *event)
+bool bridge_event_valid(const bridge_event_t *event)
 {
+    if (event == NULL) return false;
     const size_t length = strnlen(event->message, sizeof(event->message));
     return bridge_uuid_valid(event->event_id) && event->alert_id > 0U &&
            event->alert_id <= UINT64_C(9007199254740991) && length <= BRIDGE_EVENT_MESSAGE_MAX_BYTES &&
@@ -224,7 +225,7 @@ bridge_event_decode_t bridge_event_decode(const char *body, size_t length, int h
                                 decoded.scheduled_at, sizeof(decoded.scheduled_at)) &&
                     copy_string(cJSON_GetObjectItemCaseSensitive(item, "triggered_at"),
                                 decoded.triggered_at, sizeof(decoded.triggered_at)) &&
-                    event_valid(&decoded);
+                    bridge_event_valid(&decoded);
         }
     }
     if (valid) {
