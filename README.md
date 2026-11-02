@@ -45,7 +45,21 @@ idf.py -B build-app -D SDKCONFIG="$PWD/build-app/sdkconfig" \
 
 ## Provisioning
 
-Wi-Fi and bridge provisioning will be documented with the connectivity stage.
+Export ESP-IDF first to use its Python and pyserial. Verify the port and chip before operating the device, and close any serial monitor using that port.
+
+```sh
+python tools/provision.py --port PORT
+```
+
+The tool prompts privately for the Wi-Fi network, password, HTTPS bridge base URL and device token, and asks for the screen timeout. To update only the bridge URL and token, preserving Wi-Fi and settings:
+
+```sh
+python tools/provision.py --port PORT --bridge-only
+```
+
+`--env-file PATH` reads an owner-only regular file outside the repository instead of prompting. Full configuration accepts `WIFI_SSID`, `WIFI_PASSWORD`, `BRIDGE_URL`, `DEVICE_TOKEN` and `SCREEN_TIMEOUT` as `KEY=value` lines. Bridge-only files contain exactly `BRIDGE_URL` and `DEVICE_TOKEN`. Keep credentials out of command arguments and Git. A successful reply confirms storage, not bridge availability; remote bridge communication starts in stage 4.
+
+For Wi-Fi setup from a phone, open Settings → Wi-Fi → Add network. Join the temporary access point using the QR code or the credentials shown on the device, then open `http://192.168.4.1` and submit the network name and password. This form changes Wi-Fi only. Setup opens automatically on boot without saved networks; Back leaves it running and Cancel setup closes it.
 
 ## License
 

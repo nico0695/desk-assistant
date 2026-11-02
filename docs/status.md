@@ -8,7 +8,7 @@
 | 1 | Board and base UI | Done (validated 2026-11-01) |
 | 2 | Storage and settings | Done (validated 2026-11-01) |
 | 3 | Wi-Fi and provisioning | Done (validated 2026-11-01) |
-| 4 | Bridge base | Next |
+| 4 | Bridge base | Planning |
 | 5a | Recording: local capture | Pending |
 | 5b | Recording: upload and result | Pending |
 | 6 | Notifications and sound | Pending |
@@ -20,7 +20,11 @@
 ## Active stage: 4 — Bridge base
 
 - **Goal:** HTTPS client and SSE stream to the bridge, with the Wi-Fi status icon following the connection.
-- **Progress:** not started; the stage spec comes first.
+- **Progress:** planning. The stage spec, proposed design and mini plan are in `.local/stages/04-bridge-base.md`; the test bridge definition is awaiting the user's answer. Technical definitions and design approval are still pending. No stage 4 firmware has been implemented.
+- **Carry-overs:** wire IP + SSE to the status bar and measure TLS heap, largest block, task stacks and the LVGL pool. The durable origin guard will be connected to recording and notification records in stages 5b/6.
+- **Readiness check (2026-11-01):** initial worktree clean; local and remote `main` at `cf5fb57`. Host tests passed 16/16; the documented integrated build completed without warnings (incremental, 1348048-byte image, 68% of the app partition free); `dependencies.lock` unchanged. IDF 5.5.2 and LVGL 9.2.2 remain pinned.
+- **CI:** [run 41363321701](https://github.com/nico0695/desk-assistant/actions/runs/41363321701) passed on the latest firmware revision, `01ff8b4`. Only `docs/status.md` changed between that revision and `cf5fb57`; Markdown-only commits do not trigger CI.
+- **Hardware:** no new flash, reset or serial session during this readiness check. The stage 3 partial evidence and user-deferred cases below still apply.
 
 ## Closed stages
 
