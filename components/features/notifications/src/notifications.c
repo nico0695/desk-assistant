@@ -94,6 +94,10 @@ static void schedule(bool drain)
         starting = false;
         taskEXIT_CRITICAL(&lock);
         ESP_LOGE(TAG, "worker unavailable");
+        if (retry_timer != NULL) {
+            (void)esp_timer_stop(retry_timer);
+            (void)esp_timer_start_once(retry_timer, (uint64_t)CONFIG_NOTIFICATIONS_ACK_RETRY_MS * 1000U);
+        }
         return;
     }
     taskENTER_CRITICAL(&lock);
@@ -467,7 +471,7 @@ esp_err_t notifications_start(notification_view_fn on_view)
     if (on_view == NULL || view_callback != NULL) return ESP_ERR_INVALID_ARG;
     commands = xQueueCreate(COMMAND_QUEUE_LENGTH, sizeof(close_command_t));
     if (commands == NULL) return ESP_ERR_NO_MEM;
-    const esp_timer_create_args_t timer = {.callback = retry_timer_fired, .name = "notification_ack"};
+    const esp_timer_create_args_t timer = {.callback = retry_timer_fired, .name = "notification_retry"};
     if (esp_timer_create(&timer, &retry_timer) != ESP_OK) {
         vQueueDelete(commands);
         commands = NULL;

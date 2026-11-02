@@ -19,7 +19,7 @@
 
 ## Active stage: 6 — Notifications and sound
 
-- **Status:** design and mini plan approved on 2026-11-02; implementation in progress. Steps 1–4 (bridge contract/signals, durable FIFO, overlay preview, event drain and ACK) verified locally; steps 5–7 remain.
+- **Status:** design and mini plan approved on 2026-11-02; implementation in progress. Steps 1–5 (bridge contract/signals, durable FIFO, overlay preview, event drain and ACK, Snooze) verified locally; steps 6–7 remain.
 - **Goal:** durable notifications with coordinated presentation and a tone.
 - **Scope (macro plan):** `limit=1` drain, validation, dedup, persistence before the ACK, a queue of eight and the full-queue case; overlay card with local Next/Close and Snooze from the card; deferral during capture, return to the previous context and panel wake-up; ES8311 tone with a RAM accumulator, capture priority and applied volume.
 - **Carry-overs from stage 2:** apply the stored volume to the tone (0 mutes); a public synchronous `storage` write to persist notifications and ACKs outside the UI.

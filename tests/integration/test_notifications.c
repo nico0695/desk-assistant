@@ -11,7 +11,8 @@
 
 static notification_state_t durable;
 static unsigned saves, get_calls, acks, posts, holds, releases, publications;
-static bool fail_ack, busy_get, fail_save, fail_snooze_transport, deny_external_action;
+static bool fail_ack, busy_get, fail_save, fail_snooze_transport, deny_external_action, fail_worker_create;
+static unsigned timer_starts;
 static bridge_snooze_result_t fake_snooze_result;
 static void (*gate_callback)(void);
 
@@ -46,6 +47,7 @@ BaseType_t xTaskCreate(void (*task)(void *), const char *name, unsigned stack, v
                        unsigned priority, TaskHandle_t *handle)
 {
     (void)task; (void)name; (void)stack; (void)arg; (void)priority;
+    if (fail_worker_create) { fail_worker_create = false; return 0; }
     *handle = (void *)1;
     return pdPASS;
 }
@@ -57,7 +59,7 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t *args, esp_timer_handle
 esp_err_t esp_timer_stop(esp_timer_handle_t timer) { (void)timer; return ESP_OK; }
 esp_err_t esp_timer_delete(esp_timer_handle_t timer) { (void)timer; return ESP_OK; }
 esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t micros)
-{ (void)timer; TEST_ASSERT_EQUAL_UINT64(UINT64_C(5000000), micros); return ESP_OK; }
+{ (void)timer; TEST_ASSERT_EQUAL_UINT64(UINT64_C(5000000), micros); ++timer_starts; return ESP_OK; }
 const char *esp_err_to_name(esp_err_t error) { (void)error; return "fake"; }
 
 void bridge_http_set_gate_released(void (*callback)(void)) { gate_callback = callback; }
@@ -165,8 +167,8 @@ void setUp(void)
     gate_epoch = 0; generation = arrival_sequence = 0; notice = NOTIFICATION_VIEW_OK;
     view_callback = NULL; gate_callback = NULL;
     notification_state_init(&durable);
-    saves = get_calls = acks = posts = holds = releases = publications = 0;
-    fail_ack = busy_get = fail_save = fail_snooze_transport = deny_external_action = false;
+    saves = get_calls = acks = posts = holds = releases = publications = timer_starts = 0;
+    fail_ack = busy_get = fail_save = fail_snooze_transport = deny_external_action = fail_worker_create = false;
     fake_snooze_result = BRIDGE_SNOOZE_SUCCESS;
 }
 void tearDown(void) {}
@@ -323,6 +325,20 @@ static void local_time_crosses_previous_month_and_leap_day(void)
     TEST_ASSERT_EQUAL_STRING("2025-12-31 21:05", snoozed_at_text);
 }
 
+static void worker_creation_failure_keeps_one_snooze_command(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    fail_worker_create = true;
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    TEST_ASSERT_EQUAL_UINT(1, timer_starts);
+    TEST_ASSERT_EQUAL_UINT(0, posts);
+    retry_timer_fired(NULL);
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, posts);
+    TEST_ASSERT_EQUAL_UINT(0, durable.count);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -336,5 +352,6 @@ int main(void)
     RUN_TEST(uncertain_snooze_is_not_retried);
     RUN_TEST(capture_owns_action_slot_before_post);
     RUN_TEST(local_time_crosses_previous_month_and_leap_day);
+    RUN_TEST(worker_creation_failure_keeps_one_snooze_command);
     return UNITY_END();
 }
