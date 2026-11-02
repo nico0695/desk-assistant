@@ -13,7 +13,7 @@
 typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL,
                STREAM_OK, STREAM_NO_TYPE, STREAM_DENIED, STREAM_IDLE, STREAM_ENCODED, STREAM_TWO_TYPES,
                DEADLINE_CLOSE, PUT_OK, PUT_FAIL_FIRST_WRITE, PUT_FAIL_LAST_WRITE, PUT_STALL, PUT_SLOW,
-               JSON_ACK, JSON_SNOOZE } fake_mode_t;
+               JSON_ACK, JSON_SNOOZE, ACTION } fake_mode_t;
 struct fake_transport { void *context; connect_fn connect; read_fn read; write_fn write; close_fn close; bool tls; };
 struct fake_client { esp_http_client_config_t config; size_t offset; bool completed; };
 static fake_mode_t mode;
@@ -22,9 +22,10 @@ static int64_t now_us;
 static unsigned dispatches, created, destroyed, client_count, client_freed;
 static bool bundle_set, auth_set, finite_busy, handshake_busy;
 static unsigned fail_transport_call;
-static bool fail_client, fail_header;
+static bool fail_client, fail_header, fail_open, fail_write, content_type_set;
 static char captured_url[BRIDGE_URL_SIZE + 160U];
 static struct fake_client *current;
+static esp_http_client_method_t current_method;
 static const char *payload = "{\"events\":[]}";
 static bridge_origin_t origin = {"https://example.test/prefix/", "01234567890123456789012345678901"};
 #define UPLOAD_BYTES 20000U
@@ -107,7 +108,7 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
     TEST_ASSERT_EQUAL_INT(-1, config->max_authorization_retries);
     TEST_ASSERT_TRUE(bundle_set);
     snprintf(captured_url, sizeof(captured_url), "%s", config->url);
-    current = calloc(1, sizeof(*current)); current->config = *config; return current;
+    current = calloc(1, sizeof(*current)); current->config = *config; current_method = config->method; return current;
 }
 esp_err_t esp_http_client_set_header(esp_http_client_handle_t c, const char *key, const char *value)
 {
@@ -116,6 +117,7 @@ esp_err_t esp_http_client_set_header(esp_http_client_handle_t c, const char *key
         if (fail_header) return ESP_FAIL;
         TEST_ASSERT_EQUAL_STRING("Bearer 01234567890123456789012345678901", value); auth_set = true;
     }
+    if (strcmp(key, "Content-Type") == 0) content_type_set = true;
     return ESP_OK;
 }
 esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
@@ -124,6 +126,7 @@ esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
                           mode == JSON_ACK ? (int)strlen(BRIDGE_EVENT_ACK_BODY) :
                           c->config.method == HTTP_METHOD_PUT ? (int)UPLOAD_BYTES : 0, length);
     ++dispatches;
+    if (fail_open) return ESP_FAIL;
     if (mode == PUT_SLOW) now_us += INT64_C(29000000);
     return c->config.transport->connect(c->config.transport, "example.test", 443, c->config.timeout_ms) == 0 ? ESP_OK : ESP_FAIL;
 }
@@ -206,6 +209,8 @@ int esp_http_client_read(esp_http_client_handle_t c, char *data, int length)
 bool esp_http_client_is_complete_data_received(esp_http_client_handle_t c) { return c->completed; }
 int esp_http_client_write(esp_http_client_handle_t c, const char *data, int length)
 {
+    TEST_ASSERT_NOT_EQUAL_INT(ACTION, mode);
+    if (fail_write) return -1;
     if (mode == JSON_ACK) {
         TEST_ASSERT_EQUAL_INT(HTTP_METHOD_PUT, c->config.method);
         TEST_ASSERT_EQUAL_INT((int)strlen(BRIDGE_EVENT_ACK_BODY), length);
@@ -238,7 +243,7 @@ void setUp(void)
     mode = NORMAL; clock_ready = true; now_us = 0; dispatches = created = destroyed = client_count = client_freed = 0;
     payload = "{\"events\":[]}";
     bundle_set = auth_set = finite_busy = handshake_busy = false;
-    fail_transport_call = 0; fail_client = fail_header = false;
+    fail_transport_call = 0; fail_client = fail_header = fail_open = fail_write = content_type_set = false;
     gate_releases = 0;
     bridge_http_set_gate_released(NULL);
 }
@@ -267,7 +272,7 @@ static void ack_json_is_one_put_with_empty_204(void)
     bridge_http_response_t result = bridge_http_json(&origin,
         "/v1/device/events/01234567-89ab-cdef-0123-456789abcdef/ack", BRIDGE_HTTP_PUT_JSON,
         BRIDGE_EVENT_ACK_BODY, strlen(BRIDGE_EVENT_ACK_BODY), BRIDGE_HTTP_EVENT_GATE_MS,
-        BRIDGE_HTTP_EVENT_IO_MS, response, sizeof(response));
+        BRIDGE_HTTP_EVENT_IO_MS, response, sizeof(response)).response;
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.result);
     TEST_ASSERT_EQUAL_INT(204, result.status);
     TEST_ASSERT_EQUAL_UINT(0, result.length);
@@ -282,14 +287,69 @@ static void snooze_json_is_one_post_with_bounded_response(void)
     payload = "{\"alert_id\":42,\"scheduled_at\":\"2026-11-02T13:00:00Z\"}";
     char response[128];
     const char *request = "{\"preset\":\"snooze_5m\"}";
-    bridge_http_response_t result = bridge_http_json(&origin, "/v1/device/alerts/42/snooze",
-        BRIDGE_HTTP_POST_JSON, request, strlen(request), BRIDGE_HTTP_EVENT_GATE_MS,
-        BRIDGE_HTTP_SNOOZE_IO_MS, response, sizeof(response));
-    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.result);
-    TEST_ASSERT_EQUAL_INT(200, result.status);
-    TEST_ASSERT_EQUAL_UINT(strlen(payload), result.length);
-    TEST_ASSERT_EQUAL_MEMORY(payload, response, result.length);
+    const bridge_http_mutation_t result = bridge_http_json(&origin, "/v1/device/alerts/42/snooze",
+        BRIDGE_HTTP_POST_JSON, request, strlen(request), 5000U, 40000U, response, sizeof(response));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.response.result);
+    TEST_ASSERT_EQUAL_INT(200, result.response.status);
+    TEST_ASSERT_EQUAL_UINT(strlen(payload), result.response.length);
+    TEST_ASSERT_EQUAL_MEMORY(payload, response, result.response.length);
+    TEST_ASSERT_FALSE(result.unsent);
+    TEST_ASSERT_TRUE(content_type_set);
     TEST_ASSERT_EQUAL_UINT(1, dispatches);
+}
+
+static bridge_http_mutation_t action(bridge_http_action_method_t method)
+{
+    static char response[64];
+    return bridge_http_action(&origin, "/v1/device/tasks/7/complete", method, 5000U, 60000U, response,
+                              sizeof(response));
+}
+
+static void actions_send_no_body_or_content_type(void)
+{
+    mode = ACTION;
+    payload = "{\"id\":7,\"status\":\"completed\"}";
+    bridge_http_mutation_t result = action(BRIDGE_HTTP_POST_EMPTY);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.response.result);
+    TEST_ASSERT_EQUAL_INT(200, result.response.status);
+    TEST_ASSERT_EQUAL_UINT(strlen(payload), result.response.length);
+    TEST_ASSERT_FALSE(result.unsent);
+    TEST_ASSERT_FALSE(content_type_set);
+    TEST_ASSERT_EQUAL_STRING("https://example.test/prefix/v1/device/tasks/7/complete", captured_url);
+    TEST_ASSERT_EQUAL_INT(HTTP_METHOD_POST, current_method);
+    result = action(BRIDGE_HTTP_DELETE);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, result.response.result);
+    TEST_ASSERT_EQUAL_INT(HTTP_METHOD_DELETE, current_method);
+    TEST_ASSERT_FALSE(content_type_set);
+    TEST_ASSERT_EQUAL_UINT(2, dispatches);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_INVALID_ARGUMENT, action((bridge_http_action_method_t)9).response.result);
+    TEST_ASSERT_EQUAL_UINT(2, dispatches);
+}
+
+/* A request is unsent until it is written; after that any failure is uncertain. */
+static void mutations_are_unsent_only_before_the_request_is_written(void)
+{
+    mode = ACTION;
+    finite_busy = true;
+    bridge_http_mutation_t result = action(BRIDGE_HTTP_DELETE);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_BUSY, result.response.result);
+    TEST_ASSERT_TRUE(result.unsent);
+    finite_busy = false; fail_open = true;
+    result = action(BRIDGE_HTTP_DELETE);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TRANSPORT_ERROR, result.response.result);
+    TEST_ASSERT_TRUE(result.unsent);
+    fail_open = false; mode = TRUNCATED;
+    result = action(BRIDGE_HTTP_DELETE);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_INCOMPLETE, result.response.result);
+    TEST_ASSERT_FALSE(result.unsent);
+    mode = JSON_SNOOZE; fail_write = true;
+    char response[64];
+    const char *request = "{\"preset\":\"snooze_5m\"}";
+    result = bridge_http_json(&origin, "/v1/device/alerts/42/snooze", BRIDGE_HTTP_POST_JSON, request,
+                              strlen(request), 5000U, 40000U, response, sizeof(response));
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TRANSPORT_ERROR, result.response.result);
+    TEST_ASSERT_FALSE(result.unsent);
+    TEST_ASSERT_EQUAL_UINT(3, dispatches);
 }
 
 static void finite_gate_release_wakes_a_waiting_owner(void)
@@ -384,7 +444,7 @@ static bool read_source(size_t offset, void *buffer, size_t capacity, void *cont
     return true;
 }
 
-static bridge_http_upload_t put(void)
+static bridge_http_mutation_t put(void)
 {
     static char body[64];
     return bridge_http_put_wav(&origin, "/v1/device/assistant-requests/12345678-1234-4abc-9876-123456789abc",
@@ -394,7 +454,7 @@ static bridge_http_upload_t put(void)
 static void upload_sends_the_whole_body_once_and_reads_the_response(void)
 {
     mode = PUT_OK;
-    bridge_http_upload_t upload = put();
+    bridge_http_mutation_t upload = put();
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK, upload.response.result);
     TEST_ASSERT_EQUAL_INT(202, upload.response.status);
     TEST_ASSERT_EQUAL_UINT(strlen(payload), upload.response.length);
@@ -409,7 +469,7 @@ static void upload_sends_the_whole_body_once_and_reads_the_response(void)
 static void upload_is_unsent_only_before_the_last_block(void)
 {
     mode = PUT_FAIL_FIRST_WRITE;
-    bridge_http_upload_t upload = put();
+    bridge_http_mutation_t upload = put();
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TRANSPORT_ERROR, upload.response.result);
     TEST_ASSERT_TRUE(upload.unsent);
     mode = PUT_OK; fail_source_at = 3;
@@ -428,7 +488,7 @@ static void upload_respects_gate_size_and_progress_window(void)
 {
     char body[64];
     finite_busy = true;
-    bridge_http_upload_t upload = put();
+    bridge_http_mutation_t upload = put();
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_BUSY, upload.response.result);
     TEST_ASSERT_TRUE(upload.unsent);
     finite_busy = false;
@@ -447,7 +507,7 @@ static void upload_respects_gate_size_and_progress_window(void)
 static void upload_cap_starts_after_opening(void)
 {
     mode = PUT_SLOW;
-    bridge_http_upload_t upload = put();
+    bridge_http_mutation_t upload = put();
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, upload.response.result);
     TEST_ASSERT_EQUAL_UINT(BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES / 2U, uploaded);
 }
@@ -545,6 +605,8 @@ int main(void)
     RUN_TEST(complete_get_with_prefix_and_auth);
     RUN_TEST(ack_json_is_one_put_with_empty_204);
     RUN_TEST(snooze_json_is_one_post_with_bounded_response);
+    RUN_TEST(actions_send_no_body_or_content_type);
+    RUN_TEST(mutations_are_unsent_only_before_the_request_is_written);
     RUN_TEST(finite_gate_release_wakes_a_waiting_owner);
     RUN_TEST(clock_and_gate_fail_before_dispatch);
     RUN_TEST(allocation_and_setup_failures_release_resources_and_gates);

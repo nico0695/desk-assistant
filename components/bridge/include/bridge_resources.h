@@ -6,16 +6,21 @@
 
 #include "bridge_time.h"
 
-/* Client budget for a list or detail body: provisional, not a limit of the remote contract. */
+/* Client budget for a resource or Snooze response body: provisional, not a limit of the remote contract. */
 #define BRIDGE_RESOURCE_BODY_MAX_BYTES 4096U
 /* Decoded strings are copies of body strings, so they fit in the body plus one terminator each. */
 #define BRIDGE_RESOURCE_ARENA_SIZE (BRIDGE_RESOURCE_BODY_MAX_BYTES + 16U)
 #define BRIDGE_RESOURCE_PAGE_SIZE 5U
 #define BRIDGE_RESOURCE_ID_MAX UINT64_C(9007199254740991)
 #define BRIDGE_RESOURCE_PATH_SIZE 64U
-/* Wait for the shared finite HTTP gate and socket/TLS deadline of a resource read. */
+/* Wait for the shared finite HTTP gate before a resource read. */
 #define BRIDGE_RESOURCE_GATE_WAIT_MS 5000U
+/* Wait for the gate before an action (Delete, Complete or Snooze); after it the action was not sent. */
+#define BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS 5000U
+/* Socket/TLS deadline of reads, Delete and Snooze: the bridge asks for at least 35 s. */
 #define BRIDGE_RESOURCE_IO_MS 40000U
+/* Complete makes up to three bot calls: the bridge asks for at least 55 s, and the TLS handshake counts here. */
+#define BRIDGE_RESOURCE_COMPLETE_IO_MS 60000U
 
 /* Same order as the home sections. */
 typedef enum {

@@ -489,7 +489,7 @@ static void send_clip(const bridge_origin_t *origin, const char *id)
 {
     char path[BRIDGE_ASSISTANT_PATH_SIZE];
     char *body = malloc(BRIDGE_ASSISTANT_JSON_MAX_BYTES);
-    bridge_http_upload_t upload = {.response.result = BRIDGE_HTTP_NO_MEMORY, .unsent = true};
+    bridge_http_mutation_t upload = {.response.result = BRIDGE_HTTP_NO_MEMORY, .unsent = true};
     if (body == NULL) {
         ESP_LOGE(TAG, "no memory for the upload reply");
     } else if (bridge_assistant_path(id, path, sizeof(path))) {

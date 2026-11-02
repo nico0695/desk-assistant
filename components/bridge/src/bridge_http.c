@@ -179,66 +179,110 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
     return response;
 }
 
-bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const char *path,
-                                        bridge_http_json_method_t method, const char *request, size_t request_length,
-                                        uint32_t gate_wait_ms, uint32_t io_ms, char *response_body,
-                                        size_t response_capacity)
+/* Writes the whole request body; unsent turns false right before its first write. */
+static bridge_http_result_t send_request(bridge_tls_t *session, const char *request, size_t request_length,
+                                         bool *unsent)
 {
-    bridge_http_response_t response = {.result = BRIDGE_HTTP_INVALID_ARGUMENT};
+    for (size_t offset = 0; offset < request_length;) {
+        if (bridge_tls_budget(session, -1) <= 0) {
+            return BRIDGE_HTTP_TIMEOUT;
+        }
+        *unsent = false;
+        const int sent = esp_http_client_write(session->client, request + offset, (int)(request_length - offset));
+        if (sent <= 0 || (size_t)sent > request_length - offset) {
+            return failure_result(session);
+        }
+        offset += (size_t)sent;
+    }
+    *unsent = false;
+    return BRIDGE_HTTP_OK;
+}
+
+static bridge_http_result_t exchange_mutation(bridge_tls_t *session, const bridge_origin_t *origin, const char *url,
+                                              esp_http_client_method_t method, const char *request,
+                                              size_t request_length, uint32_t io_ms, char *body, size_t capacity,
+                                              bridge_http_mutation_t *mutation)
+{
+    if (!bridge_tls_create(session, origin, url, method, (int)(io_ms > INT_MAX ? INT_MAX : io_ms))) {
+        return BRIDGE_HTTP_NO_MEMORY;
+    }
+    if ((request_length > 0U &&
+         esp_http_client_set_header(session->client, "Content-Type", "application/json") != ESP_OK) ||
+        esp_http_client_set_header(session->client, "Accept", "application/json") != ESP_OK) {
+        return BRIDGE_HTTP_NO_MEMORY;
+    }
+    const bridge_tls_open_t opened = bridge_tls_open(session, (int)request_length);
+    if (opened == BRIDGE_TLS_GATE_TIMEOUT) {
+        return BRIDGE_HTTP_TIMEOUT;
+    }
+    if (opened == BRIDGE_TLS_OPEN_FAILED) {
+        return failure_result(session);
+    }
+    const bridge_http_result_t sent = send_request(session, request, request_length, &mutation->unsent);
+    return sent == BRIDGE_HTTP_OK ? receive_response(session, body, capacity, &mutation->response) : sent;
+}
+
+/* One mutation under the finite gate. A request_length of zero sends no body and no Content-Type. */
+static bridge_http_mutation_t send_mutation(const bridge_origin_t *origin, const char *path,
+                                            esp_http_client_method_t method, const char *request,
+                                            size_t request_length, uint32_t gate_wait_ms, uint32_t io_ms,
+                                            char *body, size_t capacity)
+{
+    bridge_http_mutation_t mutation = {.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
     char url[BRIDGE_HTTP_URL_SIZE];
-    if (origin == NULL || request == NULL || request_length == 0U || request_length > INT_MAX ||
-        response_body == NULL || response_capacity == 0U || response_capacity > BRIDGE_HTTP_BODY_MAX_BYTES ||
-        io_ms == 0U || (method != BRIDGE_HTTP_PUT_JSON && method != BRIDGE_HTTP_POST_JSON)) return response;
-    memset(response_body, 0, response_capacity);
-    if (!bridge_token_valid(origin->token) || !bridge_http_make_url(origin->url, path, url, sizeof(url))) return response;
+    if (body == NULL || capacity == 0U || capacity > BRIDGE_HTTP_BODY_MAX_BYTES) {
+        return mutation;
+    }
+    memset(body, 0, capacity);
+    if (origin == NULL || io_ms == 0U || request_length > INT_MAX || !bridge_token_valid(origin->token) ||
+        !bridge_http_make_url(origin->url, path, url, sizeof(url))) {
+        return mutation;
+    }
     if (!bridge_clock_ready()) {
-        response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
-        return response;
+        mutation.response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
+        return mutation;
     }
     if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(gate_wait_ms)) != pdTRUE) {
-        response.result = BRIDGE_HTTP_BUSY;
-        return response;
+        mutation.response.result = BRIDGE_HTTP_BUSY;
+        return mutation;
     }
     bridge_tls_t session = {
         .deadline_us = esp_timer_get_time() + (int64_t)io_ms * 1000,
         .wire_limit = BRIDGE_HTTP_HEADER_MAX_BYTES,
     };
-    const esp_http_client_method_t http_method = method == BRIDGE_HTTP_PUT_JSON ? HTTP_METHOD_PUT : HTTP_METHOD_POST;
-    if (!bridge_tls_create(&session, origin, url, http_method, (int)(io_ms > INT_MAX ? INT_MAX : io_ms))) {
-        response.result = BRIDGE_HTTP_NO_MEMORY;
-    } else if (esp_http_client_set_header(session.client, "Content-Type", "application/json") != ESP_OK ||
-               esp_http_client_set_header(session.client, "Accept", "application/json") != ESP_OK) {
-        response.result = BRIDGE_HTTP_TRANSPORT_ERROR;
-    } else {
-        const bridge_tls_open_t opened = bridge_tls_open(&session, (int)request_length);
-        if (opened == BRIDGE_TLS_GATE_TIMEOUT) response.result = BRIDGE_HTTP_TIMEOUT;
-        else if (opened == BRIDGE_TLS_OPEN_FAILED) response.result = failure_result(&session);
-        else {
-            response.result = BRIDGE_HTTP_OK;
-            for (size_t offset = 0; offset < request_length;) {
-                if (bridge_tls_budget(&session, -1) <= 0) {
-                    response.result = BRIDGE_HTTP_TIMEOUT;
-                    break;
-                }
-                const int sent = esp_http_client_write(session.client, request + offset, (int)(request_length - offset));
-                if (sent <= 0 || (size_t)sent > request_length - offset) {
-                    response.result = failure_result(&session);
-                    break;
-                }
-                offset += (size_t)sent;
-            }
-            if (response.result == BRIDGE_HTTP_OK)
-                response.result = receive_response(&session, response_body, response_capacity, &response);
-        }
-    }
+    mutation.response.result =
+        exchange_mutation(&session, origin, url, method, request, request_length, io_ms, body, capacity, &mutation);
     bridge_tls_destroy(&session);
     xSemaphoreGive(finite_gate);
     if (gate_released_callback != NULL) gate_released_callback();
-    if (response.result != BRIDGE_HTTP_OK) {
-        memset(response_body, 0, response_capacity);
-        response.length = 0;
+    if (mutation.response.result != BRIDGE_HTTP_OK) {
+        memset(body, 0, capacity);
+        mutation.response.length = 0;
     }
-    return response;
+    return mutation;
+}
+
+bridge_http_mutation_t bridge_http_json(const bridge_origin_t *origin, const char *path,
+                                        bridge_http_json_method_t method, const char *request, size_t request_length,
+                                        uint32_t gate_wait_ms, uint32_t io_ms, char *response_body,
+                                        size_t response_capacity)
+{
+    if (request == NULL || request_length == 0U || (method != BRIDGE_HTTP_PUT_JSON && method != BRIDGE_HTTP_POST_JSON)) {
+        return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
+    }
+    return send_mutation(origin, path, method == BRIDGE_HTTP_PUT_JSON ? HTTP_METHOD_PUT : HTTP_METHOD_POST, request,
+                         request_length, gate_wait_ms, io_ms, response_body, response_capacity);
+}
+
+bridge_http_mutation_t bridge_http_action(const bridge_origin_t *origin, const char *path,
+                                          bridge_http_action_method_t method, uint32_t gate_wait_ms, uint32_t io_ms,
+                                          char *response_body, size_t response_capacity)
+{
+    if (method != BRIDGE_HTTP_DELETE && method != BRIDGE_HTTP_POST_EMPTY) {
+        return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
+    }
+    return send_mutation(origin, path, method == BRIDGE_HTTP_DELETE ? HTTP_METHOD_DELETE : HTTP_METHOD_POST, NULL, 0U,
+                         gate_wait_ms, io_ms, response_body, response_capacity);
 }
 
 /* Writes the body block by block; unsent turns false before the first write of the last block. */
@@ -275,7 +319,7 @@ static bridge_http_result_t send_body(bridge_tls_t *session, size_t body_length,
 
 static bridge_http_result_t exchange_put(bridge_tls_t *session, const bridge_origin_t *origin, const char *url,
                                          size_t body_length, bridge_http_body_reader_t read_source, void *context,
-                                         char *body, size_t capacity, bridge_http_upload_t *upload)
+                                         char *body, size_t capacity, bridge_http_mutation_t *upload)
 {
     /* Allocated before opening: a missing buffer never starts the upload. */
     char *block = malloc(BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES);
@@ -302,11 +346,11 @@ static bridge_http_result_t exchange_put(bridge_tls_t *session, const bridge_ori
     return receive_response(session, body, capacity, &upload->response);
 }
 
-bridge_http_upload_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
-                                         bridge_http_body_reader_t read_source, void *context, char *body,
-                                         size_t capacity)
+bridge_http_mutation_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
+                                           bridge_http_body_reader_t read_source, void *context, char *body,
+                                           size_t capacity)
 {
-    bridge_http_upload_t upload = {.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
+    bridge_http_mutation_t upload = {.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
     char url[BRIDGE_HTTP_URL_SIZE];
     if (body == NULL || capacity == 0U || capacity > BRIDGE_HTTP_BODY_MAX_BYTES) {
         return upload;

@@ -16,8 +16,6 @@
 #define BRIDGE_HTTP_BODY_MAX_BYTES 32768U
 #define BRIDGE_HTTP_EVENT_IO_MS 5000U
 #define BRIDGE_HTTP_EVENT_GATE_MS 5000U
-#define BRIDGE_HTTP_SNOOZE_IO_MS 40000U
-#define BRIDGE_HTTP_SNOOZE_BODY_MAX_BYTES 4096U
 
 typedef enum {
     BRIDGE_HTTP_OK,
@@ -60,30 +58,36 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
                                        uint32_t gate_wait_ms, uint32_t io_ms,
                                        char *body, size_t capacity);
 
+typedef struct {
+    bridge_http_response_t response;
+    /*
+     * True only when the request failed before the bridge could have received all of it: before the request was
+     * written or, with a body, before the first write of its last block. From then on a failure stays uncertain.
+     */
+    bool unsent;
+} bridge_http_mutation_t;
+
 typedef enum { BRIDGE_HTTP_PUT_JSON, BRIDGE_HTTP_POST_JSON } bridge_http_json_method_t;
 /* One finite JSON mutation; no redirect or retry. Caller validates status and response schema. */
-bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const char *path,
+bridge_http_mutation_t bridge_http_json(const bridge_origin_t *origin, const char *path,
                                         bridge_http_json_method_t method, const char *request, size_t request_length,
                                         uint32_t gate_wait_ms, uint32_t io_ms, char *response_body,
                                         size_t response_capacity);
 
+typedef enum { BRIDGE_HTTP_DELETE, BRIDGE_HTTP_POST_EMPTY } bridge_http_action_method_t;
+/* One finite mutation without a body or Content-Type; no redirect or retry. Same response handling as JSON. */
+bridge_http_mutation_t bridge_http_action(const bridge_origin_t *origin, const char *path,
+                                          bridge_http_action_method_t method, uint32_t gate_wait_ms, uint32_t io_ms,
+                                          char *response_body, size_t response_capacity);
+
 /* Copies exactly capacity body bytes from offset into buffer; false when they cannot be read. */
 typedef bool (*bridge_http_body_reader_t)(size_t offset, void *buffer, size_t capacity, void *context);
-
-typedef struct {
-    bridge_http_response_t response;
-    /*
-     * True only when the upload failed before the first write of its last block, so the bridge never received the
-     * whole body. From that write on, a failure may still have delivered every byte and stays uncertain.
-     */
-    bool unsent;
-} bridge_http_upload_t;
 
 /*
  * The single assistant upload: one PUT of an audio/wav body of body_length bytes, never redirected or repeated.
  * Waits up to BRIDGE_ASSISTANT_PUT_GATE_MS for the finite gate, then applies the open, progress and response windows
  * of bridge_assistant.h, writing blocks of BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES. The response is returned like a GET.
  */
-bridge_http_upload_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
-                                         bridge_http_body_reader_t read_source, void *context, char *body,
-                                         size_t capacity);
+bridge_http_mutation_t bridge_http_put_wav(const bridge_origin_t *origin, const char *path, size_t body_length,
+                                           bridge_http_body_reader_t read_source, void *context, char *body,
+                                           size_t capacity);

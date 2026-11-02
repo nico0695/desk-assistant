@@ -11,7 +11,7 @@
 
 static notification_state_t durable;
 static unsigned saves, get_calls, acks, posts, holds, releases, publications, tones_enqueued;
-static bool fail_ack, busy_get, fail_save, fail_snooze_transport, deny_external_action, fail_worker_create;
+static bool fail_ack, busy_get, fail_save, fail_snooze_transport, unsent_snooze, deny_external_action, fail_worker_create;
 static unsigned timer_starts;
 static bridge_snooze_result_t fake_snooze_result;
 static void (*gate_callback)(void);
@@ -109,7 +109,7 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
     if (gate_callback != NULL) gate_callback();
     return (bridge_http_response_t){.result = BRIDGE_HTTP_OK, .status = 200, .length = 2};
 }
-bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const char *path,
+bridge_http_mutation_t bridge_http_json(const bridge_origin_t *origin, const char *path,
                                         bridge_http_json_method_t method, const char *request, size_t request_length,
                                         uint32_t gate_ms, uint32_t io_ms, char *body, size_t capacity)
 {
@@ -118,8 +118,9 @@ bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const cha
         TEST_ASSERT_EQUAL_STRING("/v1/device/alerts/42/snooze", path);
         TEST_ASSERT_EQUAL_STRING("snooze", request);
         ++posts;
-        if (fail_snooze_transport) return (bridge_http_response_t){.result = BRIDGE_HTTP_TIMEOUT};
-        return (bridge_http_response_t){.result = BRIDGE_HTTP_OK, .status = 200, .length = 2};
+        if (unsent_snooze) return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TRANSPORT_ERROR, .unsent = true};
+        if (fail_snooze_transport) return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TIMEOUT};
+        return (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = 200, .length = 2}};
     }
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_PUT_JSON, method);
     TEST_ASSERT_EQUAL_STRING(BRIDGE_EVENT_ACK_BODY, request);
@@ -128,8 +129,8 @@ bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const cha
     TEST_ASSERT_GREATER_THAN(0, saves);
     ++acks;
     if (gate_callback != NULL) gate_callback();
-    return fail_ack ? (bridge_http_response_t){.result = BRIDGE_HTTP_TIMEOUT} :
-                      (bridge_http_response_t){.result = BRIDGE_HTTP_OK, .status = 204, .length = 0};
+    return fail_ack ? (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TIMEOUT} :
+                      (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = 204, .length = 0}};
 }
 bool bridge_snooze_path(uint64_t alert_id, char *path, size_t capacity)
 { TEST_ASSERT_EQUAL_UINT64(42, alert_id); snprintf(path, capacity, "/v1/device/alerts/42/snooze"); return true; }
@@ -169,7 +170,7 @@ void setUp(void)
     view_callback = NULL; gate_callback = NULL;
     notification_state_init(&durable);
     saves = get_calls = acks = posts = holds = releases = publications = tones_enqueued = timer_starts = 0;
-    fail_ack = busy_get = fail_save = fail_snooze_transport = deny_external_action = fail_worker_create = false;
+    fail_ack = busy_get = fail_save = fail_snooze_transport = unsent_snooze = deny_external_action = fail_worker_create = false;
     fake_snooze_result = BRIDGE_SNOOZE_SUCCESS;
 }
 void tearDown(void) {}
@@ -307,6 +308,18 @@ static void uncertain_snooze_is_not_retried(void)
     TEST_ASSERT_FALSE(action_busy);
 }
 
+static void snooze_that_never_reached_the_bridge_is_not_sent(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    unsent_snooze = true;
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_UINT(1, posts);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_SNOOZE_NOT_SENT, notice);
+}
+
 static void capture_owns_action_slot_before_post(void)
 {
     seed_card();
@@ -354,6 +367,7 @@ int main(void)
     RUN_TEST(confirmed_snooze_retries_only_local_close);
     RUN_TEST(rejected_snooze_preserves_card);
     RUN_TEST(uncertain_snooze_is_not_retried);
+    RUN_TEST(snooze_that_never_reached_the_bridge_is_not_sent);
     RUN_TEST(capture_owns_action_slot_before_post);
     RUN_TEST(local_time_crosses_previous_month_and_leap_day);
     RUN_TEST(worker_creation_failure_keeps_one_snooze_command);

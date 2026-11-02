@@ -8,6 +8,7 @@
 #include "bridge_events.h"
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
+#include "bridge_resources.h"
 #include "bridge_snooze.h"
 #include "bridge_time.h"
 #include "esp_log.h"
@@ -205,19 +206,16 @@ static bridge_snooze_result_t send_snooze(const bridge_event_t *event, bridge_sn
         return BRIDGE_SNOOZE_NOT_SENT;
     bridge_origin_t origin;
     if (bridge_origin_load(&origin) != ESP_OK) return BRIDGE_SNOOZE_NOT_SENT;
-    char *body = malloc(BRIDGE_HTTP_SNOOZE_BODY_MAX_BYTES + 1U);
+    char *body = malloc(BRIDGE_RESOURCE_BODY_MAX_BYTES + 1U);
     if (body == NULL) { memset(&origin, 0, sizeof(origin)); return BRIDGE_SNOOZE_NOT_SENT; }
-    const bridge_http_response_t response = bridge_http_json(&origin, path, BRIDGE_HTTP_POST_JSON,
-        request, strlen(request), BRIDGE_HTTP_EVENT_GATE_MS, BRIDGE_HTTP_SNOOZE_IO_MS,
-        body, BRIDGE_HTTP_SNOOZE_BODY_MAX_BYTES);
+    const bridge_http_mutation_t sent = bridge_http_json(&origin, path, BRIDGE_HTTP_POST_JSON, request,
+        strlen(request), BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS, BRIDGE_RESOURCE_IO_MS, body,
+        BRIDGE_RESOURCE_BODY_MAX_BYTES);
     memset(&origin, 0, sizeof(origin));
     bridge_snooze_result_t result;
-    if (response.result == BRIDGE_HTTP_OK)
-        result = bridge_snooze_decode(response.status, body, response.length, event->alert_id, confirmed_at);
-    else if (response.result == BRIDGE_HTTP_BUSY || response.result == BRIDGE_HTTP_CLOCK_NOT_READY ||
-             response.result == BRIDGE_HTTP_NO_MEMORY || response.result == BRIDGE_HTTP_INVALID_ARGUMENT)
-        result = BRIDGE_SNOOZE_NOT_SENT;
-    else result = BRIDGE_SNOOZE_UNCONFIRMED;
+    if (sent.response.result == BRIDGE_HTTP_OK)
+        result = bridge_snooze_decode(sent.response.status, body, sent.response.length, event->alert_id, confirmed_at);
+    else result = sent.unsent ? BRIDGE_SNOOZE_NOT_SENT : BRIDGE_SNOOZE_UNCONFIRMED;
     free(body);
     return result;
 }
@@ -267,7 +265,7 @@ static bridge_http_response_t send_ack(const char *id)
     char body[1];
     response = bridge_http_json(&origin, path, BRIDGE_HTTP_PUT_JSON, BRIDGE_EVENT_ACK_BODY,
                                 strlen(BRIDGE_EVENT_ACK_BODY), BRIDGE_HTTP_EVENT_GATE_MS,
-                                BRIDGE_HTTP_EVENT_IO_MS, body, sizeof(body));
+                                BRIDGE_HTTP_EVENT_IO_MS, body, sizeof(body)).response;
     memset(&origin, 0, sizeof(origin));
     return response;
 }
