@@ -1,6 +1,7 @@
 #include "bridge_clock.h"
 
 #include <stdatomic.h>
+#include <stddef.h>
 #include <sys/time.h>
 
 #include "esp_netif_sntp.h"
