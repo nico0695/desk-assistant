@@ -10,7 +10,7 @@
 | 3 | Wi-Fi and provisioning | Done (validated 2026-11-01) |
 | 4 | Bridge base | Done (validated 2026-11-01) |
 | 5a | Recording: local capture | Done (validated 2026-11-02) |
-| 5b | Recording: upload and result | Next |
+| 5b | Recording: upload and result | Checkpoint, awaiting validation |
 | 6 | Notifications and sound | Pending |
 | 7 | Modules: read | Pending |
 | 8 | Modules: actions | Pending |
@@ -19,12 +19,11 @@
 
 ## Active stage: 5b — Recording: upload and result
 
-- **Status:** not planned yet; next step `/stage plan 5b`.
-- **Goal:** the full main flow, with no resends and no loss of identity.
-- **Scope (macro plan):** durable identity before the PUT, one PUT with progress windows and the `unsent` policy; remote states and local uncertainty; queries over SSE, reconnection, Check and the 180 s wait, without polling; terminal result persisted before it is shown; result panel with scroll and `content_omitted`; close, discard with confirmation, recovery after reboot and the home entry by state.
-- **Carry-overs from stage 4:** connect the durable origin guard to the recording record; extract the TLS/Bearer transport shared by `bridge_http` and `bridge_stream` and split the long `bridge_http_get`, `bridge_stream_run` and `stream_worker` (first step); measure the real audio + SSE budget; confirm independently the bridge assumption about incomplete bodies.
-- **Carry-overs from stage 5a:** enable Send in READY_TO_SEND for the upload; review the recording worker stack once it runs HTTP (1648 of 4096 B free during capture today); recording views are computed under the lock and published outside it, so a newer view could in theory be overtaken by an older one (CR-002, recorded without change).
-- **Workflow:** commits, tests, builds and `standard-code-review` stay local per step; push and remote verification happen at stage close. Deeper step reviews need a reason based on size, complexity or risk; stage close uses `4r-review` by default or `judgment-day` when blind corroboration is more useful.
+- **Status:** all steps done; checkpoint evidence below; waiting for the user's validation.
+- **Delivered:** one TLS transport shared by GET, PUT and SSE; the assistant response codec and request IDs; the single PUT with progress windows and the `unsent` boundary; a durable attempt record and an origin hold while an attempt exists; pure attempt phases with one job at a time; the owner's upload, query, close and discard jobs, the 180 s wait, restore at boot and the reply text for the UI; SSE result signals for the watched attempt; panel states with scroll, notes and the Home entry by state; fonts with general punctuation and the euro sign.
+- **Performance:** the upload was bound by the TCP send buffer; raising it to 23040 B cut a 30 s upload from 76.6 s to 28.4 s.
+- **Not run on the board, by user decision:** network cut during the upload, discard and Check on an unconfirmed attempt (all covered by host tests of the state). Also not run: a reply of the maximum size (8000 B).
+- **Open assumption:** the bridge never runs a request whose body arrived incomplete (S2) stays unverified; the client policy does not depend on more than that.
 
 ## Closed stages
 
@@ -118,3 +117,17 @@ Each checkpoint records one entry per image:
   - An earlier image with I2S mono RX recorded both slots at twice the rate; it was replaced by stereo reads keeping the left slot (`504549f`).
   - Captures shorter than 500 ms could not be produced by hand (shortest 560 ms); the rule is covered by host tests.
 - **Reviews:** `standard-code-review` on steps 6–7: CR-001 (cleanup did not retry a failed hardware release) fixed in `926eb92`; CR-002 (a view computed under the lock and published outside it can, in theory, arrive after a newer one) recorded without change. By user decision, no 4R review at close and no smoke guide.
+
+### Stage 5b — 2026-11-02
+
+- **Revision:** `6c30f19` (firmware content; later commits only change documentation), integrated profile (`sdkconfig.defaults`).
+- **ELF SHA-256:** `8e37cd57c518c10f1499df1e0a080e96a686503cae62ecdead74527178187d2f` (the boot log prints its first 9 digits).
+- **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 30/30; preview built; `dependencies.lock` unchanged.
+- **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem1101`; flashed with verified hashes.
+  - Final image `6c30f19`: boot log shows the version and ELF digits above; an unclosed completed attempt was restored without its text, queried once the event stream opened (13 s after boot) and shown; no errors.
+  - Image `0891c45-dirty` (sources of `0891c45` plus the memory checkpoints, old TCP buffer): event stream open (the deferred step 1 check); the user ran a real message with its reply, a long reply with scroll and a 30 s upload. Four attempts went 202 processing → query → completed → stored → shown → closed (clip cleared, record removed). Uploads of 178–960 KB at 10–12.5 KB/s (960 KB in 76.6 s); captures without overruns.
+  - Image `0891c45-dirty` with the TCP send buffer at 23040 B (sources of `7d3305e`): 30 s upload in 28.4 s (about 34 KB/s); reboot while processing, done automatically right after the 202: the attempt was restored as pending, the clip cleared, the query after the stream opened returned completed, which was stored and shown.
+  - Memory: heap minimum 63.6 KB with SSE and the upload together (83.5 KB with the old buffer); back to 151–159 KB free after closing. Recording worker minimum 4.2 KB free of 8192 B (fixed at 8192); `bridge_sse` minimum 2.8 KB of 8192 B. No audio, reply text, token, URL or request ID in the log.
+  - Not run, by user decision: network cut during the upload, discard and Check on an unconfirmed attempt. Not run: maximum-size reply. Recorded in `.local/follow-up.md`.
+  - Tooling: after a reset the USB log sometimes stops without an error; capturing without a reset or reconnecting the cable recovers it.
+- **Reviews:** `standard-code-review` per step group (1, 3–4, 5–7), findings fixed in `0c8e030` and `0891c45`. 4R at close: four lenses, 0 severe, 8 warnings and 3 suggestions. Fixed in `6c30f19`: a discard queued during a query could erase a terminal that just arrived; an unreadable record lost its block if the boot cleanup worker failed to start; a held origin refused an identical save, which blocked Wi-Fi provisioning; an ambiguous upload armed no 180 s wait; a missing log on an allocation failure; misleading names and header comments. Details in `.local/stages/05b-grabacion-envio-resultado.md`.
