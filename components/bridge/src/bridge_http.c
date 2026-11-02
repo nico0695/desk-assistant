@@ -174,8 +174,9 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
 
 /* Writes the body block by block; unsent turns false before the first write of the last block. */
 static bridge_http_result_t send_body(bridge_tls_t *session, size_t body_length, bridge_http_body_reader_t read_body,
-                                      void *context, char *block, int64_t cap_us, bool *unsent)
+                                      void *context, char *block, bool *unsent)
 {
+    const int64_t cap_us = bridge_http_upload_cap_us(esp_timer_get_time(), body_length);
     session->deadline_us = bridge_http_progress_deadline_us(esp_timer_get_time(), cap_us);
     for (size_t offset = 0; offset < body_length;) {
         const size_t remaining = body_length - offset;
@@ -207,7 +208,6 @@ static bridge_http_result_t exchange_put(bridge_tls_t *session, const bridge_ori
                                          size_t body_length, bridge_http_body_reader_t read_body, void *context,
                                          char *body, size_t capacity, bridge_http_upload_t *upload)
 {
-    const int64_t cap_us = bridge_http_upload_cap_us(esp_timer_get_time(), body_length);
     /* Allocated before opening: a missing buffer never starts the upload. */
     char *block = malloc(BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES);
     if (block == NULL || !bridge_tls_create(session, origin, url, HTTP_METHOD_PUT, BRIDGE_ASSISTANT_PUT_OPEN_MS) ||
@@ -222,7 +222,7 @@ static bridge_http_result_t exchange_put(bridge_tls_t *session, const bridge_ori
                                                                     : failure_result(session);
     if (result == BRIDGE_HTTP_OK) {
         bridge_tls_disable_delay(session);
-        result = send_body(session, body_length, read_body, context, block, cap_us, &upload->unsent);
+        result = send_body(session, body_length, read_body, context, block, &upload->unsent);
     }
     /* Released before the response is read, to keep the peak memory with two TLS sessions low. */
     free(block);

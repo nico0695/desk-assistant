@@ -12,7 +12,7 @@
 
 typedef enum { NORMAL, DENIED, TRUNCATED, RESPONSE_OVERFLOW, SLOW, LONG_HEADERS, FALSE_EOF, BAD_ENCODING, CONNECT_STALL,
                STREAM_OK, STREAM_NO_TYPE, STREAM_DENIED, STREAM_IDLE, STREAM_ENCODED, STREAM_TWO_TYPES,
-               DEADLINE_CLOSE, PUT_OK, PUT_FAIL_FIRST_WRITE, PUT_FAIL_LAST_WRITE, PUT_STALL } fake_mode_t;
+               DEADLINE_CLOSE, PUT_OK, PUT_FAIL_FIRST_WRITE, PUT_FAIL_LAST_WRITE, PUT_STALL, PUT_SLOW } fake_mode_t;
 struct fake_transport { void *context; connect_fn connect; read_fn read; write_fn write; close_fn close; bool tls; };
 struct fake_client { esp_http_client_config_t config; size_t offset; bool completed; };
 static fake_mode_t mode;
@@ -114,6 +114,7 @@ esp_err_t esp_http_client_set_header(esp_http_client_handle_t c, const char *key
 esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
 {
     TEST_ASSERT_EQUAL_INT(c->config.method == HTTP_METHOD_PUT ? (int)UPLOAD_BYTES : 0, length); ++dispatches;
+    if (mode == PUT_SLOW) now_us += INT64_C(29000000);
     return c->config.transport->connect(c->config.transport, "example.test", 443, c->config.timeout_ms) == 0 ? ESP_OK : ESP_FAIL;
 }
 int64_t esp_http_client_fetch_headers(esp_http_client_handle_t c)
@@ -198,6 +199,7 @@ int esp_http_client_write(esp_http_client_handle_t c, const char *data, int leng
     const bool last = uploaded + (size_t)length == UPLOAD_BYTES;
     if ((mode == PUT_FAIL_FIRST_WRITE && uploaded == 0U) || (mode == PUT_FAIL_LAST_WRITE && last)) return -1;
     if (mode == PUT_STALL) now_us += INT64_C(31000000);
+    if (mode == PUT_SLOW) now_us += INT64_C(25000000);
     if (last) last_write_offset = uploaded;
     /* Accepts half of a block at a time to exercise partial writes. */
     if (length > 1) length /= 2;
@@ -369,6 +371,15 @@ static void upload_respects_gate_size_and_progress_window(void)
     TEST_ASSERT_EQUAL_UINT(1, dispatches);
 }
 
+/* A slow open does not consume the progress cap, and renewals stop at it. */
+static void upload_cap_starts_after_opening(void)
+{
+    mode = PUT_SLOW;
+    bridge_http_upload_t upload = put();
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_TIMEOUT, upload.response.result);
+    TEST_ASSERT_EQUAL_UINT(BRIDGE_ASSISTANT_UPLOAD_BLOCK_BYTES / 2U, uploaded);
+}
+
 typedef struct { bool opened; unsigned checks; } stream_test_t;
 static bool stream_opened(void *context) { ((stream_test_t *)context)->opened = true; return true; }
 static bool stream_open_rejected(void *context) { (void)context; return false; }
@@ -467,6 +478,7 @@ int main(void)
     RUN_TEST(upload_sends_the_whole_body_once_and_reads_the_response);
     RUN_TEST(upload_is_unsent_only_before_the_last_block);
     RUN_TEST(upload_respects_gate_size_and_progress_window);
+    RUN_TEST(upload_cap_starts_after_opening);
     RUN_TEST(stream_opens_with_auth_processes_frame_and_releases_resources);
     RUN_TEST(stream_rejects_invalid_headers_and_unauthorized_response);
     RUN_TEST(stream_idle_times_out_after_sixty_seconds);
