@@ -234,6 +234,12 @@ static void test_unsent_upload_is_not_sent_only_when_forgotten(void)
     TEST_ASSERT_FALSE(view().can_discard);
     TEST_ASSERT_TRUE(view().close_keeps_attempt);
     TEST_ASSERT_EQUAL(RECORDING_EFFECT_NONE, recording_state_discard(&state, state.generation));
+    /* A later terminal stored and closed proves the record writable again. */
+    recording_state_resolved(&state, ID, RECORDING_REPLY_COMPLETED, false);
+    recording_state_close(&state, state.generation);
+    recording_state_next_job(&state);
+    recording_state_forgotten(&state, true, true);
+    TEST_ASSERT_FALSE(state.record_failed);
 }
 
 static void test_ambiguous_upload_is_unconfirmed_until_a_terminal_reply(void)
@@ -399,6 +405,15 @@ static void test_queries_coalesce_while_the_worker_runs(void)
 
 static void test_a_worker_that_cannot_start_touches_nothing(void)
 {
+    recording_state_init(&state);
+    recording_state_restore(&state, ID, RECORDING_REPLY_PROCESSING);
+    TEST_ASSERT_EQUAL(RECORDING_JOB_CLEANUP, recording_state_claim_job(&state));
+    recording_state_start_failed(&state);
+    TEST_ASSERT_EQUAL(RECORDING_PROCESSING, state.phase);
+    TEST_ASSERT_EQUAL_STRING(ID, state.id);
+    TEST_ASSERT_TRUE(state.cleanup_pending);
+    TEST_ASSERT_EQUAL(RECORDING_JOB_QUERY, recording_state_claim_job(&state));
+
     start_recording();
     recording_state_start_failed(&state);
     TEST_ASSERT_EQUAL(RECORDING_FAILURE_START, state.failure);

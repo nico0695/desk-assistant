@@ -74,6 +74,8 @@ static void block_record(recording_state_t *state)
 static void return_to_idle(recording_state_t *state)
 {
     forget_attempt(state);
+    /* Reaching IDLE takes a successful record write, so the record is trustworthy again. */
+    state->record_failed = false;
     state->notice = RECORDING_NOTICE_NONE;
     state->cleanup_pending = false;
     state->send_requested = false;
@@ -182,6 +184,9 @@ void recording_state_start_failed(recording_state_t *state)
     state->running_job = RECORDING_JOB_NONE;
     if (job == RECORDING_JOB_CAPTURE) {
         recording_state_failed(state, RECORDING_FAILURE_START, true);
+    } else if (job == RECORDING_JOB_CLEANUP && has_attempt(state)) {
+        /* A restored attempt keeps its phase; the residue stays pending until a forget clears it. */
+        state->cleanup_pending = true;
     } else if (job == RECORDING_JOB_CLEANUP) {
         recording_state_failed(state, RECORDING_FAILURE_CLEANUP, false);
     } else if (job == RECORDING_JOB_UPLOAD && state->phase == RECORDING_UPLOADING && !has_attempt(state)) {

@@ -282,16 +282,21 @@ static void release_origin(void)
     }
 }
 
-/* The attempt and its durable record ended: nothing binds the origin or the event stream to it anymore. */
-static void attempt_ended(void)
+static void drop_message(void)
 {
-    bridge_watch_assistant(NULL);
-    release_origin();
     xSemaphoreTake(message_lock, portMAX_DELAY);
     free(message);
     message = NULL;
     message_generation = 0;
     xSemaphoreGive(message_lock);
+}
+
+/* The attempt and its durable record ended: nothing binds the origin or the event stream to it anymore. */
+static void attempt_ended(void)
+{
+    bridge_watch_assistant(NULL);
+    release_origin();
+    drop_message();
 }
 
 static void clear_secret(void *buffer, size_t size)
@@ -558,6 +563,9 @@ static void run_forget(void)
     taskEXIT_CRITICAL(&lock);
     if (error == ESP_OK) {
         attempt_ended();
+    } else if (cleaned) {
+        /* Blocked until restart: the reply is no longer shown. */
+        drop_message();
     }
     publish_current();
 }
@@ -762,14 +770,17 @@ esp_err_t recording_start(recording_view_fn on_view)
     ESP_RETURN_ON_ERROR(esp_timer_create(&timer, &wait_timer), TAG, "wait timer");
     view_callback = on_view;
     recording_state_init(&state);
+    /* Before the clip: a stored attempt keeps its identity and origin even without an audio partition. */
+    restore_attempt();
     const esp_err_t error = recording_clip_init();
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "audio partition unusable: %s", esp_err_to_name(error));
-        report_failed(RECORDING_FAILURE_START, false);
-        return error;
+        if (state.id[0] == '\0') {
+            report_failed(RECORDING_FAILURE_START, false);
+            return error;
+        }
     }
-    restore_attempt();
     publish_current();
     start_job();
-    return ESP_OK;
+    return error;
 }
