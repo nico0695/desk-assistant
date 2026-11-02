@@ -4,11 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bridge_time.h"
 #include "bridge_uuid.h"
 
 #define BRIDGE_EVENT_MESSAGE_MAX_BYTES 512U
 #define BRIDGE_EVENT_MESSAGE_SIZE (BRIDGE_EVENT_MESSAGE_MAX_BYTES + 1U)
-#define BRIDGE_EVENT_TIME_SIZE 31U
+#define BRIDGE_EVENT_TIME_SIZE BRIDGE_TIME_UTC_SIZE
 #define BRIDGE_EVENT_GET_PATH "/v1/device/events?limit=1"
 #define BRIDGE_EVENT_RESPONSE_MAX_BYTES 4096U
 #define BRIDGE_EVENT_ACK_BODY "{\"status\":\"displayed\"}"
@@ -30,7 +31,6 @@ typedef enum {
 } bridge_event_decode_t;
 
 bool bridge_event_valid(const bridge_event_t *event);
-bool bridge_event_timestamp_valid(const char *text);
 /* Exact GET /events?limit=1 response. Failure leaves outputs unchanged. */
 bridge_event_decode_t bridge_event_decode(const char *body, size_t length, int status,
                                           bridge_event_t *event, bool *present);

@@ -9,6 +9,7 @@
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
 #include "bridge_snooze.h"
+#include "bridge_time.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -190,38 +191,9 @@ static bool close_front(const char *event_id)
     return saved;
 }
 
-static unsigned decimal(const char *text, size_t count)
-{
-    unsigned value = 0U;
-    for (size_t i = 0; i < count; ++i) value = value * 10U + (unsigned)(text[i] - '0');
-    return value;
-}
-
-static unsigned days_in_month(unsigned year, unsigned month)
-{
-    static const unsigned days[] = {31U, 28U, 31U, 30U, 31U, 30U, 31U, 31U, 30U, 31U, 30U, 31U};
-    if (month == 2U && year % 4U == 0U && (year % 100U != 0U || year % 400U == 0U)) return 29U;
-    return days[month - 1U];
-}
-
 static void format_local_time(const char *utc)
 {
-    unsigned year = decimal(utc, 4U), month = decimal(utc + 5U, 2U), day = decimal(utc + 8U, 2U);
-    unsigned hour = decimal(utc + 11U, 2U), minute = decimal(utc + 14U, 2U);
-    if (year < NOTIFICATIONS_LOCAL_TIME_FIRST_YEAR) {
-        (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u UTC",
-                       year % 10000U, month % 100U, day % 100U, hour % 100U, minute % 100U);
-        return;
-    }
-    if (hour < NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS) {
-        hour += 24U - NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
-        if (--day == 0U) {
-            if (--month == 0U) { month = 12U; --year; }
-            day = days_in_month(year, month);
-        }
-    } else hour -= NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
-    (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u " NOTIFICATIONS_LOCAL_ZONE_LABEL,
-                   year % 10000U, month % 100U, day % 100U, hour % 100U, minute % 100U);
+    if (!bridge_time_format_local(utc, snoozed_at_text, sizeof(snoozed_at_text))) snoozed_at_text[0] = '\0';
 }
 
 static bridge_snooze_result_t send_snooze(const bridge_event_t *event, bridge_snooze_preset_t preset,

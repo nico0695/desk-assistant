@@ -713,13 +713,18 @@ static void wait_expired(void *unused)
 bool recording_external_action_begin(void)
 {
     taskENTER_CRITICAL(&lock);
-    const bool available = !external_action_busy && state.phase != RECORDING_RECORDING &&
-                           state.phase != RECORDING_FINALIZING && state.phase != RECORDING_CANCELLING &&
-                           state.phase != RECORDING_UPLOADING && state.running_job != RECORDING_JOB_UPLOAD &&
-                           state.wanted_job != RECORDING_JOB_UPLOAD;
+    const bool available = !external_action_busy && !recording_state_media_active(&state);
     if (available) external_action_busy = true;
     taskEXIT_CRITICAL(&lock);
     return available;
+}
+
+bool recording_reads_blocked(void)
+{
+    taskENTER_CRITICAL(&lock);
+    const bool blocked = recording_state_media_active(&state);
+    taskEXIT_CRITICAL(&lock);
+    return blocked;
 }
 
 void recording_external_action_end(void)

@@ -1,6 +1,7 @@
 /* Event response validation adapted from event_codec.c in the author's V4 firmware; see THIRD_PARTY_NOTICES.md. */
 #include "bridge_events.h"
 #include "bridge_text.h"
+#include "bridge_time.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -10,44 +11,14 @@
 #include "cJSON.h"
 #include "bridge_uuid.h"
 
-/* Dates are kept in their complete UTC wire form for Snooze correlation. */
-static unsigned digits(const char *text, size_t count)
-{
-    unsigned value = 0;
-    for (size_t i = 0; i < count; ++i) value = value * 10U + (unsigned)(text[i] - '0');
-    return value;
-}
-
-bool bridge_event_timestamp_valid(const char *text)
-{
-    const size_t length = strnlen(text, BRIDGE_EVENT_TIME_SIZE);
-    if (length < 20U || length > 30U || text[4] != '-' || text[7] != '-' || text[10] != 'T' ||
-        text[13] != ':' || text[16] != ':' || text[length - 1U] != 'Z') return false;
-    for (size_t i = 0; i < length - 1U; ++i) {
-        if (i == 4U || i == 7U || i == 10U || i == 13U || i == 16U) continue;
-        if (i == 19U && length != 20U) {
-            if (text[i] != '.' || length < 22U) return false;
-            continue;
-        }
-        if (text[i] < '0' || text[i] > '9') return false;
-    }
-    const unsigned year = digits(text, 4U), month = digits(text + 5U, 2U), day = digits(text + 8U, 2U);
-    static const unsigned days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (month < 1U || month > 12U || day < 1U) return false;
-    unsigned limit = days[month - 1U];
-    if (month == 2U && year % 4U == 0U && (year % 100U != 0U || year % 400U == 0U)) ++limit;
-    return day <= limit && digits(text + 11U, 2U) < 24U && digits(text + 14U, 2U) < 60U &&
-           digits(text + 17U, 2U) < 60U;
-}
-
 bool bridge_event_valid(const bridge_event_t *event)
 {
     if (event == NULL) return false;
     const size_t length = strnlen(event->message, sizeof(event->message));
     return bridge_uuid_valid(event->event_id) && event->alert_id > 0U &&
            event->alert_id <= UINT64_C(9007199254740991) && length <= BRIDGE_EVENT_MESSAGE_MAX_BYTES &&
-           bridge_utf8_valid(event->message, length) && bridge_event_timestamp_valid(event->scheduled_at) &&
-           bridge_event_timestamp_valid(event->triggered_at);
+           bridge_utf8_valid(event->message, length) && bridge_time_valid(event->scheduled_at) &&
+           bridge_time_valid(event->triggered_at);
 }
 
 static bool fields_exact(const cJSON *object, const char *const *names, size_t count)

@@ -40,3 +40,6 @@ bool recording_read_message(uint64_t generation, void (*reader)(const char *text
 /* Reserve the user action slot for a finite external mutation. Capture and upload commands are blocked until end. */
 bool recording_external_action_begin(void);
 void recording_external_action_end(void);
+
+/* True during capture, cleanup and upload: module reads must not start. Never blocks. */
+bool recording_reads_blocked(void);

@@ -1,5 +1,6 @@
 /* Adapted from snooze_codec.c in the author's V4 firmware; see THIRD_PARTY_NOTICES.md. */
 #include "bridge_snooze.h"
+#include "bridge_time.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -36,7 +37,7 @@ bool bridge_snooze_request(bridge_snooze_preset_t preset, const char *scheduled_
     static const char *const keys[] = {"snooze_5m", "snooze_1h", "snooze_tomorrow_same_time"};
     if (preset < BRIDGE_SNOOZE_FIVE_MINUTES || preset > BRIDGE_SNOOZE_TOMORROW ||
         scheduled_at == NULL || body == NULL || capacity == 0U ||
-        !bridge_event_timestamp_valid(scheduled_at)) return false;
+        !bridge_time_valid(scheduled_at)) return false;
     const int length = snprintf(body, capacity, "{\"preset\":\"%s\",\"expected_scheduled_at\":\"%s\"}",
                                 keys[preset - BRIDGE_SNOOZE_FIVE_MINUTES], scheduled_at);
     return length > 0 && (size_t)length < capacity;
@@ -65,7 +66,7 @@ bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t
         if (fields_exact(root, names, 2U) && cJSON_IsNumber(id) &&
             isfinite(id->valuedouble) && id->valuedouble == (double)alert_id &&
             cJSON_IsString(time) && time->valuestring != NULL &&
-            bridge_event_timestamp_valid(time->valuestring)) {
+            bridge_time_valid(time->valuestring)) {
             memcpy(confirmed_at, time->valuestring, strlen(time->valuestring) + 1U);
             result = BRIDGE_SNOOZE_SUCCESS;
         }

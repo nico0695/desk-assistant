@@ -296,6 +296,13 @@ recording_failure_t recording_state_validate(const recording_state_t *state, uin
     return state->samples < RECORDING_MIN_SAMPLES ? RECORDING_FAILURE_TOO_SHORT : RECORDING_FAILURE_NONE;
 }
 
+bool recording_state_media_active(const recording_state_t *state)
+{
+    return state->phase == RECORDING_RECORDING || state->phase == RECORDING_FINALIZING ||
+           state->phase == RECORDING_CANCELLING || state->phase == RECORDING_UPLOADING ||
+           state->running_job == RECORDING_JOB_UPLOAD || state->wanted_job == RECORDING_JOB_UPLOAD;
+}
+
 bool recording_state_ready(recording_state_t *state)
 {
     if (state->phase != RECORDING_FINALIZING) {

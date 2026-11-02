@@ -88,6 +88,8 @@ void recording_state_restore(recording_state_t *state, const char *id, recording
 /* After init: an unreadable record blocks everything until restart. */
 void recording_state_restore_failed(recording_state_t *state);
 void recording_state_view(const recording_state_t *state, recording_view_t *view);
+/* True while a capture, its cleanup or an upload owns the audio path or the finite HTTP gate for long. */
+bool recording_state_media_active(const recording_state_t *state);
 
 /* The next job, marking the worker busy; RECORDING_JOB_NONE while one runs or when nothing is wanted. */
 recording_job_t recording_state_claim_job(recording_state_t *state);
