@@ -27,8 +27,9 @@ esp_err_t bridge_clock_start(bridge_clock_synced_fn callback, void *context) { (
 bool bridge_clock_ready(void) { return true; }
 esp_err_t bridge_origin_load(bridge_origin_t *origin) { memset(origin, 0, sizeof(*origin)); return ESP_FAIL; }
 void bridge_origin_set_changed_callback(bridge_origin_changed_fn callback) { (void)callback; }
-void bridge_stream_run(const bridge_origin_t *origin, bridge_sse_t *state, const bridge_stream_hooks_t *hooks)
-{ (void)origin; (void)state; (void)hooks; }
+bridge_stream_result_t bridge_stream_run(const bridge_origin_t *origin, bridge_sse_t *state,
+                                         const bridge_stream_hooks_t *hooks)
+{ (void)origin; (void)state; (void)hooks; return (bridge_stream_result_t){0}; }
 int64_t esp_timer_get_time(void) { return 0; }
 BaseType_t xTaskCreate(void (*task)(void *), const char *name, unsigned stack, void *arg, unsigned priority, TaskHandle_t *handle)
 { (void)task; (void)name; (void)stack; (void)arg; (void)priority; *handle = (void *)1; return pdPASS; }

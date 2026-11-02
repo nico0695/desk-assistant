@@ -22,6 +22,22 @@ static uint64_t input_revision;
 static TaskHandle_t stream_task;
 static bridge_online_fn online_callback;
 
+static const char *stream_failure_name(bridge_stream_reason_t reason)
+{
+    switch (reason) {
+    case BRIDGE_STREAM_SETUP_FAILED: return "setup";
+    case BRIDGE_STREAM_CONNECT_FAILED: return "connection";
+    case BRIDGE_STREAM_HEADERS_FAILED: return "headers read";
+    case BRIDGE_STREAM_HTTP_REJECTED: return "HTTP rejected";
+    case BRIDGE_STREAM_INVALID_HEADERS: return "invalid headers";
+    case BRIDGE_STREAM_HEARTBEAT_TIMEOUT: return "heartbeat timeout";
+    case BRIDGE_STREAM_READ_FAILED: return "read";
+    case BRIDGE_STREAM_INVALID_FRAME: return "invalid frame";
+    case BRIDGE_STREAM_STOPPED: return "stopped";
+    }
+    return "unknown";
+}
+
 typedef struct {
     uint64_t ticket;
     const bridge_origin_t *origin;
@@ -111,6 +127,7 @@ static void stream_worker(void *unused)
     bridge_sse_t stream;
     bridge_sse_init(&stream);
     uint64_t observed_revision = UINT64_MAX;
+    bridge_stream_result_t previous_failure = {0};
     for (;;) {
         bridge_origin_t origin;
         bool has_ip;
@@ -126,6 +143,7 @@ static void stream_worker(void *unused)
         taskEXIT_CRITICAL(&state_lock);
         if (revision != observed_revision) {
             bridge_sse_init(&stream);
+            previous_failure = (bridge_stream_result_t){0};
             observed_revision = revision;
             online_callback(false, generation);
         }
@@ -155,13 +173,20 @@ static void stream_worker(void *unused)
         taskEXIT_CRITICAL(&state_lock);
         if (context.ticket != 0U) {
             bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
-            bridge_stream_run(&origin, &stream, &hooks);
+            bridge_stream_result_t result = bridge_stream_run(&origin, &stream, &hooks);
+            if (stream.connected) previous_failure = (bridge_stream_result_t){0};
+            if (result.reason != BRIDGE_STREAM_STOPPED &&
+                (result.reason != previous_failure.reason || result.http_status != previous_failure.http_status)) {
+                ESP_LOGW(TAG, "event stream failure: %s (HTTP %d)", stream_failure_name(result.reason),
+                         result.http_status);
+                previous_failure = result;
+            }
             taskENTER_CRITICAL(&state_lock);
             bool closed = bridge_connection_stream_closed(&connection, context.ticket);
             generation = connection.generation;
             taskEXIT_CRITICAL(&state_lock);
             if (closed) online_callback(false, generation);
-            if (closed) ESP_LOGI(TAG, "event stream closed");
+            if (closed && stream.connected) ESP_LOGI(TAG, "event stream closed");
             bridge_sse_disconnected(&stream, (uint64_t)esp_timer_get_time() / 1000U);
         }
         clear_secret(&origin, sizeof(origin));

@@ -263,7 +263,8 @@ static void stream_opens_with_auth_processes_frame_and_releases_resources(void)
     stream_test_t context = {0};
     bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
     mode = STREAM_OK;
-    bridge_stream_run(&origin, &state, &hooks);
+    bridge_stream_result_t result = bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STOPPED, result.reason);
     TEST_ASSERT_TRUE(context.opened);
     TEST_ASSERT_TRUE(state.connected);
     TEST_ASSERT_TRUE(bridge_sse_take_pending_events(&state));
@@ -279,10 +280,13 @@ static void stream_rejects_missing_type_and_unauthorized_response(void)
     stream_test_t context = {0};
     bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
     mode = STREAM_NO_TYPE;
-    bridge_stream_run(&origin, &state, &hooks);
+    bridge_stream_result_t result = bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_INVALID_HEADERS, result.reason);
     TEST_ASSERT_FALSE(context.opened);
     mode = STREAM_DENIED;
-    bridge_stream_run(&origin, &state, &hooks);
+    result = bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_HTTP_REJECTED, result.reason);
+    TEST_ASSERT_EQUAL_INT(401, result.http_status);
     TEST_ASSERT_FALSE(context.opened);
     TEST_ASSERT_EQUAL_UINT(2, dispatches);
 }
@@ -294,10 +298,24 @@ static void stream_idle_times_out_after_sixty_seconds(void)
     stream_test_t context = {0};
     bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_always_current, .context = &context};
     mode = STREAM_IDLE;
-    bridge_stream_run(&origin, &state, &hooks);
+    bridge_stream_result_t result = bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_HEARTBEAT_TIMEOUT, result.reason);
     TEST_ASSERT_TRUE(context.opened);
     TEST_ASSERT_GREATER_OR_EQUAL_INT64(INT64_C(60000000), now_us);
     TEST_ASSERT_LESS_THAN_INT64(INT64_C(61000000), now_us);
+}
+
+static void stream_reports_connection_failure(void)
+{
+    bridge_sse_t state;
+    bridge_sse_init(&state);
+    stream_test_t context = {0};
+    bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
+    mode = CONNECT_STALL;
+    bridge_stream_result_t result = bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_CONNECT_FAILED, result.reason);
+    TEST_ASSERT_EQUAL_INT(0, result.http_status);
+    TEST_ASSERT_FALSE(context.opened);
 }
 
 static void stream_stale_open_does_not_publish_connected(void)
@@ -307,7 +325,8 @@ static void stream_stale_open_does_not_publish_connected(void)
     stream_test_t context = {0};
     bridge_stream_hooks_t hooks = {.opened = stream_open_rejected, .current = stream_current, .context = &context};
     mode = STREAM_OK;
-    bridge_stream_run(&origin, &state, &hooks);
+    bridge_stream_result_t result = bridge_stream_run(&origin, &state, &hooks);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_STREAM_STOPPED, result.reason);
     TEST_ASSERT_FALSE(state.connected);
     TEST_ASSERT_EQUAL_UINT(0, context.checks);
 }
@@ -324,6 +343,7 @@ int main(void)
     RUN_TEST(stream_opens_with_auth_processes_frame_and_releases_resources);
     RUN_TEST(stream_rejects_missing_type_and_unauthorized_response);
     RUN_TEST(stream_idle_times_out_after_sixty_seconds);
+    RUN_TEST(stream_reports_connection_failure);
     RUN_TEST(stream_stale_open_does_not_publish_connected);
     return UNITY_END();
 }

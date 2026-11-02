@@ -116,8 +116,10 @@ static void clear_secret(char *secret, size_t size)
     while (size-- > 0U) *at++ = 0;
 }
 
-void bridge_stream_run(const bridge_origin_t *origin, bridge_sse_t *state, const bridge_stream_hooks_t *hooks)
+bridge_stream_result_t bridge_stream_run(const bridge_origin_t *origin, bridge_sse_t *state,
+                                         const bridge_stream_hooks_t *hooks)
 {
+    bridge_stream_result_t result = {.reason = BRIDGE_STREAM_SETUP_FAILED};
     stream_transport_t stream = {.deadline_us = esp_timer_get_time() + (int64_t)BRIDGE_SSE_OPEN_MS * 1000};
     esp_transport_handle_t wrapper = NULL;
     esp_http_client_handle_t client = NULL;
@@ -146,28 +148,43 @@ void bridge_stream_run(const bridge_origin_t *origin, bridge_sse_t *state, const
     if (error != ESP_OK || esp_http_client_set_header(client, "Accept", "text/event-stream") != ESP_OK ||
         esp_http_client_set_header(client, "Accept-Encoding", "identity") != ESP_OK) goto cleanup;
     int budget = remaining(&stream, -1);
+    result.reason = BRIDGE_STREAM_CONNECT_FAILED;
     if (budget <= 0 || !bridge_http_handshake_acquire((uint32_t)budget)) goto cleanup;
     handshake_held = true;
     error = esp_http_client_open(client, 0);
     bridge_http_handshake_release();
     handshake_held = false;
-    if (error != ESP_OK || esp_http_client_fetch_headers(client) < 0 ||
-        remaining(&stream, -1) <= 0 || esp_http_client_get_status_code(client) != 200 ||
-        stream.content_type_count != 1U || !stream.content_type_valid || stream.encoding_invalid ||
-        !hooks->opened(hooks->context)) goto cleanup;
+    if (error != ESP_OK) goto cleanup;
+    result.reason = BRIDGE_STREAM_HEADERS_FAILED;
+    if (esp_http_client_fetch_headers(client) < 0 || remaining(&stream, -1) <= 0) goto cleanup;
+    result.http_status = esp_http_client_get_status_code(client);
+    result.reason = BRIDGE_STREAM_HTTP_REJECTED;
+    if (result.http_status != 200) goto cleanup;
+    result.reason = BRIDGE_STREAM_INVALID_HEADERS;
+    if (stream.content_type_count != 1U || !stream.content_type_valid || stream.encoding_invalid) goto cleanup;
+    result.reason = BRIDGE_STREAM_STOPPED;
+    result.http_status = 0;
+    if (!hooks->opened(hooks->context)) goto cleanup;
     stream.streaming = true;
     bridge_sse_connected(state, (uint64_t)esp_timer_get_time() / 1000U);
     char bytes[STREAM_READ_BYTES];
     while (hooks->current(hooks->context)) {
         uint64_t now = (uint64_t)esp_timer_get_time() / 1000U;
-        if (bridge_sse_dead(state, now)) break;
+        if (bridge_sse_dead(state, now)) {
+            result.reason = BRIDGE_STREAM_HEARTBEAT_TIMEOUT;
+            break;
+        }
         stream.deadline_us = esp_timer_get_time() + (int64_t)STREAM_READ_MS * 1000;
         int64_t dead_us = (int64_t)(state->last_bytes_ms + BRIDGE_SSE_DEAD_MS) * 1000;
         if (dead_us < stream.deadline_us) stream.deadline_us = dead_us;
         int count = esp_http_client_read(client, bytes, sizeof(bytes));
         if (count > 0) {
-            if (!bridge_sse_feed(state, bytes, (size_t)count, (uint64_t)esp_timer_get_time() / 1000U)) break;
+            if (!bridge_sse_feed(state, bytes, (size_t)count, (uint64_t)esp_timer_get_time() / 1000U)) {
+                result.reason = BRIDGE_STREAM_INVALID_FRAME;
+                break;
+            }
         } else if (count != -ESP_ERR_HTTP_EAGAIN) {
+            result.reason = BRIDGE_STREAM_READ_FAILED;
             break;
         }
     }
@@ -177,4 +194,5 @@ cleanup:
     if (wrapper != NULL) esp_transport_destroy(wrapper);
     if (stream.tls != NULL) esp_transport_destroy(stream.tls);
     clear_secret(authorization, sizeof(authorization));
+    return result;
 }
