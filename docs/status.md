@@ -12,18 +12,18 @@
 | 5a | Recording: local capture | Done (validated 2026-11-02) |
 | 5b | Recording: upload and result | Done (validated 2026-11-02) |
 | 6 | Notifications and sound | Done (validated 2026-11-02) |
-| 7 | Modules: read | Checkpoint, waiting for validation |
-| 8 | Modules: actions | Pending |
+| 7 | Modules: read | Done (validated 2026-11-02) |
+| 8 | Modules: actions | Next |
 | 9 | Full acceptance | Pending |
 | 10 | Battery (optional) | Pending |
 
-## Active stage: 7 — Modules: read
+## Active stage: 8 — Modules: actions
 
-- **Status:** checkpoint reached. The read codec, the browsing state, the read worker and the list and detail screens are built, reviewed (4R) and flashed on `esp32-02` (`4769531`). Waiting for the user's validation of the smoke guide.
-- **Goal:** Tasks, Notes and Alerts browsable with recoverable memory.
-- **Scope (macro plan):** paged lists, Refresh, a valid empty page, detail by ID, Back with the list kept once; generation tickets for stale results; dates in UTC-3, read errors distinct from empty, busy during capture and upload; memory released on exit.
-- **Open:** body budget (4096 B provisional): the received lengths are logged per read but were not recorded; measure them with real data.
-- **Carry-overs from stage 6:** Snooze from the Alerts detail belongs to stage 8; the tone-volume intensity and the stage 6 gaps are in `.local/follow-up.md`.
+- **Status:** next, not started.
+- **Goal:** safe mutations on remote resources.
+- **Scope (macro plan):** Delete with confirmation, Complete for pending, Snooze from the detail; frozen target, a single dispatch and error mapping; uncertainty that requires a fresh detail, and a success that survives a failed refresh; notification deferral during the confirmation.
+- **Open:** Complete deadline to coordinate with the bridge.
+- **Carry-overs from stage 7:** a direct module-to-module path would need `forget_screen` to tell screens apart; the other items are in `.local/follow-up.md`.
 
 ## Closed stages
 
@@ -35,6 +35,7 @@
 - **5a — Recording: local capture:** ES7210 microphone over I2S (stereo reads keeping MIC1) with the ALDO1 rail saved and restored; PCM16 clip in the audio partition with the WAV header synthesized on read, erased after each attempt and scanned at boot; capture state machine with 0.5–30 s limits, overrun and cleanup failures; recording panel from Home with the screen held on during capture. Validated on `esp32-02` at `0eccb5e`; no 4R review or smoke guide at close by user decision.
 - **5b — Recording: upload and result:** one TLS transport shared by GET, PUT and SSE; assistant codec; the single PUT with the `unsent` boundary and progress windows; a durable attempt record with an origin hold; one-job-at-a-time attempt phases; upload, query, close and discard jobs, the 180 s wait and restore after reboot; reply panel with scroll and notes; Home entry by state. Validated by the user on `esp32-02` at `6c30f19` (green CI on `0474820`); network cut, discard and Check on the board were skipped by the user and are in `.local/follow-up.md`.
 - **6 — Notifications and sound:** a durable FIFO of eight and a pending-ACK journal in one NVS blob; `limit=1` drain on demand with persistence before the ACK and an idempotent ACK retry; an overlay card with local Next and Close, Snooze with presets and a durable close, panel wake-up and deferral during capture; an atomic audio arbiter between capture and playback and an ES8311 tone with a RAM accumulator. Validated by the user on `esp32-02` at `25af727` (green CI on `2396ba9`); the tone intensity does not follow the volume (only 0 mutes), and several cases are deferred in `.local/follow-up.md`.
+- **7 — Modules: read:** a codec for the Tasks, Notes and Alerts lists and details with exact fields and the error envelope; shared UTC-3 dates and JSON guard extracted from notifications and events; a browsing state machine with generation tickets and one retained list; a short-lived read worker that waits up to 5 s for the HTTP gate and refuses to start during capture or upload; list and detail screens with page in the title, Prev, Refresh and Next, replace-by-state loading and errors, and the host preview. Validated by the user on `esp32-02` at `4769531` (green CI on `a83b605`); a read during a Wi-Fi outage was not tested and the body budget is still unmeasured, both in `.local/follow-up.md`.
 
 ## Evidence
 
@@ -156,5 +157,7 @@ Each checkpoint records one entry per image:
 - **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), battery present, USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes.
   - Final image `4769531`: boot log shows the version and ELF digits above; heap 166 KB free, minimum 153 KB at UI ready; event stream open 10 s after boot; no errors. Only the boot was observed on this image; the modules were not exercised on it.
   - Image `6c81f34` (same module logic; the final image only adds tests, a log field and cosmetic UI cleanups): the user opened Tasks, Notes and Alerts with real data and reported everything working. The per-read lengths in the `modules` log were not recorded, so the 4096 B budget stays provisional.
-  - Not run: a network cut or an unconfigured origin during a read, a read refused during a recording or upload, a notification over a module, and a module with more than five items were not individually reported by the user.
+  - Final image `4769531`, observed by the user: Busy while a recording is active and loading after it ends, an alert arriving over an open module and returning to it on close, and a normal recording after browsing modules, all working.
+  - Not run, by user decision: a read during a Wi-Fi outage (error state and Refresh recovery). Not reported: the received body lengths and a module with more than five items on the final image.
+- **Validation:** the user ran the reduced smoke guide on the final image and reported the executed cases working (2026-11-02).
 - **Reviews:** `standard-code-review` per step group (findings fixed in `6c81f34`, the V4 attribution and the step 5 UI). 4R at close: four lenses, 0 severe, 14 warnings and suggestions. Fixed in `4769531`: tests for the shared timestamp validator, for the finalizing and cancelling capture phases that block reads and for the refresh and newest-request cases; the read log no longer shows a transport code for reads that were never sent; dead UI parameter, redundant clear, time buffer size and comments. Deferred or discarded with their reason in `.local/stages/07-modulos-lectura.md`.
