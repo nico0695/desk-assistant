@@ -22,7 +22,7 @@
 - **Status:** next, not started.
 - **Goal:** safe mutations on remote resources.
 - **Scope (macro plan):** Delete with confirmation, Complete for pending, Snooze from the detail; frozen target, a single dispatch and error mapping; uncertainty that requires a fresh detail, and a success that survives a failed refresh; notification deferral during the confirmation.
-- **Open:** Complete deadline to coordinate with the bridge.
+- **Open:** the Complete deadline. The bridge makes up to three bot calls and asks the device to wait at least 55 s; the 40 s used for the other actions covers their 35 s minimum.
 - **Carry-overs from stage 7:** a direct module-to-module path would need `forget_screen` to tell screens apart; the other items are in `.local/follow-up.md`.
 
 ## Closed stages
