@@ -42,7 +42,6 @@ static void origin_changed(const bridge_origin_t *origin)
     active_origin = *origin;
     bridge_connection_origin_changed(&connection, true);
     ++input_revision;
-    if (online_callback != NULL) online_callback(false);
     taskEXIT_CRITICAL(&state_lock);
     wake_stream();
 }
@@ -55,7 +54,6 @@ void bridge_set_ip(bool has_ip)
     if (changed) {
         bridge_connection_set_ip(&connection, has_ip);
         ++input_revision;
-        if (online_callback != NULL) online_callback(false);
     }
     taskEXIT_CRITICAL(&state_lock);
     if (changed) wake_stream();
@@ -81,9 +79,13 @@ static bool stream_opened(void *context)
     const stream_context_t *stream = context;
     taskENTER_CRITICAL(&state_lock);
     bool opened = bridge_connection_stream_opened(&connection, stream->ticket);
-    if (opened) online_callback(true);
     taskEXIT_CRITICAL(&state_lock);
     if (opened) {
+        online_callback(true);
+        if (!stream_current(context)) {
+            online_callback(false);
+            return false;
+        }
         ESP_LOGI(TAG, "event stream open");
     }
     return opened;

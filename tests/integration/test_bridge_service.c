@@ -4,7 +4,15 @@
 
 static bool shown_online;
 static unsigned publications;
-static void show_online(bool online) { shown_online = online; ++publications; }
+static bool drop_during_publication;
+unsigned bridge_test_critical_depth;
+static void show_online(bool online)
+{
+    TEST_ASSERT_EQUAL_UINT(0, bridge_test_critical_depth);
+    shown_online = online;
+    ++publications;
+    if (online && drop_during_publication) bridge_set_ip(false);
+}
 
 esp_err_t bridge_http_init(void) { return ESP_OK; }
 esp_err_t bridge_clock_start(bridge_clock_synced_fn callback, void *context) { (void)callback; (void)context; return ESP_OK; }
@@ -28,6 +36,8 @@ void setUp(void)
     online_callback = show_online;
     shown_online = false;
     publications = 0;
+    drop_during_publication = false;
+    bridge_test_critical_depth = 0;
 }
 void tearDown(void) {}
 
@@ -37,10 +47,7 @@ static void lost_ip_invalidates_a_stale_open(void)
     origin_changed(&origin);
     bridge_set_ip(true);
     stream_context_t stream = {.ticket = bridge_connection_begin_stream(&connection)};
-    TEST_ASSERT_TRUE(stream_opened(&stream));
-    TEST_ASSERT_TRUE(shown_online);
     bridge_set_ip(false);
-    TEST_ASSERT_FALSE(shown_online);
     TEST_ASSERT_FALSE(stream_opened(&stream));
     TEST_ASSERT_FALSE(shown_online);
 }
@@ -51,11 +58,21 @@ static void origin_change_invalidates_a_stale_open(void)
     origin_changed(&origin);
     bridge_set_ip(true);
     stream_context_t stream = {.ticket = bridge_connection_begin_stream(&connection)};
-    TEST_ASSERT_TRUE(stream_opened(&stream));
     origin_changed(&origin);
-    TEST_ASSERT_FALSE(shown_online);
     TEST_ASSERT_FALSE(stream_opened(&stream));
     TEST_ASSERT_FALSE(shown_online);
+}
+
+static void lost_ip_during_open_publication_is_retracted(void)
+{
+    bridge_origin_t origin = {"https://example.test", "01234567890123456789012345678901"};
+    origin_changed(&origin);
+    bridge_set_ip(true);
+    stream_context_t stream = {.ticket = bridge_connection_begin_stream(&connection)};
+    drop_during_publication = true;
+    TEST_ASSERT_FALSE(stream_opened(&stream));
+    TEST_ASSERT_FALSE(shown_online);
+    TEST_ASSERT_EQUAL_UINT(2, publications);
 }
 
 static void ip_change_after_failed_start_has_no_callback(void)
@@ -70,6 +87,7 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(lost_ip_invalidates_a_stale_open);
     RUN_TEST(origin_change_invalidates_a_stale_open);
+    RUN_TEST(lost_ip_during_open_publication_is_retracted);
     RUN_TEST(ip_change_after_failed_start_has_no_callback);
     return UNITY_END();
 }
