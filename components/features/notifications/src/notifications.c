@@ -10,6 +10,7 @@
 #include "bridge_origin_store.h"
 #include "bridge_resources.h"
 #include "bridge_snooze.h"
+#include "bridge_snooze_send.h"
 #include "bridge_time.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -200,17 +201,12 @@ static void format_local_time(const char *utc)
 static bridge_action_result_t send_snooze(const bridge_event_t *event, bridge_snooze_preset_t preset,
                                            char confirmed_at[BRIDGE_EVENT_TIME_SIZE])
 {
-    char path[BRIDGE_SNOOZE_PATH_SIZE], request[BRIDGE_SNOOZE_REQUEST_SIZE];
-    if (!bridge_snooze_path(event->alert_id, path, sizeof(path)) ||
-        !bridge_snooze_request(preset, event->scheduled_at, request, sizeof(request)))
-        return BRIDGE_ACTION_NOT_SENT;
     bridge_origin_t origin;
     if (bridge_origin_load(&origin) != ESP_OK) return BRIDGE_ACTION_NOT_SENT;
-    char *body = malloc(BRIDGE_RESOURCE_BODY_MAX_BYTES + 1U);
+    char *body = malloc(BRIDGE_RESOURCE_BODY_MAX_BYTES);
     if (body == NULL) { memset(&origin, 0, sizeof(origin)); return BRIDGE_ACTION_NOT_SENT; }
-    const bridge_http_mutation_t sent = bridge_http_json(&origin, path, BRIDGE_HTTP_POST_JSON, request,
-        strlen(request), BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS, BRIDGE_RESOURCE_IO_MS, body,
-        BRIDGE_RESOURCE_BODY_MAX_BYTES);
+    const bridge_http_mutation_t sent = bridge_snooze_send(&origin, event->alert_id, preset, event->scheduled_at,
+                                                           body, BRIDGE_RESOURCE_BODY_MAX_BYTES);
     memset(&origin, 0, sizeof(origin));
     bridge_action_result_t result;
     if (sent.response.result == BRIDGE_HTTP_OK)

@@ -51,6 +51,13 @@ static void known_errors_are_classified_without_message_text(void)
     const char *not_sent = "{\"error\":{\"code\":\"temporarily_unavailable\",\"message\":\"private\"}}";
     TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_NOT_SENT,
         bridge_snooze_decode(503, not_sent, strlen(not_sent), 42, confirmed));
+    /* Rows shared with Delete and Complete: a missing route is a rejection, a read failure stays uncertain. */
+    const char *no_route = "{\"error\":{\"code\":\"not_found\",\"message\":\"private\"}}";
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_REJECTED,
+        bridge_snooze_decode(404, no_route, strlen(no_route), 42, confirmed));
+    const char *read_failed = "{\"error\":{\"code\":\"upstream_unavailable\",\"message\":\"private\"}}";
+    TEST_ASSERT_EQUAL_INT(BRIDGE_ACTION_UNCONFIRMED,
+        bridge_snooze_decode(502, read_failed, strlen(read_failed), 42, confirmed));
 }
 
 int main(void)

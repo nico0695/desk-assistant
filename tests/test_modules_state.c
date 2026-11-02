@@ -407,6 +407,24 @@ static void an_action_that_cannot_start_a_worker_is_not_sent(void)
     TEST_ASSERT_EQUAL(MODULES_READY, view().status);
 }
 
+static void an_outcome_after_leaving_changes_nothing_after_reentry(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_TASKS, true);
+    modules_state_act(&state, ticket, MODULES_ACTION_COMPLETE, 0U, NULL);
+    const modules_request_t action = modules_state_claim(&state);
+    modules_state_leave(&state);
+    modules_state_enter(&state, BRIDGE_RESOURCE_TASKS);
+    TEST_ASSERT_EQUAL(MODULES_REQUEST_NONE, modules_state_claim(&state).type);
+    TEST_ASSERT_EQUAL_UINT(MODULES_EFFECT_NONE,
+                           modules_state_action_done(&state, action.ticket, MODULES_NOTICE_UNCONFIRMED, NULL));
+    TEST_ASSERT_EQUAL(MODULES_SCREEN_LIST, view().screen);
+    TEST_ASSERT_EQUAL(MODULES_LOADING, view().status);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_NONE, view().notice);
+    const modules_request_t next = modules_state_finish(&state);
+    TEST_ASSERT_EQUAL(MODULES_REQUEST_LIST, next.type);
+    TEST_ASSERT_EQUAL_UINT64(1U, next.number);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -431,5 +449,6 @@ int main(void)
     RUN_TEST(an_uncertain_outcome_requires_a_fresh_detail);
     RUN_TEST(a_not_sent_outcome_allows_a_new_explicit_action);
     RUN_TEST(an_action_that_cannot_start_a_worker_is_not_sent);
+    RUN_TEST(an_outcome_after_leaving_changes_nothing_after_reentry);
     return UNITY_END();
 }

@@ -17,7 +17,7 @@ typedef struct {
     void (*on_open)(uint64_t ticket, uint64_t id);
     /* Back from a detail returns to its list. */
     void (*on_back)(uint64_t ticket);
-    /* Actions on the detail shown with the ticket, sent after the user confirms in the screen's dialog. */
+    /* Actions on the detail shown with the ticket: Delete and Snooze after the screen's dialog, Complete on its tap. */
     void (*on_delete)(uint64_t ticket);
     void (*on_complete)(uint64_t ticket);
     void (*on_snooze)(uint64_t ticket, bridge_snooze_preset_t preset);

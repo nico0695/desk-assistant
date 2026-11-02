@@ -6,6 +6,7 @@
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
 #include "bridge_snooze.h"
+#include "bridge_snooze_send.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -347,16 +348,10 @@ static bool send_action(const modules_request_t *request, const bridge_origin_t 
         *sent = bridge_http_action(origin, path, BRIDGE_HTTP_POST_EMPTY, BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS,
                                    BRIDGE_RESOURCE_COMPLETE_IO_MS, body, BRIDGE_RESOURCE_BODY_MAX_BYTES);
         return true;
-    case MODULES_ACTION_SNOOZE: {
-        char snooze[BRIDGE_SNOOZE_REQUEST_SIZE];
-        if (!bridge_snooze_path(request->number, path, sizeof(path)) ||
-            !bridge_snooze_request((bridge_snooze_preset_t)request->preset, request->scheduled_at, snooze,
-                                   sizeof(snooze))) return false;
-        *sent = bridge_http_json(origin, path, BRIDGE_HTTP_POST_JSON, snooze, strlen(snooze),
-                                 BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS, BRIDGE_RESOURCE_IO_MS, body,
-                                 BRIDGE_RESOURCE_BODY_MAX_BYTES);
+    case MODULES_ACTION_SNOOZE:
+        *sent = bridge_snooze_send(origin, request->number, (bridge_snooze_preset_t)request->preset,
+                                   request->scheduled_at, body, BRIDGE_RESOURCE_BODY_MAX_BYTES);
         return true;
-    }
     default: return false;
     }
 }

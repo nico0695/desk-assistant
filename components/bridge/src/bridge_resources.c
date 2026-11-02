@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bridge_action_error.h"
 #include "bridge_json.h"
 #include "bridge_text.h"
 
@@ -260,8 +261,12 @@ bool bridge_resource_complete_path(uint64_t id, char *path, size_t capacity)
     return length > 0 && (size_t)length < capacity;
 }
 
-/* An action error decided by the HTTP/code pair. Anything unknown after dispatch may have been applied. */
-static bridge_action_result_t action_error(int status, const cJSON *root, bool complete)
+static bool code_is(const char *name, const char *expected)
+{
+    return expected != NULL && strcmp(name, expected) == 0;
+}
+
+bridge_action_result_t bridge_action_error(int status, const cJSON *root, const bridge_action_codes_t *codes)
 {
     static const char *const wrapper[] = {"error"};
     static const char *const fields[] = {"code", "message"};
@@ -272,22 +277,22 @@ static bridge_action_result_t action_error(int status, const cJSON *root, bool c
         !cJSON_IsString(code) || code->valuestring == NULL || !cJSON_IsString(message))
         return BRIDGE_ACTION_UNCONFIRMED;
     const char *name = code->valuestring;
-    const bool bot_rejection = strcmp(name, "bot_auth_rejected") == 0 || strcmp(name, "bot_access_denied") == 0;
-    /* Complete reads the task before updating it: a failed read means no update was sent. */
-    const bool read_failed = strcmp(name, "upstream_unavailable") == 0 || strcmp(name, "invalid_upstream_response") == 0;
-    if (status == 503 && strcmp(name, "temporarily_unavailable") == 0) return BRIDGE_ACTION_NOT_SENT;
-    if (complete && status == 502 && read_failed) return BRIDGE_ACTION_NOT_SENT;
-    if (status == 404 && strcmp(name, "resource_not_found") == 0) return BRIDGE_ACTION_NOT_FOUND;
-    if (complete && status == 409 && strcmp(name, "task_state_changed") == 0) return BRIDGE_ACTION_CHANGED;
-    if ((status == 400 && strcmp(name, "invalid_request") == 0) || (status == 401 && strcmp(name, "unauthorized") == 0) ||
-        (status == 404 && strcmp(name, "not_found") == 0) || (status == 502 && bot_rejection))
+    const bool bot_rejection = code_is(name, "bot_auth_rejected") || code_is(name, "bot_access_denied");
+    const bool read_failed = code_is(name, "upstream_unavailable") || code_is(name, "invalid_upstream_response");
+    if (status == 503 && code_is(name, "temporarily_unavailable")) return BRIDGE_ACTION_NOT_SENT;
+    if (codes->reads_first && status == 502 && read_failed) return BRIDGE_ACTION_NOT_SENT;
+    if (status == 404 && code_is(name, codes->not_found)) return BRIDGE_ACTION_NOT_FOUND;
+    if (status == 409 && code_is(name, codes->changed)) return BRIDGE_ACTION_CHANGED;
+    if ((status == 400 && code_is(name, "invalid_request")) || (status == 401 && code_is(name, "unauthorized")) ||
+        (status == 404 && code_is(name, "not_found")) || (status == 502 && bot_rejection))
         return BRIDGE_ACTION_REJECTED;
     return BRIDGE_ACTION_UNCONFIRMED;
 }
 
 /* Success is exactly {"id": id, <field>: expected}; expected is a string, or NULL for boolean true. */
 static bridge_action_result_t decode_action(uint64_t id, int status, const char *body, size_t length,
-                                            const char *field, const char *expected, bool complete)
+                                            const char *field, const char *expected,
+                                            const bridge_action_codes_t *codes)
 {
     if (id == 0U || id > BRIDGE_RESOURCE_ID_MAX) return BRIDGE_ACTION_UNCONFIRMED;
     cJSON *root = parse(body, length);
@@ -304,7 +309,7 @@ static bridge_action_result_t decode_action(uint64_t id, int status, const char 
             safe_integer(cJSON_GetObjectItemCaseSensitive(root, "id"), &answered) && answered == id && matches)
             result = BRIDGE_ACTION_SUCCESS;
     } else {
-        result = action_error(status, root, complete);
+        result = bridge_action_error(status, root, codes);
     }
     cJSON_Delete(root);
     return result;
@@ -312,10 +317,13 @@ static bridge_action_result_t decode_action(uint64_t id, int status, const char 
 
 bridge_action_result_t bridge_resource_decode_delete(uint64_t id, int status, const char *body, size_t length)
 {
-    return decode_action(id, status, body, length, "deleted", NULL, false);
+    static const bridge_action_codes_t codes = {.not_found = "resource_not_found"};
+    return decode_action(id, status, body, length, "deleted", NULL, &codes);
 }
 
 bridge_action_result_t bridge_resource_decode_complete(uint64_t id, int status, const char *body, size_t length)
 {
-    return decode_action(id, status, body, length, "status", "completed", true);
+    static const bridge_action_codes_t codes = {
+        .not_found = "resource_not_found", .changed = "task_state_changed", .reads_first = true};
+    return decode_action(id, status, body, length, "status", "completed", &codes);
 }

@@ -114,14 +114,6 @@ bridge_http_mutation_t bridge_http_json(const bridge_origin_t *origin, const cha
                                         uint32_t gate_ms, uint32_t io_ms, char *body, size_t capacity)
 {
     (void)origin; (void)gate_ms; (void)io_ms; (void)body; (void)capacity;
-    if (method == BRIDGE_HTTP_POST_JSON) {
-        TEST_ASSERT_EQUAL_STRING("/v1/device/alerts/42/snooze", path);
-        TEST_ASSERT_EQUAL_STRING("snooze", request);
-        ++posts;
-        if (unsent_snooze) return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TRANSPORT_ERROR, .unsent = true};
-        if (fail_snooze_transport) return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TIMEOUT};
-        return (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = 200, .length = 2}};
-    }
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_PUT_JSON, method);
     TEST_ASSERT_EQUAL_STRING(BRIDGE_EVENT_ACK_BODY, request);
     TEST_ASSERT_EQUAL_UINT(strlen(BRIDGE_EVENT_ACK_BODY), request_length);
@@ -132,13 +124,18 @@ bridge_http_mutation_t bridge_http_json(const bridge_origin_t *origin, const cha
     return fail_ack ? (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TIMEOUT} :
                       (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = 204, .length = 0}};
 }
-bool bridge_snooze_path(uint64_t alert_id, char *path, size_t capacity)
-{ TEST_ASSERT_EQUAL_UINT64(42, alert_id); snprintf(path, capacity, "/v1/device/alerts/42/snooze"); return true; }
-bool bridge_snooze_request(bridge_snooze_preset_t preset, const char *scheduled_at, char *body, size_t capacity)
+bridge_http_mutation_t bridge_snooze_send(const bridge_origin_t *origin, uint64_t alert_id,
+                                          bridge_snooze_preset_t preset, const char *scheduled_at, char *body,
+                                          size_t capacity)
 {
+    (void)origin; (void)body; (void)capacity;
+    TEST_ASSERT_EQUAL_UINT64(42, alert_id);
     TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_FIVE_MINUTES, preset);
     TEST_ASSERT_EQUAL_STRING("2026-11-02T12:00:00Z", scheduled_at);
-    snprintf(body, capacity, "snooze"); return true;
+    ++posts;
+    if (unsent_snooze) return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TRANSPORT_ERROR, .unsent = true};
+    if (fail_snooze_transport) return (bridge_http_mutation_t){.response.result = BRIDGE_HTTP_TIMEOUT};
+    return (bridge_http_mutation_t){.response = {.result = BRIDGE_HTTP_OK, .status = 200, .length = 2}};
 }
 bridge_action_result_t bridge_snooze_decode(int status, const char *body, size_t length,
                                             uint64_t alert_id, char confirmed_at[BRIDGE_EVENT_TIME_SIZE])
