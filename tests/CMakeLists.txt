@@ -165,7 +165,7 @@ target_link_libraries(test_notification_tones PRIVATE unity)
 add_test(NAME test_notification_tones COMMAND test_notification_tones)
 
 add_executable(test_modules integration/test_modules.c
-    ${COMPONENTS_DIR}/features/modules/src/modules_state.c
+    ${COMPONENTS_DIR}/features/modules/src/modules_state.c ${COMPONENTS_DIR}/bridge/src/bridge_snooze.c
     ${COMPONENTS_DIR}/bridge/src/bridge_resources.c ${COMPONENTS_DIR}/bridge/src/bridge_json.c
     ${COMPONENTS_DIR}/bridge/src/bridge_text.c ${COMPONENTS_DIR}/bridge/src/bridge_time.c)
 target_include_directories(test_modules PRIVATE modules_stubs bridge_http_stubs

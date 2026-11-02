@@ -5,6 +5,7 @@
 
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
+#include "bridge_snooze.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -135,6 +136,26 @@ void modules_back(uint64_t ticket)
     commit(modules_state_back(&state, ticket));
 }
 
+void modules_delete(uint64_t ticket)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    commit(modules_state_act(&state, ticket, MODULES_ACTION_DELETE, 0U, NULL));
+}
+
+void modules_complete(uint64_t ticket)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    commit(modules_state_act(&state, ticket, MODULES_ACTION_COMPLETE, 0U, NULL));
+}
+
+void modules_snooze(uint64_t ticket, bridge_snooze_preset_t preset)
+{
+    xSemaphoreTake(lock, portMAX_DELAY);
+    /* The shown detail holds the alert time the user saw; the state checks it is the detail of this ticket. */
+    const char *scheduled_at = detail_slot != NULL ? detail_slot->detail.when_at : NULL;
+    commit(modules_state_act(&state, ticket, MODULES_ACTION_SNOOZE, (unsigned)preset, scheduled_at));
+}
+
 bool modules_read_page(uint64_t ticket, void (*reader)(const bridge_resource_page_t *page, void *context),
                        void *context)
 {
@@ -222,8 +243,10 @@ static void deliver_list(const modules_request_t *request, modules_error_t error
 
 static void deliver_detail(const modules_request_t *request, modules_error_t error, detail_slot_t *slot)
 {
+    const bool task_pending = error == MODULES_ERROR_NONE && slot->detail.kind == BRIDGE_RESOURCE_TASKS &&
+                              slot->detail.task_status == BRIDGE_TASK_PENDING;
     xSemaphoreTake(lock, portMAX_DELAY);
-    const unsigned effects = modules_state_detail_done(&state, request->ticket, error);
+    const unsigned effects = modules_state_detail_done(&state, request->ticket, error, task_pending);
     if ((effects & MODULES_EFFECT_ACCEPT) != 0U) {
         free(detail_slot);
         detail_slot = slot;
@@ -293,6 +316,97 @@ static void read_detail(const modules_request_t *request)
     deliver_detail(request, error, slot);
 }
 
+static const char *const ACTION_NAMES[] = {"none", "delete", "complete", "snooze"};
+
+static modules_notice_t action_notice(bridge_action_result_t result)
+{
+    switch (result) {
+    case BRIDGE_ACTION_SUCCESS: return MODULES_NOTICE_DONE;
+    case BRIDGE_ACTION_NOT_SENT: return MODULES_NOTICE_NOT_SENT;
+    case BRIDGE_ACTION_REJECTED: return MODULES_NOTICE_REJECTED;
+    case BRIDGE_ACTION_NOT_FOUND: return MODULES_NOTICE_NOT_FOUND;
+    case BRIDGE_ACTION_CHANGED: return MODULES_NOTICE_CHANGED;
+    default: return MODULES_NOTICE_UNCONFIRMED;
+    }
+}
+
+/* Sends the one request of the action; false when it could not be built. */
+static bool send_action(const modules_request_t *request, const bridge_origin_t *origin, char *body,
+                        bridge_http_mutation_t *sent)
+{
+    char path[BRIDGE_RESOURCE_PATH_SIZE];
+    switch (request->action) {
+    case MODULES_ACTION_DELETE:
+        if (!bridge_resource_detail_path(request->kind, request->number, path, sizeof(path))) return false;
+        *sent = bridge_http_action(origin, path, BRIDGE_HTTP_DELETE, BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS,
+                                   BRIDGE_RESOURCE_IO_MS, body, BRIDGE_RESOURCE_BODY_MAX_BYTES);
+        return true;
+    case MODULES_ACTION_COMPLETE:
+        if (!bridge_resource_complete_path(request->number, path, sizeof(path))) return false;
+        *sent = bridge_http_action(origin, path, BRIDGE_HTTP_POST_EMPTY, BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS,
+                                   BRIDGE_RESOURCE_COMPLETE_IO_MS, body, BRIDGE_RESOURCE_BODY_MAX_BYTES);
+        return true;
+    case MODULES_ACTION_SNOOZE: {
+        char snooze[BRIDGE_SNOOZE_REQUEST_SIZE];
+        if (!bridge_snooze_path(request->number, path, sizeof(path)) ||
+            !bridge_snooze_request((bridge_snooze_preset_t)request->preset, request->scheduled_at, snooze,
+                                   sizeof(snooze))) return false;
+        *sent = bridge_http_json(origin, path, BRIDGE_HTTP_POST_JSON, snooze, strlen(snooze),
+                                 BRIDGE_RESOURCE_ACTION_GATE_WAIT_MS, BRIDGE_RESOURCE_IO_MS, body,
+                                 BRIDGE_RESOURCE_BODY_MAX_BYTES);
+        return true;
+    }
+    default: return false;
+    }
+}
+
+static bridge_action_result_t decode_action(const modules_request_t *request, const bridge_http_response_t *response,
+                                            const char *body, char snoozed_until[BRIDGE_TIME_UTC_SIZE])
+{
+    switch (request->action) {
+    case MODULES_ACTION_DELETE:
+        return bridge_resource_decode_delete(request->number, response->status, body, response->length);
+    case MODULES_ACTION_COMPLETE:
+        return bridge_resource_decode_complete(request->number, response->status, body, response->length);
+    default:
+        return bridge_snooze_decode(response->status, body, response->length, request->number, snoozed_until);
+    }
+}
+
+/* The single dispatch of an action, while capture and upload are held off. */
+static modules_notice_t run_action(const modules_request_t *request, char snoozed_until[BRIDGE_TIME_UTC_SIZE])
+{
+    if (!recording_external_action_begin()) return MODULES_NOTICE_BUSY;
+    modules_notice_t notice = MODULES_NOTICE_NOT_SENT;
+    bridge_http_mutation_t sent = {.response.result = BRIDGE_HTTP_INVALID_ARGUMENT, .unsent = true};
+    char *body = calloc(1U, BRIDGE_RESOURCE_BODY_MAX_BYTES);
+    bridge_origin_t origin;
+    const bool origin_loaded = bridge_origin_load(&origin) == ESP_OK;
+    if (body != NULL && origin_loaded && send_action(request, &origin, body, &sent)) {
+        if (sent.response.result == BRIDGE_HTTP_OK)
+            notice = action_notice(decode_action(request, &sent.response, body, snoozed_until));
+        else if (sent.unsent)
+            notice = sent.response.result == BRIDGE_HTTP_BUSY ? MODULES_NOTICE_BUSY : MODULES_NOTICE_NOT_SENT;
+        else
+            notice = MODULES_NOTICE_UNCONFIRMED;
+    }
+    memset(&origin, 0, sizeof(origin));
+    recording_external_action_end();
+    ESP_LOGI(TAG, "%s %s: result %d, HTTP %d, unsent %d, notice %d", KIND_NAMES[request->kind],
+             ACTION_NAMES[request->action], (int)sent.response.result, sent.response.status, (int)sent.unsent,
+             (int)notice);
+    free(body);
+    return notice;
+}
+
+static void act(const modules_request_t *request)
+{
+    char snoozed_until[BRIDGE_TIME_UTC_SIZE] = {0};
+    const modules_notice_t notice = run_action(request, snoozed_until);
+    xSemaphoreTake(lock, portMAX_DELAY);
+    commit(modules_state_action_done(&state, request->ticket, notice, snoozed_until));
+}
+
 static bool request_is_current(const modules_request_t *request)
 {
     xSemaphoreTake(lock, portMAX_DELAY);
@@ -310,8 +424,9 @@ static void run(void *unused)
     while (request.type != MODULES_REQUEST_NONE) {
         if (request_is_current(&request)) {
             if (request.type == MODULES_REQUEST_LIST) read_list(&request);
-            else read_detail(&request);
-            memory_report_log("modules read");
+            else if (request.type == MODULES_REQUEST_DETAIL) read_detail(&request);
+            else act(&request);
+            memory_report_log("modules request");
         }
         xSemaphoreTake(lock, portMAX_DELAY);
         request = modules_state_finish(&state);

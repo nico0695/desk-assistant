@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "bridge_resources.h"
+#include "bridge_snooze.h"
 #include "esp_err.h"
 #include "modules_view.h"
 
@@ -23,6 +24,16 @@ void modules_refresh(uint64_t ticket);
 /* id must belong to the shown page. */
 void modules_open_detail(uint64_t ticket, uint64_t id);
 void modules_back(uint64_t ticket);
+
+/*
+ * Actions on the detail shown with this ticket, which freezes the target. Each dispatches at most one request and
+ * is ignored when the ticket is stale, an action is in flight or the detail must be read again.
+ */
+void modules_delete(uint64_t ticket);
+/* Only for a pending task. */
+void modules_complete(uint64_t ticket);
+/* Only for an alert; sends the alert time shown with the ticket. */
+void modules_snooze(uint64_t ticket, bridge_snooze_preset_t preset);
 
 /*
  * Pass the data shown by the view with this ticket to reader, which must copy what it needs before returning and

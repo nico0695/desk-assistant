@@ -9,14 +9,19 @@ typedef enum {
     MODULES_REQUEST_NONE,
     MODULES_REQUEST_LIST,
     MODULES_REQUEST_DETAIL,
+    MODULES_REQUEST_ACTION,
 } modules_request_type_t;
 
 typedef struct {
     modules_request_type_t type;
     bridge_resource_kind_t kind;
-    /* Page number for a list, resource ID for a detail. */
+    /* Page number for a list, resource ID for a detail or an action. */
     uint64_t number;
     uint64_t ticket;
+    modules_action_t action;
+    /* Snooze only: the preset and the alert time shown when it was chosen. */
+    unsigned preset;
+    char scheduled_at[BRIDGE_TIME_UTC_SIZE];
 } modules_request_t;
 
 typedef struct {
@@ -35,6 +40,13 @@ typedef struct {
     /* The list stays in memory while its detail is shown; Back uses it once. */
     bool retained;
     uint64_t detail_id;
+    /* The accepted task detail is pending, so it admits Complete. */
+    bool task_pending;
+    /* After an uncertain or stale outcome no action is offered until a fresh detail arrives. */
+    bool fresh_required;
+    modules_action_t action;
+    modules_notice_t notice;
+    char snoozed_until[BRIDGE_TIME_UTC_SIZE];
     modules_request_t wanted;
     modules_request_t running_request;
 } modules_state_t;
@@ -82,7 +94,21 @@ unsigned modules_state_back(modules_state_t *state, uint64_t ticket);
 /* A finished read, with the ticket of its request. error is MODULES_ERROR_NONE on success. */
 unsigned modules_state_list_done(modules_state_t *state, uint64_t ticket, modules_error_t error,
                                  const modules_page_t *page);
-unsigned modules_state_detail_done(modules_state_t *state, uint64_t ticket, modules_error_t error);
+/* task_pending tells whether an accepted task detail admits Complete. */
+unsigned modules_state_detail_done(modules_state_t *state, uint64_t ticket, modules_error_t error, bool task_pending);
+
+/*
+ * Dispatches an action on the shown detail: the ticket freezes the target. Complete needs a pending task, Snooze an
+ * alert, a preset and the shown alert time. Frees the retained list. Ignored while the detail must be read again.
+ */
+unsigned modules_state_act(modules_state_t *state, uint64_t ticket, modules_action_t action, unsigned preset,
+                           const char *scheduled_at);
+/*
+ * The outcome of the action request with this ticket. DONE goes to a fresh list of the origin page, or rereads the
+ * detail after Snooze with the confirmed time; the notice survives that read.
+ */
+unsigned modules_state_action_done(modules_state_t *state, uint64_t ticket, modules_notice_t outcome,
+                                   const char *snoozed_until);
 
 /* Marks a worker busy with the wanted request; NONE while one runs or nothing is wanted. */
 modules_request_t modules_state_claim(modules_state_t *state);

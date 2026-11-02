@@ -1,5 +1,8 @@
+#include "bridge_snooze.h"
 #include "modules_state.h"
 #include "unity.h"
+
+#define T0 "2026-11-02T12:00:00Z"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -156,7 +159,7 @@ static void a_detail_retains_the_list_and_back_uses_it_once(void)
     const modules_request_t request = modules_state_claim(&state);
     TEST_ASSERT_EQUAL(MODULES_REQUEST_DETAIL, request.type);
     TEST_ASSERT_EQUAL_UINT64(103U, request.number);
-    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE);
+    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE, false);
     modules_state_finish(&state);
     TEST_ASSERT_EQUAL(MODULES_READY, view().status);
 
@@ -189,7 +192,7 @@ static void back_while_the_detail_loads_drops_its_result(void)
     modules_state_open_detail(&state, ticket, 101U);
     const modules_request_t request = modules_state_claim(&state);
     modules_state_back(&state, state.ticket);
-    TEST_ASSERT_EQUAL(MODULES_EFFECT_DISCARD, modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE));
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_DISCARD, modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE, false));
     TEST_ASSERT_EQUAL(MODULES_SCREEN_LIST, view().screen);
     TEST_ASSERT_EQUAL(MODULES_READY, view().status);
 }
@@ -199,7 +202,7 @@ static void a_detail_error_keeps_back_and_refresh_rereads_the_same_id(void)
     const uint64_t ticket = open_ready();
     modules_state_open_detail(&state, ticket, 102U);
     const modules_request_t request = modules_state_claim(&state);
-    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NOT_FOUND);
+    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NOT_FOUND, false);
     modules_state_finish(&state);
     TEST_ASSERT_EQUAL(MODULES_FAILED, view().status);
     TEST_ASSERT_EQUAL(MODULES_ERROR_NOT_FOUND, view().error);
@@ -210,7 +213,7 @@ static void a_detail_error_keeps_back_and_refresh_rereads_the_same_id(void)
     modules_state_claim(&state);
     modules_state_finish(&state);
     /* Back still returns to the retained list. */
-    modules_state_detail_done(&state, state.running_request.ticket, MODULES_ERROR_NONE);
+    modules_state_detail_done(&state, state.running_request.ticket, MODULES_ERROR_NONE, false);
     modules_state_back(&state, state.ticket);
     TEST_ASSERT_EQUAL(MODULES_READY, view().status);
     TEST_ASSERT_EQUAL_UINT8(5U, view().count);
@@ -259,6 +262,151 @@ static void a_worker_that_cannot_start_fails_the_view(void)
     TEST_ASSERT_EQUAL(MODULES_REQUEST_LIST, modules_state_claim(&state).type);
 }
 
+/* Opens a module and a ready detail of its first entry (id 101); for tasks, pending says whether it is pending. */
+static uint64_t open_detail_of(bridge_resource_kind_t kind, bool pending)
+{
+    modules_state_init(&state);
+    modules_state_enter(&state, kind);
+    modules_request_t request = modules_state_claim(&state);
+    const modules_page_t page = page_of(1U, false, true, 5U);
+    modules_state_list_done(&state, request.ticket, MODULES_ERROR_NONE, &page);
+    modules_state_finish(&state);
+    modules_state_open_detail(&state, state.ticket, 101U);
+    request = modules_state_claim(&state);
+    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE, pending);
+    modules_state_finish(&state);
+    TEST_ASSERT_EQUAL(MODULES_READY, view().status);
+    return state.ticket;
+}
+
+static void actions_follow_the_resource_and_its_state(void)
+{
+    open_detail_of(BRIDGE_RESOURCE_NOTES, false);
+    TEST_ASSERT_TRUE(view().can_delete);
+    TEST_ASSERT_FALSE(view().can_complete);
+    TEST_ASSERT_FALSE(view().can_snooze);
+    uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_TASKS, false);
+    TEST_ASSERT_FALSE(view().can_complete);
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, ticket, MODULES_ACTION_COMPLETE, 0U, NULL));
+    open_detail_of(BRIDGE_RESOURCE_TASKS, true);
+    TEST_ASSERT_TRUE(view().can_complete);
+    ticket = open_detail_of(BRIDGE_RESOURCE_ALERTS, false);
+    TEST_ASSERT_TRUE(view().can_snooze);
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, ticket, MODULES_ACTION_SNOOZE, 4U, T0));
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, ticket, MODULES_ACTION_SNOOZE, 1U, ""));
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, ticket, MODULES_ACTION_COMPLETE, 0U, NULL));
+}
+
+static void an_action_dispatches_once_and_blocks_every_control(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_TASKS, true);
+    const unsigned effects = modules_state_act(&state, ticket, MODULES_ACTION_COMPLETE, 0U, NULL);
+    TEST_ASSERT_BITS(MODULES_EFFECT_WORK | MODULES_EFFECT_FREE_LIST, MODULES_EFFECT_WORK | MODULES_EFFECT_FREE_LIST,
+                     effects);
+    TEST_ASSERT_EQUAL(MODULES_ACTING, view().status);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_WORKING, view().notice);
+    TEST_ASSERT_EQUAL(MODULES_ACTION_COMPLETE, view().action);
+    TEST_ASSERT_FALSE(view().can_delete);
+    /* A double tap with the same ticket, or any other command, does nothing while it runs. */
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, ticket, MODULES_ACTION_COMPLETE, 0U, NULL));
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, state.ticket, MODULES_ACTION_DELETE, 0U, NULL));
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_back(&state, state.ticket));
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_refresh(&state, state.ticket));
+    const modules_request_t request = modules_state_claim(&state);
+    TEST_ASSERT_EQUAL(MODULES_REQUEST_ACTION, request.type);
+    TEST_ASSERT_EQUAL(MODULES_ACTION_COMPLETE, request.action);
+    TEST_ASSERT_EQUAL_UINT64(101U, request.number);
+    TEST_ASSERT_EQUAL(MODULES_REQUEST_NONE, modules_state_finish(&state).type);
+}
+
+static void a_delete_success_reads_the_origin_page_and_keeps_its_notice(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_NOTES, false);
+    modules_state_act(&state, ticket, MODULES_ACTION_DELETE, 0U, NULL);
+    modules_request_t request = modules_state_claim(&state);
+    TEST_ASSERT_BITS(MODULES_EFFECT_WORK | MODULES_EFFECT_FREE_DETAIL, MODULES_EFFECT_WORK | MODULES_EFFECT_FREE_DETAIL,
+                     modules_state_action_done(&state, request.ticket, MODULES_NOTICE_DONE, ""));
+    TEST_ASSERT_EQUAL(MODULES_SCREEN_LIST, view().screen);
+    TEST_ASSERT_EQUAL(MODULES_LOADING, view().status);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_DONE, view().notice);
+    request = modules_state_finish(&state);
+    TEST_ASSERT_EQUAL(MODULES_REQUEST_LIST, request.type);
+    TEST_ASSERT_EQUAL_UINT64(1U, request.number);
+    /* The success stays visible when the fresh list fails. */
+    modules_state_list_done(&state, request.ticket, MODULES_ERROR_NETWORK, NULL);
+    TEST_ASSERT_EQUAL(MODULES_FAILED, view().status);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_DONE, view().notice);
+    TEST_ASSERT_EQUAL(MODULES_ACTION_DELETE, view().action);
+    /* The next user command ends it. */
+    modules_state_refresh(&state, state.ticket);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_NONE, view().notice);
+}
+
+static void a_snooze_success_rereads_the_detail_with_the_confirmed_time(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_ALERTS, false);
+    modules_state_act(&state, ticket, MODULES_ACTION_SNOOZE, BRIDGE_SNOOZE_ONE_HOUR, T0);
+    modules_request_t request = modules_state_claim(&state);
+    TEST_ASSERT_EQUAL_STRING(T0, request.scheduled_at);
+    TEST_ASSERT_EQUAL_UINT(BRIDGE_SNOOZE_ONE_HOUR, request.preset);
+    modules_state_action_done(&state, request.ticket, MODULES_NOTICE_DONE, "2026-11-02T13:00:00.000Z");
+    TEST_ASSERT_EQUAL(MODULES_SCREEN_DETAIL, view().screen);
+    TEST_ASSERT_EQUAL(MODULES_LOADING, view().status);
+    TEST_ASSERT_EQUAL_STRING("2026-11-02T13:00:00.000Z", view().snoozed_until);
+    request = modules_state_finish(&state);
+    TEST_ASSERT_EQUAL(MODULES_REQUEST_DETAIL, request.type);
+    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE, false);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_DONE, view().notice);
+    TEST_ASSERT_TRUE(view().can_snooze);
+}
+
+static void an_uncertain_outcome_requires_a_fresh_detail(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_NOTES, false);
+    modules_state_act(&state, ticket, MODULES_ACTION_DELETE, 0U, NULL);
+    modules_request_t request = modules_state_claim(&state);
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_VIEW,
+                      modules_state_action_done(&state, request.ticket, MODULES_NOTICE_UNCONFIRMED, NULL));
+    modules_state_finish(&state);
+    TEST_ASSERT_EQUAL(MODULES_READY, view().status);
+    TEST_ASSERT_EQUAL(MODULES_SCREEN_DETAIL, view().screen);
+    TEST_ASSERT_FALSE(view().can_delete);
+    TEST_ASSERT_EQUAL(MODULES_EFFECT_NONE, modules_state_act(&state, state.ticket, MODULES_ACTION_DELETE, 0U, NULL));
+    /* A failed reread keeps the block; a fresh detail lifts it. */
+    modules_state_refresh(&state, state.ticket);
+    request = modules_state_claim(&state);
+    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NETWORK, false);
+    modules_state_finish(&state);
+    TEST_ASSERT_FALSE(view().can_delete);
+    modules_state_refresh(&state, state.ticket);
+    request = modules_state_claim(&state);
+    modules_state_detail_done(&state, request.ticket, MODULES_ERROR_NONE, false);
+    TEST_ASSERT_TRUE(view().can_delete);
+}
+
+static void a_not_sent_outcome_allows_a_new_explicit_action(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_NOTES, false);
+    modules_state_act(&state, ticket, MODULES_ACTION_DELETE, 0U, NULL);
+    const modules_request_t request = modules_state_claim(&state);
+    modules_state_action_done(&state, request.ticket, MODULES_NOTICE_BUSY, NULL);
+    modules_state_finish(&state);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_BUSY, view().notice);
+    TEST_ASSERT_TRUE(view().can_delete);
+    /* Back after dispatch reads the list again: the retained copy ended with the action. */
+    TEST_ASSERT_BITS(MODULES_EFFECT_WORK, MODULES_EFFECT_WORK, modules_state_back(&state, state.ticket));
+}
+
+static void an_action_that_cannot_start_a_worker_is_not_sent(void)
+{
+    const uint64_t ticket = open_detail_of(BRIDGE_RESOURCE_NOTES, false);
+    modules_state_act(&state, ticket, MODULES_ACTION_DELETE, 0U, NULL);
+    modules_state_claim(&state);
+    modules_state_start_failed(&state);
+    TEST_ASSERT_EQUAL(MODULES_NOTICE_NOT_SENT, view().notice);
+    TEST_ASSERT_EQUAL(MODULES_READY, view().status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -276,5 +424,12 @@ int main(void)
     RUN_TEST(only_the_newest_wanted_request_survives_a_running_read);
     RUN_TEST(leaving_frees_everything_and_ignores_later_commands);
     RUN_TEST(a_worker_that_cannot_start_fails_the_view);
+    RUN_TEST(actions_follow_the_resource_and_its_state);
+    RUN_TEST(an_action_dispatches_once_and_blocks_every_control);
+    RUN_TEST(a_delete_success_reads_the_origin_page_and_keeps_its_notice);
+    RUN_TEST(a_snooze_success_rereads_the_detail_with_the_confirmed_time);
+    RUN_TEST(an_uncertain_outcome_requires_a_fresh_detail);
+    RUN_TEST(a_not_sent_outcome_allows_a_new_explicit_action);
+    RUN_TEST(an_action_that_cannot_start_a_worker_is_not_sent);
     return UNITY_END();
 }
