@@ -231,7 +231,8 @@ static void worker(void *argument)
     if ((job_t)(uintptr_t)argument == JOB_CAPTURE) {
         run_capture();
     } else {
-        report_cleaned(clear_clip());
+        /* Also retries any hardware a failed stop left owned; with nothing owned the stop is a no-op. */
+        report_cleaned(release_and_clear());
     }
     vTaskDelete(NULL);
 }
