@@ -24,6 +24,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/board/src/touch_decode.c
     ${COMPONENTS_DIR}/board/src/key_filter.c
     ${COMPONENTS_DIR}/ui/src/screen_power.c
+    ${COMPONENTS_DIR}/ui/src/ui_bridge_status.c
     ${COMPONENTS_DIR}/ui/src/touch_gate.c
     ${COMPONENTS_DIR}/features/settings/src/settings_values.c
     ${COMPONENTS_DIR}/features/settings/src/settings_row.c
@@ -77,8 +78,8 @@ add_test(NAME test_bridge_http COMMAND test_bridge_http)
 
 add_executable(test_bridge_service integration/test_bridge_service.c
     ${COMPONENTS_DIR}/bridge/src/bridge_connection.c ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
-    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
-target_include_directories(test_bridge_service PRIVATE bridge_service_stubs bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src)
+    ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c ${COMPONENTS_DIR}/ui/src/ui_bridge_status.c)
+target_include_directories(test_bridge_service PRIVATE bridge_service_stubs bridge_http_stubs ${COMPONENTS_DIR}/bridge/include ${COMPONENTS_DIR}/bridge/src ${COMPONENTS_DIR}/ui/src)
 target_compile_options(test_bridge_service PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_bridge_service PRIVATE unity cjson m)
 add_test(NAME test_bridge_service COMMAND test_bridge_service)

@@ -42,21 +42,28 @@ static void origin_changed(const bridge_origin_t *origin)
     active_origin = *origin;
     bridge_connection_origin_changed(&connection, true);
     ++input_revision;
+    const uint64_t generation = connection.generation;
     taskEXIT_CRITICAL(&state_lock);
+    if (online_callback != NULL) online_callback(false, generation);
     wake_stream();
 }
 
 void bridge_set_ip(bool has_ip)
 {
     bool changed;
+    uint64_t generation = 0;
     taskENTER_CRITICAL(&state_lock);
     changed = connection.has_ip != has_ip;
     if (changed) {
         bridge_connection_set_ip(&connection, has_ip);
         ++input_revision;
+        generation = connection.generation;
     }
     taskEXIT_CRITICAL(&state_lock);
-    if (changed) wake_stream();
+    if (changed) {
+        if (online_callback != NULL) online_callback(false, generation);
+        wake_stream();
+    }
 }
 
 static void clock_synced(void *unused)
@@ -81,11 +88,7 @@ static bool stream_opened(void *context)
     bool opened = bridge_connection_stream_opened(&connection, stream->ticket);
     taskEXIT_CRITICAL(&state_lock);
     if (opened) {
-        online_callback(true);
-        if (!stream_current(context)) {
-            online_callback(false);
-            return false;
-        }
+        online_callback(true, stream->ticket);
         ESP_LOGI(TAG, "event stream open");
     }
     return opened;
@@ -102,16 +105,18 @@ static void stream_worker(void *unused)
         bool has_ip;
         bool has_origin;
         uint64_t revision;
+        uint64_t generation;
         taskENTER_CRITICAL(&state_lock);
         origin = active_origin;
         has_ip = connection.has_ip;
         has_origin = connection.has_origin;
         revision = input_revision;
+        generation = connection.generation;
         taskEXIT_CRITICAL(&state_lock);
         if (revision != observed_revision) {
             bridge_sse_init(&stream);
             observed_revision = revision;
-            online_callback(false);
+            online_callback(false, generation);
         }
         if (!has_ip || !has_origin) {
             clear_secret(&origin, sizeof(origin));
@@ -141,8 +146,9 @@ static void stream_worker(void *unused)
             bridge_stream_run(&origin, &stream, &hooks);
             taskENTER_CRITICAL(&state_lock);
             bool closed = bridge_connection_stream_closed(&connection, context.ticket);
+            generation = connection.generation;
             taskEXIT_CRITICAL(&state_lock);
-            online_callback(false);
+            if (closed) online_callback(false, generation);
             if (closed) ESP_LOGI(TAG, "event stream closed");
             bridge_sse_disconnected(&stream, (uint64_t)esp_timer_get_time() / 1000U);
         }

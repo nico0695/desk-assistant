@@ -1,4 +1,5 @@
 idf_component_register(SRCS "src/ui_task.c"
+                            "src/ui_bridge_status.c"
                             "src/ui_display_port.c"
                             "src/ui_theme.c"
                             "src/ui_widgets.c"

@@ -12,6 +12,7 @@
 #include "screen_power.h"
 #include "sdkconfig.h"
 #include "ui_display_port.h"
+#include "ui_bridge_status.h"
 #include "ui_navigation.h"
 #include "ui_settings_control.h"
 #include "ui_status_bar.h"
@@ -41,7 +42,7 @@ static TaskHandle_t ui_task;
 static portMUX_TYPE battery_lock = portMUX_INITIALIZER_UNLOCKED;
 static ui_battery_t latest_battery;
 static portMUX_TYPE bridge_lock = portMUX_INITIALIZER_UNLOCKED;
-static bool latest_bridge_online;
+static ui_bridge_status_t latest_bridge;
 
 static settings_loaded_t initial_settings;
 static screen_power_t screen;
@@ -93,7 +94,7 @@ static void show_latest_battery(void)
 static void show_latest_bridge(void)
 {
     taskENTER_CRITICAL(&bridge_lock);
-    const bool online = latest_bridge_online;
+    const bool online = latest_bridge.online;
     taskEXIT_CRITICAL(&bridge_lock);
     ui_status_bar_set_bridge_online(online);
 }
@@ -286,11 +287,10 @@ void ui_show_battery(bool known, uint8_t percent)
     }
 }
 
-void ui_show_bridge_online(bool online)
+void ui_show_bridge_online(bool online, uint64_t generation)
 {
     taskENTER_CRITICAL(&bridge_lock);
-    const bool changed = latest_bridge_online != online;
-    latest_bridge_online = online;
+    const bool changed = ui_bridge_status_update(&latest_bridge, online, generation);
     taskEXIT_CRITICAL(&bridge_lock);
     if (changed && ui_task != NULL) {
         xTaskNotify(ui_task, EVENT_BRIDGE, eSetBits);
