@@ -18,7 +18,7 @@ static unsigned digits(const char *text, size_t count)
     return value;
 }
 
-static bool timestamp_valid(const char *text)
+bool bridge_event_timestamp_valid(const char *text)
 {
     const size_t length = strnlen(text, BRIDGE_EVENT_TIME_SIZE);
     if (length < 20U || length > 30U || text[4] != '-' || text[7] != '-' || text[10] != 'T' ||
@@ -46,8 +46,8 @@ bool bridge_event_valid(const bridge_event_t *event)
     const size_t length = strnlen(event->message, sizeof(event->message));
     return bridge_uuid_valid(event->event_id) && event->alert_id > 0U &&
            event->alert_id <= UINT64_C(9007199254740991) && length <= BRIDGE_EVENT_MESSAGE_MAX_BYTES &&
-           bridge_utf8_valid(event->message, length) && timestamp_valid(event->scheduled_at) &&
-           timestamp_valid(event->triggered_at);
+           bridge_utf8_valid(event->message, length) && bridge_event_timestamp_valid(event->scheduled_at) &&
+           bridge_event_timestamp_valid(event->triggered_at);
 }
 
 static bool fields_exact(const cJSON *object, const char *const *names, size_t count)

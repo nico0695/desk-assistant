@@ -10,8 +10,9 @@
 #include "../../components/features/notifications/src/notifications.c"
 
 static notification_state_t durable;
-static unsigned saves, get_calls, acks, holds, releases, publications;
-static bool fail_ack, busy_get, fail_save;
+static unsigned saves, get_calls, acks, posts, holds, releases, publications;
+static bool fail_ack, busy_get, fail_save, fail_snooze_transport, deny_external_action;
+static bridge_snooze_result_t fake_snooze_result;
 static void (*gate_callback)(void);
 
 typedef struct { close_command_t item; bool has_item; } fake_queue_t;
@@ -111,6 +112,13 @@ bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const cha
                                         uint32_t gate_ms, uint32_t io_ms, char *body, size_t capacity)
 {
     (void)origin; (void)gate_ms; (void)io_ms; (void)body; (void)capacity;
+    if (method == BRIDGE_HTTP_POST_JSON) {
+        TEST_ASSERT_EQUAL_STRING("/v1/device/alerts/42/snooze", path);
+        TEST_ASSERT_EQUAL_STRING("snooze", request);
+        ++posts;
+        if (fail_snooze_transport) return (bridge_http_response_t){.result = BRIDGE_HTTP_TIMEOUT};
+        return (bridge_http_response_t){.result = BRIDGE_HTTP_OK, .status = 200, .length = 2};
+    }
     TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_PUT_JSON, method);
     TEST_ASSERT_EQUAL_STRING(BRIDGE_EVENT_ACK_BODY, request);
     TEST_ASSERT_EQUAL_UINT(strlen(BRIDGE_EVENT_ACK_BODY), request_length);
@@ -121,6 +129,25 @@ bridge_http_response_t bridge_http_json(const bridge_origin_t *origin, const cha
     return fail_ack ? (bridge_http_response_t){.result = BRIDGE_HTTP_TIMEOUT} :
                       (bridge_http_response_t){.result = BRIDGE_HTTP_OK, .status = 204, .length = 0};
 }
+bool bridge_snooze_path(uint64_t alert_id, char *path, size_t capacity)
+{ TEST_ASSERT_EQUAL_UINT64(42, alert_id); snprintf(path, capacity, "/v1/device/alerts/42/snooze"); return true; }
+bool bridge_snooze_request(bridge_snooze_preset_t preset, const char *scheduled_at, char *body, size_t capacity)
+{
+    TEST_ASSERT_EQUAL_INT(BRIDGE_SNOOZE_FIVE_MINUTES, preset);
+    TEST_ASSERT_EQUAL_STRING("2026-11-02T12:00:00Z", scheduled_at);
+    snprintf(body, capacity, "snooze"); return true;
+}
+bridge_snooze_result_t bridge_snooze_decode(int status, const char *body, size_t length,
+                                            uint64_t alert_id, char confirmed_at[BRIDGE_EVENT_TIME_SIZE])
+{
+    (void)body; (void)length;
+    TEST_ASSERT_EQUAL_INT(200, status);
+    TEST_ASSERT_EQUAL_UINT64(42, alert_id);
+    if (fake_snooze_result == BRIDGE_SNOOZE_SUCCESS) strcpy(confirmed_at, "2026-11-02T12:00:00Z");
+    return fake_snooze_result;
+}
+bool recording_external_action_begin(void) { return !deny_external_action; }
+void recording_external_action_end(void) {}
 
 static void show_view(const notification_view_t *view)
 {
@@ -133,11 +160,14 @@ void setUp(void)
     if (commands != NULL) vQueueDelete(commands);
     commands = NULL; retry_timer = NULL; worker = NULL; starting = drain_requested = waiting_gate = false;
     stream_online = origin_held = uncertain = false;
+    snooze_queued = action_busy = confirmed_retry_allowed = false;
+    shown_event_id[0] = confirmed_event_id[0] = snoozed_at_text[0] = '\0';
     gate_epoch = 0; generation = arrival_sequence = 0; notice = NOTIFICATION_VIEW_OK;
     view_callback = NULL; gate_callback = NULL;
     notification_state_init(&durable);
-    saves = get_calls = acks = holds = releases = publications = 0;
-    fail_ack = busy_get = fail_save = false;
+    saves = get_calls = acks = posts = holds = releases = publications = 0;
+    fail_ack = busy_get = fail_save = fail_snooze_transport = deny_external_action = false;
+    fake_snooze_result = BRIDGE_SNOOZE_SUCCESS;
 }
 void tearDown(void) {}
 
@@ -204,6 +234,95 @@ static void failed_journal_commit_blocks_ack_and_keeps_event(void)
     TEST_ASSERT_EQUAL_UINT(0, uxQueueMessagesWaiting(commands));
 }
 
+static void seed_card(void)
+{
+    bridge_event_t item = {.alert_id = 42};
+    strcpy(item.event_id, "01234567-89ab-cdef-0123-456789abcdef");
+    strcpy(item.message, "Reminder");
+    strcpy(item.scheduled_at, "2026-11-02T12:00:00Z");
+    strcpy(item.triggered_at, "2026-11-02T12:00:01Z");
+    durable.cards[0] = item;
+    durable.count = 1;
+}
+
+static void snooze_success_closes_locally_once(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    TEST_ASSERT_FALSE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, posts);
+    TEST_ASSERT_EQUAL_UINT(0, durable.count);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_SNOOZE_CONFIRMED, notice);
+    TEST_ASSERT_EQUAL_STRING("2026-11-02 09:00", snoozed_at_text);
+    notifications_close(generation, "");
+    run(NULL);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_OK, notice);
+}
+
+static void confirmed_snooze_retries_only_local_close(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    fail_save = true;
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_TRUE(confirmed_retry_allowed);
+    TEST_ASSERT_FALSE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    fail_save = false;
+    notifications_close(generation, durable.cards[0].event_id);
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(0, durable.count);
+    TEST_ASSERT_EQUAL_UINT(1, posts);
+}
+
+static void rejected_snooze_preserves_card(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    fake_snooze_result = BRIDGE_SNOOZE_SCHEDULE_CHANGED;
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_UINT(1, posts);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_SNOOZE_SCHEDULE_CHANGED, notice);
+}
+
+static void uncertain_snooze_is_not_retried(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    fail_snooze_transport = true;
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_UINT(1, posts);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_SNOOZE_UNCONFIRMED, notice);
+    TEST_ASSERT_FALSE(action_busy);
+}
+
+static void capture_owns_action_slot_before_post(void)
+{
+    seed_card();
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    deny_external_action = true;
+    TEST_ASSERT_TRUE(notifications_snooze(generation, durable.cards[0].event_id, 1U));
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(0, posts);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_SNOOZE_NOT_SENT, notice);
+}
+
+static void local_time_crosses_previous_month_and_leap_day(void)
+{
+    format_local_time("2024-03-01T01:15:00Z");
+    TEST_ASSERT_EQUAL_STRING("2024-02-29 22:15", snoozed_at_text);
+    format_local_time("2026-01-01T00:05:00Z");
+    TEST_ASSERT_EQUAL_STRING("2025-12-31 21:05", snoozed_at_text);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -211,5 +330,11 @@ int main(void)
     RUN_TEST(lost_ack_response_keeps_id_until_retry);
     RUN_TEST(busy_get_resumes_on_gate_release);
     RUN_TEST(failed_journal_commit_blocks_ack_and_keeps_event);
+    RUN_TEST(snooze_success_closes_locally_once);
+    RUN_TEST(confirmed_snooze_retries_only_local_close);
+    RUN_TEST(rejected_snooze_preserves_card);
+    RUN_TEST(uncertain_snooze_is_not_retried);
+    RUN_TEST(capture_owns_action_slot_before_post);
+    RUN_TEST(local_time_crosses_previous_month_and_leap_day);
     return UNITY_END();
 }

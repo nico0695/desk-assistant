@@ -44,6 +44,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/bridge/src/bridge_text.c
     ${COMPONENTS_DIR}/bridge/src/bridge_assistant.c
     ${COMPONENTS_DIR}/bridge/src/bridge_events.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_snooze.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/board/include
@@ -137,7 +138,8 @@ add_executable(test_notifications integration/test_notifications.c
     ${COMPONENTS_DIR}/features/notifications/src/notification_state.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 target_include_directories(test_notifications PRIVATE notifications_stubs bridge_http_stubs
-    ${COMPONENTS_DIR}/features/notifications/include ${COMPONENTS_DIR}/bridge/include)
+    ${COMPONENTS_DIR}/features/notifications/include ${COMPONENTS_DIR}/features/recording/include
+    ${COMPONENTS_DIR}/bridge/include)
 target_compile_options(test_notifications PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_notifications PRIVATE unity)
 add_test(NAME test_notifications COMMAND test_notifications)

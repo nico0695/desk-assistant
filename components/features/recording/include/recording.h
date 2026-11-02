@@ -36,3 +36,7 @@ void recording_assistant_result(void);
  * and must not call back into recording. False when there is no message for that generation. Never blocks on I/O.
  */
 bool recording_read_message(uint64_t generation, void (*reader)(const char *text, void *context), void *context);
+
+/* Reserve the user action slot for a finite external mutation. Capture and upload commands are blocked until end. */
+bool recording_external_action_begin(void);
+void recording_external_action_end(void);

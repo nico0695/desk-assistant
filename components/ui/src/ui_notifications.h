@@ -5,7 +5,7 @@
 
 typedef struct {
     void (*close)(uint64_t generation, const char *event_id);
-    void (*snooze)(uint64_t generation, const char *event_id, unsigned preset);
+    bool (*snooze)(uint64_t generation, const char *event_id, unsigned preset);
 } ui_notifications_handlers_t;
 
 /* UI owner only. The card is on LVGL's top layer, preserving the current screen and scroll beneath it. */

@@ -9,6 +9,9 @@ typedef enum {
     NOTIFICATION_VIEW_OK,
     NOTIFICATION_VIEW_STORAGE_ERROR,
     NOTIFICATION_VIEW_SNOOZE_REJECTED,
+    NOTIFICATION_VIEW_SNOOZE_NOT_FOUND,
+    NOTIFICATION_VIEW_SNOOZE_SCHEDULE_CHANGED,
+    NOTIFICATION_VIEW_SNOOZE_NOT_SENT,
     NOTIFICATION_VIEW_SNOOZE_UNCONFIRMED,
     NOTIFICATION_VIEW_SNOOZE_CONFIRMED,
 } notification_view_notice_t;
@@ -19,6 +22,7 @@ typedef struct {
     uint64_t generation;
     uint64_t arrival_sequence;
     bool action_busy;
+    bool snooze_close_pending;
     notification_view_notice_t notice;
     /* Already formatted for the user; the owner retains the complete UTC value for the bridge. */
     char snoozed_at_text[BRIDGE_EVENT_TIME_SIZE];

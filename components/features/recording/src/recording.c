@@ -59,6 +59,8 @@ static char *message;
 static uint64_t message_generation;
 /* Only the worker (or startup, before any worker) touches it: the origin is held for the attempt. */
 static bool origin_held;
+/* Guarded by lock: Snooze owns the user action slot while its POST is in flight. */
+static bool external_action_busy;
 static recording_view_fn view_callback;
 
 /* Call under lock. */
@@ -646,11 +648,13 @@ static void apply_effect(recording_effect_t effect, const recording_view_t *view
     }
 }
 
-static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t), uint64_t generation)
+static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t), uint64_t generation,
+                     bool block_external)
 {
     recording_view_t view;
     taskENTER_CRITICAL(&lock);
-    const recording_effect_t effect = command(&state, generation);
+    const recording_effect_t effect = block_external && external_action_busy
+                                          ? RECORDING_EFFECT_NONE : command(&state, generation);
     snapshot(&view);
     taskEXIT_CRITICAL(&lock);
     apply_effect(effect, &view);
@@ -658,32 +662,32 @@ static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t
 
 void recording_record(uint64_t generation)
 {
-    dispatch(recording_state_record, generation);
+    dispatch(recording_state_record, generation, true);
 }
 
 void recording_send(uint64_t generation)
 {
-    dispatch(recording_state_send, generation);
+    dispatch(recording_state_send, generation, true);
 }
 
 void recording_cancel(uint64_t generation)
 {
-    dispatch(recording_state_cancel, generation);
+    dispatch(recording_state_cancel, generation, false);
 }
 
 void recording_close(uint64_t generation)
 {
-    dispatch(recording_state_close, generation);
+    dispatch(recording_state_close, generation, false);
 }
 
 void recording_check(uint64_t generation)
 {
-    dispatch(recording_state_check, generation);
+    dispatch(recording_state_check, generation, false);
 }
 
 void recording_discard(uint64_t generation)
 {
-    dispatch(recording_state_discard, generation);
+    dispatch(recording_state_discard, generation, false);
 }
 
 /* From the esp_timer task. */
@@ -693,7 +697,26 @@ static void wait_expired(void *unused)
     taskENTER_CRITICAL(&lock);
     const uint64_t generation = wait_generation;
     taskEXIT_CRITICAL(&lock);
-    dispatch(recording_state_wait_expired, generation);
+    dispatch(recording_state_wait_expired, generation, false);
+}
+
+bool recording_external_action_begin(void)
+{
+    taskENTER_CRITICAL(&lock);
+    const bool available = !external_action_busy && state.phase != RECORDING_RECORDING &&
+                           state.phase != RECORDING_FINALIZING && state.phase != RECORDING_CANCELLING &&
+                           state.phase != RECORDING_UPLOADING && state.running_job != RECORDING_JOB_UPLOAD &&
+                           state.wanted_job != RECORDING_JOB_UPLOAD;
+    if (available) external_action_busy = true;
+    taskEXIT_CRITICAL(&lock);
+    return available;
+}
+
+void recording_external_action_end(void)
+{
+    taskENTER_CRITICAL(&lock);
+    external_action_busy = false;
+    taskEXIT_CRITICAL(&lock);
 }
 
 static void signal_attempt(const char *id)

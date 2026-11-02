@@ -157,11 +157,12 @@ static void ignore_notification_close(uint64_t generation, const char *event_id)
     (void)event_id;
 }
 
-static void ignore_notification_snooze(uint64_t generation, const char *event_id, unsigned preset)
+static bool ignore_notification_snooze(uint64_t generation, const char *event_id, unsigned preset)
 {
     (void)generation;
     (void)event_id;
     (void)preset;
+    return true;
 }
 
 static const ui_notifications_handlers_t NOTIFICATION_HANDLERS = {
@@ -436,7 +437,14 @@ int main(int argc, char **argv)
     lv_refr_now(display);
     write_png(directory, "notification-snooze-unconfirmed");
     notification.notice = NOTIFICATION_VIEW_SNOOZE_CONFIRMED;
-    strcpy(notification.snoozed_at_text, "Nov 2, 10:00");
+    notification.snooze_close_pending = true;
+    strcpy(notification.snoozed_at_text, "2026-11-02 10:00");
+    ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
+    lv_refr_now(display);
+    write_png(directory, "notification-snooze-close-pending");
+    notification.snooze_close_pending = false;
+    notification.count = 0;
+    memset(&notification.card, 0, sizeof(notification.card));
     ui_notifications_show(&notification, &NOTIFICATION_HANDLERS);
     lv_refr_now(display);
     write_png(directory, "notification-snooze-confirmed");

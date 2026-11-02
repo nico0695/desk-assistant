@@ -30,6 +30,7 @@ typedef enum {
 } bridge_event_decode_t;
 
 bool bridge_event_valid(const bridge_event_t *event);
+bool bridge_event_timestamp_valid(const char *text);
 /* Exact GET /events?limit=1 response. Failure leaves outputs unchanged. */
 bridge_event_decode_t bridge_event_decode(const char *body, size_t length, int status,
                                           bridge_event_t *event, bool *present);

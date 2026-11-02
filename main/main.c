@@ -68,7 +68,7 @@ static const bridge_hooks_t BRIDGE_HOOKS = {
 
 static void show_notification(const notification_view_t *view)
 {
-    ui_show_notification(view, notifications_close, NULL);
+    ui_show_notification(view, notifications_close, notifications_snooze);
 }
 
 static void show_battery(board_battery_reading_t reading, void *unused)

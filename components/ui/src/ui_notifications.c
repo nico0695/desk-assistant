@@ -30,6 +30,9 @@ static const char *notice_text(notification_view_notice_t value)
     switch (value) {
     case NOTIFICATION_VIEW_STORAGE_ERROR: return UI_TEXT_NOTIFICATION_STORAGE_ERROR;
     case NOTIFICATION_VIEW_SNOOZE_REJECTED: return UI_TEXT_NOTIFICATION_SNOOZE_REJECTED;
+    case NOTIFICATION_VIEW_SNOOZE_NOT_FOUND: return UI_TEXT_NOTIFICATION_SNOOZE_NOT_FOUND;
+    case NOTIFICATION_VIEW_SNOOZE_SCHEDULE_CHANGED: return UI_TEXT_NOTIFICATION_SNOOZE_SCHEDULE_CHANGED;
+    case NOTIFICATION_VIEW_SNOOZE_NOT_SENT: return UI_TEXT_NOTIFICATION_SNOOZE_NOT_SENT;
     case NOTIFICATION_VIEW_SNOOZE_UNCONFIRMED: return UI_TEXT_NOTIFICATION_SNOOZE_UNCONFIRMED;
     case NOTIFICATION_VIEW_SNOOZE_CONFIRMED: return UI_TEXT_NOTIFICATION_SNOOZE_CONFIRMED;
     case NOTIFICATION_VIEW_OK: return "";
@@ -40,6 +43,11 @@ static const char *notice_text(notification_view_notice_t value)
 static void on_close(lv_event_t *event)
 {
     (void)event;
+    if (shown.count == 0U && shown.notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) {
+        if (has_callbacks && callbacks.close != NULL) callbacks.close(shown.generation, "");
+        ui_notifications_hide();
+        return;
+    }
     if (has_callbacks && callbacks.close != NULL && !shown.action_busy &&
         shown.notice != NOTIFICATION_VIEW_STORAGE_ERROR)
         callbacks.close(shown.generation, shown.card.event_id);
@@ -49,7 +57,7 @@ static void on_snooze(lv_event_t *event)
 {
     (void)event;
     if (shown.action_busy || shown.notice == NOTIFICATION_VIEW_STORAGE_ERROR ||
-        shown.notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) return;
+        shown.snooze_close_pending) return;
     selecting_preset = true;
     lv_obj_add_flag(message, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(notice, LV_OBJ_FLAG_HIDDEN);
@@ -75,8 +83,14 @@ static void on_preset(lv_event_t *event)
     lv_obj_remove_flag(notice, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(presets, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(actions, LV_OBJ_FLAG_HIDDEN);
-    if (has_callbacks && callbacks.snooze != NULL && !shown.action_busy)
-        callbacks.snooze(shown.generation, shown.card.event_id, preset);
+    if (has_callbacks && callbacks.snooze != NULL && !shown.action_busy &&
+        callbacks.snooze(shown.generation, shown.card.event_id, preset)) {
+        shown.action_busy = true;
+        lv_obj_add_state(actions, LV_STATE_DISABLED);
+    } else {
+        lv_label_set_text_static(notice, UI_TEXT_NOTIFICATION_SNOOZE_NOT_SENT);
+        lv_obj_remove_flag(notice, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 static lv_obj_t *button(lv_obj_t *parent, const char *text, lv_event_cb_t on_click, uintptr_t data)
@@ -162,15 +176,19 @@ void ui_notifications_hide(void)
 
 void ui_notifications_show(const notification_view_t *view, const ui_notifications_handlers_t *handlers)
 {
-    if (view == NULL || (view->count == 0U && view->notice != NOTIFICATION_VIEW_STORAGE_ERROR)) {
+    if (view == NULL || (view->count == 0U && view->notice != NOTIFICATION_VIEW_STORAGE_ERROR &&
+                         view->notice != NOTIFICATION_VIEW_SNOOZE_CONFIRMED)) {
         ui_notifications_hide();
         return;
     }
-    const bool changed = overlay == NULL || strcmp(shown.card.event_id, view->card.event_id) != 0;
+    const bool changed = overlay == NULL || strcmp(shown.card.event_id, view->card.event_id) != 0 ||
+                         (view->count == 0U && shown.notice != view->notice);
     if (changed) {
         ui_notifications_hide();
         create_overlay();
-        lv_label_set_text(message, view->count == 0U ? UI_TEXT_NOTIFICATION_STORAGE_ERROR : view->card.message);
+        if (view->count == 0U && view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED)
+            lv_label_set_text_fmt(message, UI_TEXT_NOTIFICATION_SNOOZE_CONFIRMED, view->snoozed_at_text);
+        else lv_label_set_text(message, view->count == 0U ? UI_TEXT_NOTIFICATION_STORAGE_ERROR : view->card.message);
     }
     ui_status_bar_set_title_override(UI_TEXT_NOTIFICATION_TITLE);
     shown = *view;
@@ -178,18 +196,25 @@ void ui_notifications_show(const notification_view_t *view, const ui_notificatio
     has_callbacks = handlers != NULL;
     if (view->count == 0U) {
         lv_obj_add_flag(notice, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(actions, LV_OBJ_FLAG_HIDDEN);
+        if (view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) {
+            lv_obj_remove_flag(actions, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(snooze_button, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text_static(lv_obj_get_child(close_button, -1), UI_TEXT_NOTIFICATION_OK);
+        } else lv_obj_add_flag(actions, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(presets, LV_OBJ_FLAG_HIDDEN);
         return;
     }
+    lv_obj_remove_flag(snooze_button, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text_static(lv_obj_get_child(close_button, -1),
                              view->count > 1U ? UI_TEXT_NOTIFICATION_NEXT : UI_TEXT_NOTIFICATION_CLOSE);
     if (view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) {
-        lv_label_set_text_fmt(notice, notice_text(view->notice), view->snoozed_at_text);
+        lv_label_set_text_fmt(notice, view->snooze_close_pending ? UI_TEXT_NOTIFICATION_SNOOZE_CLOSE_PENDING
+                                                                 : UI_TEXT_NOTIFICATION_SNOOZE_CONFIRMED,
+                              view->snoozed_at_text);
     } else {
         lv_label_set_text_static(notice, notice_text(view->notice));
     }
-    if (view->action_busy || view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) selecting_preset = false;
+    if (view->action_busy || view->snooze_close_pending) selecting_preset = false;
     if (selecting_preset) {
         lv_obj_add_flag(message, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(notice, LV_OBJ_FLAG_HIDDEN);
@@ -205,7 +230,7 @@ void ui_notifications_show(const notification_view_t *view, const ui_notificatio
         lv_obj_add_state(actions, LV_STATE_DISABLED);
     else lv_obj_remove_state(actions, LV_STATE_DISABLED);
     if (callbacks.snooze == NULL || view->action_busy || view->notice == NOTIFICATION_VIEW_STORAGE_ERROR ||
-        view->notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED)
+        view->snooze_close_pending)
         lv_obj_add_state(snooze_button, LV_STATE_DISABLED);
     else lv_obj_remove_state(snooze_button, LV_STATE_DISABLED);
 }

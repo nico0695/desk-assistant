@@ -8,6 +8,7 @@
 #include "bridge_events.h"
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
+#include "bridge_snooze.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -15,14 +16,19 @@
 #include "freertos/task.h"
 #include "notification_journal.h"
 #include "notification_state.h"
+#include "recording.h"
 #include "sdkconfig.h"
 
 #define WORKER_NAME "notifications"
 #define ACK_PATH_SIZE (sizeof(BRIDGE_EVENT_ACK_PATH_FORMAT) + BRIDGE_UUID_LENGTH)
 #define COMMAND_QUEUE_LENGTH 8U
 
+typedef enum { COMMAND_CLOSE, COMMAND_SNOOZE, COMMAND_DISMISS_CONFIRMATION } notification_command_type_t;
+
 typedef struct {
+    notification_command_type_t type;
     char event_id[BRIDGE_UUID_SIZE];
+    bridge_snooze_preset_t preset;
 } close_command_t;
 
 static const char *TAG = "notifications";
@@ -42,15 +48,25 @@ static uint32_t gate_epoch;
 static uint64_t generation;
 static uint64_t arrival_sequence;
 static notification_view_notice_t notice;
+static bool snooze_queued;
+static bool action_busy;
+static char shown_event_id[BRIDGE_UUID_SIZE];
+static char confirmed_event_id[BRIDGE_UUID_SIZE];
+static char snoozed_at_text[BRIDGE_EVENT_TIME_SIZE];
+static atomic_bool confirmed_retry_allowed;
 
 static void publish(void)
 {
     if (view_callback == NULL) return;
     taskENTER_CRITICAL(&lock);
     const uint64_t current_generation = ++generation;
+    if (state.count != 0U) memcpy(shown_event_id, state.cards[0].event_id, sizeof(shown_event_id));
+    else shown_event_id[0] = '\0';
     taskEXIT_CRITICAL(&lock);
     notification_view_t view = {.generation = current_generation, .arrival_sequence = arrival_sequence,
-                                .count = state.count, .notice = notice};
+                                .count = state.count, .notice = notice, .action_busy = action_busy,
+                                .snooze_close_pending = confirmed_retry_allowed};
+    memcpy(view.snoozed_at_text, snoozed_at_text, sizeof(view.snoozed_at_text));
     if (state.count != 0U) view.card = state.cards[0];
     view_callback(&view);
 }
@@ -154,10 +170,110 @@ static bool close_front(const char *event_id)
     const bool saved = changed && save_candidate(candidate);
     free(candidate);
     if (saved) {
+        if (strcmp(confirmed_event_id, event_id) == 0) {
+            confirmed_event_id[0] = '\0';
+            confirmed_retry_allowed = false;
+            uncertain = false;
+            notice = NOTIFICATION_VIEW_SNOOZE_CONFIRMED;
+            publish();
+        }
         release_idle_origin();
         schedule(true);
+    } else if (strcmp(confirmed_event_id, event_id) == 0) {
+        notice = NOTIFICATION_VIEW_SNOOZE_CONFIRMED;
+        publish();
     }
     return saved;
+}
+
+static unsigned decimal(const char *text, size_t count)
+{
+    unsigned value = 0U;
+    for (size_t i = 0; i < count; ++i) value = value * 10U + (unsigned)(text[i] - '0');
+    return value;
+}
+
+static unsigned days_in_month(unsigned year, unsigned month)
+{
+    static const unsigned days[] = {31U, 28U, 31U, 30U, 31U, 30U, 31U, 31U, 30U, 31U, 30U, 31U};
+    if (month == 2U && year % 4U == 0U && (year % 100U != 0U || year % 400U == 0U)) return 29U;
+    return days[month - 1U];
+}
+
+static void format_local_time(const char *utc)
+{
+    unsigned year = decimal(utc, 4U), month = decimal(utc + 5U, 2U), day = decimal(utc + 8U, 2U);
+    unsigned hour = decimal(utc + 11U, 2U), minute = decimal(utc + 14U, 2U);
+    if (hour < NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS) {
+        hour += 24U - NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
+        if (--day == 0U) {
+            if (--month == 0U) { month = 12U; --year; }
+            day = days_in_month(year, month);
+        }
+    } else hour -= NOTIFICATIONS_LOCAL_UTC_OFFSET_HOURS;
+    (void)snprintf(snoozed_at_text, sizeof(snoozed_at_text), "%04u-%02u-%02u %02u:%02u",
+                   year, month, day, hour, minute);
+}
+
+static bridge_snooze_result_t send_snooze(const bridge_event_t *event, bridge_snooze_preset_t preset,
+                                           char confirmed_at[BRIDGE_EVENT_TIME_SIZE])
+{
+    char path[BRIDGE_SNOOZE_PATH_SIZE], request[BRIDGE_SNOOZE_REQUEST_SIZE];
+    if (!bridge_snooze_path(event->alert_id, path, sizeof(path)) ||
+        !bridge_snooze_request(preset, event->scheduled_at, request, sizeof(request)))
+        return BRIDGE_SNOOZE_NOT_SENT;
+    bridge_origin_t origin;
+    if (bridge_origin_load(&origin) != ESP_OK) return BRIDGE_SNOOZE_NOT_SENT;
+    char *body = malloc(BRIDGE_HTTP_SNOOZE_BODY_MAX_BYTES + 1U);
+    if (body == NULL) { memset(&origin, 0, sizeof(origin)); return BRIDGE_SNOOZE_NOT_SENT; }
+    const bridge_http_response_t response = bridge_http_json(&origin, path, BRIDGE_HTTP_POST_JSON,
+        request, strlen(request), BRIDGE_HTTP_EVENT_GATE_MS, BRIDGE_HTTP_SNOOZE_IO_MS,
+        body, BRIDGE_HTTP_SNOOZE_BODY_MAX_BYTES);
+    memset(&origin, 0, sizeof(origin));
+    bridge_snooze_result_t result;
+    if (response.result == BRIDGE_HTTP_OK)
+        result = bridge_snooze_decode(response.status, body, response.length, event->alert_id, confirmed_at);
+    else if (response.result == BRIDGE_HTTP_BUSY || response.result == BRIDGE_HTTP_CLOCK_NOT_READY ||
+             response.result == BRIDGE_HTTP_NO_MEMORY || response.result == BRIDGE_HTTP_INVALID_ARGUMENT)
+        result = BRIDGE_SNOOZE_NOT_SENT;
+    else result = BRIDGE_SNOOZE_UNCONFIRMED;
+    free(body);
+    return result;
+}
+
+static void run_snooze(const close_command_t *command)
+{
+    if (state.count == 0U || strcmp(state.cards[0].event_id, command->event_id) != 0 ||
+        confirmed_event_id[0] != '\0') goto done;
+    action_busy = true;
+    notice = NOTIFICATION_VIEW_OK;
+    publish();
+    bridge_snooze_result_t result = BRIDGE_SNOOZE_NOT_SENT;
+    char confirmed_at[BRIDGE_EVENT_TIME_SIZE] = {0};
+    if (recording_external_action_begin()) {
+        result = send_snooze(&state.cards[0], command->preset, confirmed_at);
+        recording_external_action_end();
+    }
+    action_busy = false;
+    if (result == BRIDGE_SNOOZE_SUCCESS) {
+        memcpy(confirmed_event_id, command->event_id, sizeof(confirmed_event_id));
+        confirmed_retry_allowed = true;
+        format_local_time(confirmed_at);
+        notice = NOTIFICATION_VIEW_SNOOZE_CONFIRMED;
+        publish();
+        (void)close_front(command->event_id);
+    } else {
+        notice = result == BRIDGE_SNOOZE_NOT_SENT ? NOTIFICATION_VIEW_SNOOZE_NOT_SENT
+               : result == BRIDGE_SNOOZE_NOT_FOUND ? NOTIFICATION_VIEW_SNOOZE_NOT_FOUND
+               : result == BRIDGE_SNOOZE_SCHEDULE_CHANGED ? NOTIFICATION_VIEW_SNOOZE_SCHEDULE_CHANGED
+               : result == BRIDGE_SNOOZE_REJECTED ? NOTIFICATION_VIEW_SNOOZE_REJECTED
+                                                   : NOTIFICATION_VIEW_SNOOZE_UNCONFIRMED;
+        publish();
+    }
+done:
+    taskENTER_CRITICAL(&lock);
+    snooze_queued = false;
+    taskEXIT_CRITICAL(&lock);
 }
 
 static bridge_http_response_t send_ack(const char *id)
@@ -295,7 +411,24 @@ static void run(void *unused)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     for (;;) {
         close_command_t command;
-        while (!uncertain && xQueueReceive(commands, &command, 0) == pdTRUE) (void)close_front(command.event_id);
+        while (xQueueReceive(commands, &command, 0) == pdTRUE) {
+            if (command.type == COMMAND_SNOOZE) {
+                if (!uncertain) run_snooze(&command);
+                else {
+                    taskENTER_CRITICAL(&lock);
+                    snooze_queued = false;
+                    taskEXIT_CRITICAL(&lock);
+                }
+            } else if (command.type == COMMAND_DISMISS_CONFIRMATION) {
+                if (state.count == 0U && notice == NOTIFICATION_VIEW_SNOOZE_CONFIRMED) {
+                    notice = NOTIFICATION_VIEW_OK;
+                    publish();
+                }
+            } else if (!uncertain || (confirmed_retry_allowed &&
+                                      strcmp(command.event_id, confirmed_event_id) == 0)) {
+                (void)close_front(command.event_id);
+            }
+        }
         if (uncertain) {
             taskENTER_CRITICAL(&lock);
             worker = NULL;
@@ -384,9 +517,38 @@ void notifications_close(uint64_t expected_generation, const char *event_id)
 {
     taskENTER_CRITICAL(&lock);
     const bool current = expected_generation != 0U && expected_generation <= generation;
+    const bool dismiss = event_id != NULL && event_id[0] == '\0' && shown_event_id[0] == '\0';
     taskEXIT_CRITICAL(&lock);
-    if (commands == NULL || uncertain || !current || !bridge_uuid_valid(event_id)) return;
-    close_command_t command;
-    memcpy(command.event_id, event_id, sizeof(command.event_id));
+    if (commands == NULL || !current || (dismiss ? uncertain : !bridge_uuid_valid(event_id)) ||
+        (uncertain && !confirmed_retry_allowed)) return;
+    taskENTER_CRITICAL(&lock);
+    const bool available = !snooze_queued;
+    taskEXIT_CRITICAL(&lock);
+    if (!available) return;
+    close_command_t command = {.type = dismiss ? COMMAND_DISMISS_CONFIRMATION : COMMAND_CLOSE};
+    if (!dismiss) memcpy(command.event_id, event_id, sizeof(command.event_id));
     if (xQueueSend(commands, &command, 0) == pdTRUE) schedule(true);
+}
+
+bool notifications_snooze(uint64_t expected_generation, const char *event_id, unsigned preset)
+{
+    if (commands == NULL || event_id == NULL || !bridge_uuid_valid(event_id) || uncertain ||
+        preset < BRIDGE_SNOOZE_FIVE_MINUTES || preset > BRIDGE_SNOOZE_TOMORROW || confirmed_retry_allowed)
+        return false;
+    taskENTER_CRITICAL(&lock);
+    const bool accepted = !snooze_queued && expected_generation != 0U &&
+                          expected_generation <= generation && strcmp(shown_event_id, event_id) == 0;
+    if (accepted) snooze_queued = true;
+    taskEXIT_CRITICAL(&lock);
+    if (!accepted) return false;
+    close_command_t command = {.type = COMMAND_SNOOZE, .preset = (bridge_snooze_preset_t)preset};
+    memcpy(command.event_id, event_id, sizeof(command.event_id));
+    if (xQueueSend(commands, &command, 0) != pdTRUE) {
+        taskENTER_CRITICAL(&lock);
+        snooze_queued = false;
+        taskEXIT_CRITICAL(&lock);
+        return false;
+    }
+    schedule(true);
+    return true;
 }

@@ -354,7 +354,7 @@ void ui_show_recording(const recording_view_t *view)
 }
 
 void ui_show_notification(const notification_view_t *view, void (*close)(uint64_t, const char *),
-                          void (*snooze)(uint64_t, const char *, unsigned))
+                          bool (*snooze)(uint64_t, const char *, unsigned))
 {
     if (view == NULL) return;
     taskENTER_CRITICAL(&notification_lock);
