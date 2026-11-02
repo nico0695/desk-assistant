@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the SDK HTTP client's compile-time protection for private headers."""
+"""Verify SDK HTTP and TLS compile-time protection for private configuration."""
 
 import json
 from pathlib import Path
@@ -17,13 +17,27 @@ def main(build_dir):
         if len(matches) != 1:
             raise ValueError("HTTP client source missing or ambiguous in build metadata")
         definitions = [arg for arg in shlex.split(matches[0]["command"]) if arg.startswith("-DLOG_LOCAL_LEVEL=")]
-        if definitions != ["-DLOG_LOCAL_LEVEL=ESP_LOG_INFO"]:
+        if definitions != ["-DLOG_LOCAL_LEVEL=ESP_LOG_NONE"]:
             raise ValueError("HTTP client log cap missing or overridden")
 
     archive = (root / "esp-idf/esp_http_client/libesp_http_client.a").read_bytes()
-    if b"Write header[" in archive or b"auth_response=" in archive:
+    if any(value in archive for value in (b"Write header[", b"auth_response=", b"Error parse url %s",
+                                           b"This authentication method is not supported: %s")):
         raise ValueError("HTTP client includes a private-header debug format")
-    print("HTTP client private-header debug logging is compiled out.")
+
+    for name, level in (("esp_tls.c", "ESP_LOG_NONE"), ("esp_tls_mbedtls.c", "ESP_LOG_INFO")):
+        matches = [entry for entry in entries if Path(entry["file"]).name == name
+                   and "/esp-tls/" in entry["file"]]
+        if len(matches) != 1:
+            raise ValueError("TLS source missing or ambiguous in build metadata")
+        definitions = [arg for arg in shlex.split(matches[0]["command"]) if arg.startswith("-DLOG_LOCAL_LEVEL=")]
+        if definitions != [f"-DLOG_LOCAL_LEVEL={level}"]:
+            raise ValueError("TLS log cap missing or overridden")
+    tls_archive = (root / "esp-idf/esp-tls/libesp-tls.a").read_bytes()
+    if any(value in tls_archive for value in (b"couldn't get hostname for", b"host:%s: strlen",
+                                               b"Connecting to server. HOST:", b"verification info: %s")):
+        raise ValueError("TLS library includes a private-host debug or error format")
+    print("HTTP and TLS private-configuration logging is compiled out.")
 
 
 if __name__ == "__main__":
