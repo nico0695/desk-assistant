@@ -66,3 +66,8 @@ esp_err_t notification_journal_save(const notification_state_t *state)
     free(stored);
     return error;
 }
+
+bool notification_journal_unwritten(esp_err_t error)
+{
+    return error == ESP_ERR_NO_MEM || error == ESP_ERR_INVALID_ARG || error == ESP_ERR_INVALID_STATE;
+}

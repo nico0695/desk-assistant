@@ -14,6 +14,8 @@ static unsigned saves, get_calls, acks, posts, holds, releases, publications, to
 static bool fail_ack, busy_get, fail_save, fail_snooze_transport, unsent_snooze, deny_external_action, fail_worker_create;
 static unsigned timer_starts;
 static int ack_status;
+static esp_err_t save_error;
+static unsigned save_attempts, fail_save_attempt;
 static bridge_action_result_t fake_snooze_result;
 static void (*gate_callback)(void);
 
@@ -76,11 +78,13 @@ esp_err_t bridge_origin_load(bridge_origin_t *origin)
 esp_err_t notification_journal_load(notification_state_t *loaded) { *loaded = durable; return ESP_OK; }
 esp_err_t notification_journal_save(const notification_state_t *next)
 {
-    if (fail_save) return ESP_FAIL;
+    ++save_attempts;
+    if (fail_save || save_attempts == fail_save_attempt) return save_error;
     durable = *next;
     ++saves;
     return ESP_OK;
 }
+bool notification_journal_unwritten(esp_err_t error) { return error == ESP_ERR_NO_MEM; }
 bool bridge_event_valid(const bridge_event_t *event) { return event != NULL && bridge_uuid_valid(event->event_id); }
 bridge_event_decode_t bridge_event_decode(const char *body, size_t length, int status,
                                           bridge_event_t *event, bool *present)
@@ -172,6 +176,8 @@ void setUp(void)
     fail_ack = busy_get = fail_save = fail_snooze_transport = unsent_snooze = deny_external_action = fail_worker_create = false;
     fake_snooze_result = BRIDGE_ACTION_SUCCESS;
     ack_status = 204;
+    save_error = ESP_FAIL;
+    save_attempts = fail_save_attempt = 0;
 }
 void tearDown(void) {}
 
@@ -265,6 +271,45 @@ static void failed_journal_commit_blocks_ack_and_keeps_event(void)
     TEST_ASSERT_EQUAL_UINT(0, releases);
     notifications_close(generation, "01234567-89ab-cdef-0123-456789abcdef");
     TEST_ASSERT_EQUAL_UINT(0, uxQueueMessagesWaiting(commands));
+}
+
+static void unwritten_journal_failure_does_not_block_the_next_signal(void)
+{
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    fail_save = true;
+    save_error = ESP_ERR_NO_MEM;
+    notifications_bridge_online(true);
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(0, durable.count);
+    TEST_ASSERT_EQUAL_UINT(0, acks);
+    TEST_ASSERT_FALSE(uncertain);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_STORAGE_ERROR, notice);
+    fail_save = false;
+    get_calls = 0;
+    notifications_pending_events();
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_STRING("", durable.pending_ack);
+    TEST_ASSERT_EQUAL_UINT(1, acks);
+    TEST_ASSERT_EQUAL_INT(NOTIFICATION_VIEW_OK, notice);
+}
+
+static void unwritten_ack_clear_retries_later_without_looping(void)
+{
+    TEST_ASSERT_EQUAL_INT(ESP_OK, notifications_start(show_view));
+    save_error = ESP_ERR_NO_MEM;
+    fail_save_attempt = 2;
+    notifications_bridge_online(true);
+    run(NULL);
+    TEST_ASSERT_EQUAL_UINT(1, durable.count);
+    TEST_ASSERT_EQUAL_STRING(durable.cards[0].event_id, durable.pending_ack);
+    TEST_ASSERT_EQUAL_UINT(1, acks);
+    TEST_ASSERT_EQUAL_UINT(1, timer_starts);
+    TEST_ASSERT_FALSE(uncertain);
+    retry_timer_fired(NULL);
+    run(NULL);
+    TEST_ASSERT_EQUAL_STRING("", durable.pending_ack);
+    TEST_ASSERT_EQUAL_UINT(2, acks);
 }
 
 static void seed_card(void)
@@ -391,6 +436,8 @@ int main(void)
     RUN_TEST(lost_ack_response_keeps_id_until_retry);
     RUN_TEST(rejected_ack_clears_pending_and_waits_for_the_next_signal);
     RUN_TEST(unavailable_ack_is_retried);
+    RUN_TEST(unwritten_journal_failure_does_not_block_the_next_signal);
+    RUN_TEST(unwritten_ack_clear_retries_later_without_looping);
     RUN_TEST(busy_get_resumes_on_gate_release);
     RUN_TEST(failed_journal_commit_blocks_ack_and_keeps_event);
     RUN_TEST(snooze_success_closes_locally_once);

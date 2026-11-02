@@ -116,8 +116,12 @@ static void retry_timer_fired(void *unused)
     schedule(true);
 }
 
+/* Stops the drain and confirms the pending ACK again after the retry delay. */
 static void retry_ack_later(void)
 {
+    taskENTER_CRITICAL(&lock);
+    drain_requested = false;
+    taskEXIT_CRITICAL(&lock);
     if (retry_timer != NULL) {
         (void)esp_timer_stop(retry_timer);
         (void)esp_timer_start_once(retry_timer, (uint64_t)CONFIG_NOTIFICATIONS_ACK_RETRY_MS * 1000U);
@@ -144,8 +148,8 @@ static bool save_candidate(notification_state_t *candidate)
 {
     const esp_err_t error = notification_journal_save(candidate);
     if (error != ESP_OK) {
-        /* The commit may have reached flash. Keep the origin and block until reboot. */
-        uncertain = true;
+        /* Unless nothing was written, the commit may have reached flash: keep the origin and block until reboot. */
+        if (!notification_journal_unwritten(error)) uncertain = true;
         notice = NOTIFICATION_VIEW_STORAGE_ERROR;
         ESP_LOGE(TAG, "journal commit failed: %s", esp_err_to_name(error));
         publish();
@@ -299,9 +303,6 @@ static bool acknowledge(void)
         taskEXIT_CRITICAL(&lock);
     } else if (!answered || !bridge_event_ack_succeeded(response.status, response.length)) {
         ESP_LOGW(TAG, "ACK pending: transport %d HTTP %d", response.result, response.status);
-        taskENTER_CRITICAL(&lock);
-        drain_requested = false;
-        taskEXIT_CRITICAL(&lock);
         retry_ack_later();
         return false;
     }
@@ -314,6 +315,7 @@ static bool acknowledge(void)
     const bool saved = changed && save_candidate(candidate);
     free(candidate);
     if (saved) release_idle_origin();
+    else if (changed && !uncertain) retry_ack_later();
     return saved;
 }
 

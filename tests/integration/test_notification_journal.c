@@ -74,10 +74,19 @@ static void corrupt_or_uncertain_write_is_never_read_as_empty(void)
     TEST_ASSERT_EQUAL_UINT(0, restored.count);
 }
 
+static void only_errors_before_the_write_are_unwritten(void)
+{
+    TEST_ASSERT_TRUE(notification_journal_unwritten(ESP_ERR_NO_MEM));
+    TEST_ASSERT_TRUE(notification_journal_unwritten(ESP_ERR_INVALID_ARG));
+    TEST_ASSERT_TRUE(notification_journal_unwritten(ESP_ERR_INVALID_STATE));
+    TEST_ASSERT_FALSE(notification_journal_unwritten(ESP_FAIL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(closed_card_retains_ack_across_restart);
     RUN_TEST(corrupt_or_uncertain_write_is_never_read_as_empty);
+    RUN_TEST(only_errors_before_the_write_are_unwritten);
     return UNITY_END();
 }
