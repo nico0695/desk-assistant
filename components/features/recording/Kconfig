@@ -3,9 +3,10 @@ menu "Desk Assistant recording"
     config RECORDING_WORKER_STACK_SIZE
         int "Recording worker stack size (bytes)"
         range 3072 16384
-        default 4096
+        default 8192
         help
-            The worker exists only during the boot cleanup, a capture or a cancellation.
+            The worker exists only while a job runs: cleanup, capture, upload, query or
+            forget. Uploads and queries run the TLS handshake on this stack.
 
     config RECORDING_WORKER_PRIORITY
         int "Recording worker priority"

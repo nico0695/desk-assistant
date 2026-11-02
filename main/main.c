@@ -52,6 +52,17 @@ static void log_bridge_origin(void)
              error == ESP_OK ? "configured" : error == ESP_ERR_NVS_NOT_FOUND ? "not configured" : "unusable");
 }
 
+static void bridge_online_changed(bool online, uint64_t generation)
+{
+    ui_show_bridge_online(online, generation);
+    recording_bridge_online(online, generation);
+}
+
+static const bridge_hooks_t BRIDGE_HOOKS = {
+    .online_changed = bridge_online_changed,
+    .assistant_result = recording_assistant_result,
+};
+
 static void show_battery(board_battery_reading_t reading, void *unused)
 {
     (void)unused;
@@ -75,7 +86,7 @@ void app_main(void)
         ESP_ERROR_CHECK_WITHOUT_ABORT(recording_start(ui_show_recording));
         ESP_ERROR_CHECK_WITHOUT_ABORT(board_battery_start(show_battery, NULL));
     }
-    ESP_ERROR_CHECK_WITHOUT_ABORT(bridge_start(ui_show_bridge_online));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(bridge_start(&BRIDGE_HOOKS));
     ESP_ERROR_CHECK_WITHOUT_ABORT(connectivity_start(&CONNECTIVITY_HOOKS));
     memory_report_log("boot");
 }

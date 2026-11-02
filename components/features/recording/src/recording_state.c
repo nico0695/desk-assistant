@@ -50,6 +50,7 @@ static void enter(recording_state_t *state, recording_phase_t phase, recording_f
 {
     state->phase = phase;
     state->failure = failure;
+    state->notice = RECORDING_NOTICE_NONE;
     ++state->generation;
 }
 
@@ -66,6 +67,7 @@ static void block_record(recording_state_t *state)
 {
     state->record_failed = true;
     state->query_wanted = false;
+    state->has_message = false;
     enter(state, RECORDING_FAILED, RECORDING_FAILURE_RECORD);
 }
 
@@ -81,6 +83,7 @@ static void return_to_idle(recording_state_t *state)
 
 static recording_effect_t want_job(recording_state_t *state, recording_job_t job)
 {
+    state->notice = RECORDING_NOTICE_NONE;
     state->wanted_job = job;
     return RECORDING_EFFECT_VIEW;
 }
@@ -358,11 +361,11 @@ void recording_state_upload_failed(recording_state_t *state, const char *id, rec
               state->cleanup_pending ? RECORDING_FAILURE_CLEANUP : RECORDING_FAILURE_NOT_SENT);
         return;
     }
-    if (failure == RECORDING_UPLOAD_UNSENT_KEPT) {
-        state->record_failed = true;
-    }
+    /* A failed forget may have reached flash: the attempt stays uncertain and the record untrusted. */
+    const bool kept = failure == RECORDING_UPLOAD_UNSENT_KEPT;
+    state->record_failed = state->record_failed || kept;
     state->query_wanted = true;
-    enter(state, RECORDING_UNCONFIRMED, RECORDING_FAILURE_NONE);
+    enter(state, RECORDING_UNCONFIRMED, kept ? RECORDING_FAILURE_RECORD : RECORDING_FAILURE_NONE);
 }
 
 recording_apply_t recording_state_reply(recording_state_t *state, const char *id, recording_reply_t reply)
@@ -429,15 +432,14 @@ void recording_state_forgotten(recording_state_t *state, bool cleaned, bool clea
     if (!has_attempt(state)) {
         return;
     }
-    state->cleanup_pending = !cleaned;
-    if (!cleared) {
+    if (!cleaned) {
+        /* The audio goes before the identity: the record was not touched and the attempt stays as it was. */
+        state->cleanup_pending = true;
+        state->notice = RECORDING_NOTICE_NOT_CLEARED;
+    } else if (!cleared) {
+        state->cleanup_pending = false;
         block_record(state);
-        return;
-    }
-    if (cleaned) {
+    } else {
         return_to_idle(state);
-        return;
     }
-    forget_attempt(state);
-    enter(state, RECORDING_FAILED, RECORDING_FAILURE_CLEANUP);
 }

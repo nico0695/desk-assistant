@@ -9,8 +9,9 @@
 typedef void (*recording_view_fn)(const recording_view_t *view);
 
 /*
- * Starts the attempt owner and the boot cleanup of the audio partition. on_view receives every state change from
- * whichever task produced it and must not block. Requires board_init.
+ * Starts the attempt owner, restores a stored attempt and runs the boot cleanup of the audio partition. on_view
+ * receives every state change from whichever task produced it and must not block. Requires board_init and storage;
+ * call before bridge_start.
  */
 esp_err_t recording_start(recording_view_fn on_view);
 
@@ -25,6 +26,10 @@ void recording_close(uint64_t generation);
 void recording_check(uint64_t generation);
 /* The user confirmed discarding the uncertain attempt shown with this generation. */
 void recording_discard(uint64_t generation);
+
+/* Bridge signals, from the bridge or event tasks; never block. Newer generations supersede older ones. */
+void recording_bridge_online(bool online, uint64_t generation);
+void recording_assistant_result(void);
 
 /*
  * Passes the bridge message of the attempt shown with this generation to reader, which must copy it before returning

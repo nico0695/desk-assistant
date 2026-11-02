@@ -55,6 +55,8 @@ typedef enum {
     RECORDING_NOTICE_NONE,
     /* Send was refused locally because the event stream is closed; the clip is kept. */
     RECORDING_NOTICE_NOT_CONNECTED,
+    /* Close or Discard could not clear the audio; the attempt is kept and the action can be repeated. */
+    RECORDING_NOTICE_NOT_CLEARED,
 } recording_notice_t;
 
 /*

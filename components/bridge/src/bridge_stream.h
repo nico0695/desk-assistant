@@ -7,6 +7,8 @@
 typedef struct {
     bool (*opened)(void *context);
     bool (*current)(void *context);
+    /* Optional; runs right before and after each parsed chunk to exchange state with the parser's owner. */
+    void (*sync)(bridge_sse_t *state, void *context);
     void *context;
 } bridge_stream_hooks_t;
 

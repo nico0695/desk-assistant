@@ -4,12 +4,19 @@
 #include <string.h>
 
 #include "board_audio.h"
+#include "bridge.h"
+#include "bridge_assistant.h"
+#include "bridge_http.h"
+#include "bridge_origin_store.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_random.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "recording_clip.h"
+#include "recording_record.h"
 #include "recording_state.h"
 #include "sdkconfig.h"
 
@@ -17,6 +24,7 @@
 /* The duration on the panel changes at most this often. */
 #define VIEW_PERIOD_US INT64_C(200000)
 #define US_PER_MS 1000
+#define UUID_RANDOM_BYTES 16U
 #define WARMUP_SAMPLES (BOARD_AUDIO_SAMPLE_RATE_HZ * CONFIG_RECORDING_WARMUP_MS / 1000U)
 #define CAPTURE_GUARD_US ((int64_t)(RECORDING_MAX_MS + CONFIG_RECORDING_DURATION_GUARD_MS) * US_PER_MS)
 
@@ -35,6 +43,21 @@ static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static recording_state_t state;
 /* Guarded by lock; numbers every view so the consumer can drop one that arrives late. */
 static uint64_t view_revision;
+/* Guarded by lock: the latest event stream state, for admission and queries. */
+static bool stream_online;
+static uint64_t stream_generation;
+/* Guarded by lock: the generation the armed local wait belongs to. */
+static uint64_t wait_generation;
+static esp_timer_handle_t wait_timer;
+/*
+ * The bridge message of the shown terminal, guarded by message_lock: heap, owned here from its reply until the attempt
+ * ends; readers copy it. A mutex rather than lock because a reader copies up to 8 KB.
+ */
+static SemaphoreHandle_t message_lock;
+static char *message;
+static uint64_t message_generation;
+/* Only the worker (or startup, before any worker) touches it: the origin is held for the attempt. */
+static bool origin_held;
 static recording_view_fn view_callback;
 
 /* Call under lock. */
@@ -234,12 +257,308 @@ static bool run_capture(void)
     return false;
 }
 
-/* Placeholder until the upload exists: admission is refused and the clip is kept. */
-static void run_upload(void)
+/* Clears the clip after the upload and records the outcome in the state; no view of its own. */
+static void clean_after_upload(void)
+{
+    const bool cleaned = clear_clip();
+    taskENTER_CRITICAL(&lock);
+    recording_state_cleaned(&state, cleaned);
+    taskEXIT_CRITICAL(&lock);
+}
+
+static void hold_origin(void)
+{
+    origin_held = bridge_origin_hold();
+    if (!origin_held) {
+        ESP_LOGE(TAG, "origin hold failed");
+    }
+}
+
+static void release_origin(void)
+{
+    if (origin_held) {
+        bridge_origin_release();
+        origin_held = false;
+    }
+}
+
+/* The attempt and its durable record ended: nothing binds the origin or the event stream to it anymore. */
+static void attempt_ended(void)
+{
+    bridge_watch_assistant(NULL);
+    release_origin();
+    xSemaphoreTake(message_lock, portMAX_DELAY);
+    free(message);
+    message = NULL;
+    message_generation = 0;
+    xSemaphoreGive(message_lock);
+}
+
+static void clear_secret(void *buffer, size_t size)
+{
+    volatile unsigned char *at = buffer;
+    while (size-- > 0U) *at++ = 0;
+}
+
+static bool load_origin(bridge_origin_t *origin)
+{
+    const esp_err_t error = bridge_origin_load(origin);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "origin load: %s", esp_err_to_name(error));
+    }
+    return error == ESP_OK;
+}
+
+static void arm_wait(uint64_t generation)
 {
     taskENTER_CRITICAL(&lock);
-    recording_state_refused(&state);
+    wait_generation = generation;
     taskEXIT_CRITICAL(&lock);
+    esp_timer_stop(wait_timer);
+    const esp_err_t error = esp_timer_start_once(wait_timer, (uint64_t)BRIDGE_ASSISTANT_WAIT_MS * US_PER_MS);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "wait timer: %s", esp_err_to_name(error));
+    }
+}
+
+static recording_reply_t reply_of(bridge_assistant_status_t status)
+{
+    switch (status) {
+    case BRIDGE_ASSISTANT_COMPLETED: return RECORDING_REPLY_COMPLETED;
+    case BRIDGE_ASSISTANT_FAILED: return RECORDING_REPLY_FAILED;
+    case BRIDGE_ASSISTANT_UNKNOWN: return RECORDING_REPLY_UNKNOWN;
+    case BRIDGE_ASSISTANT_PROCESSING:
+    default: return RECORDING_REPLY_PROCESSING;
+    }
+}
+
+static recording_record_phase_t record_phase_of(recording_reply_t reply)
+{
+    switch (reply) {
+    case RECORDING_REPLY_COMPLETED: return RECORDING_RECORD_COMPLETED;
+    case RECORDING_REPLY_FAILED: return RECORDING_RECORD_FAILED;
+    case RECORDING_REPLY_UNKNOWN: return RECORDING_RECORD_UNKNOWN;
+    case RECORDING_REPLY_PROCESSING:
+    default: return RECORDING_RECORD_PENDING;
+    }
+}
+
+/* Shows a persisted terminal and takes ownership of its text. */
+static void show_terminal(const char *id, recording_reply_t reply, bool omitted, char *text)
+{
+    recording_view_t view;
+    xSemaphoreTake(message_lock, portMAX_DELAY);
+    taskENTER_CRITICAL(&lock);
+    recording_state_resolved(&state, id, reply, omitted);
+    const bool shown = state.has_message && state.generation != message_generation;
+    snapshot(&view);
+    taskEXIT_CRITICAL(&lock);
+    if (shown) {
+        free(message);
+        message = text;
+        message_generation = view.generation;
+        text = NULL;
+    }
+    xSemaphoreGive(message_lock);
+    free(text);
+    publish(&view);
+}
+
+/*
+ * Applies a reply body for the attempt; a terminal is persisted before it is shown. Returns false when the body is not
+ * a valid reply for this attempt, which leaves the state unchanged.
+ */
+static bool apply_reply(const char *id, const char *body, bridge_http_response_t response, bool upload)
+{
+    char *text = malloc(BRIDGE_ASSISTANT_MESSAGE_SIZE);
+    if (text == NULL) {
+        ESP_LOGE(TAG, "no memory for the reply");
+        return false;
+    }
+    bridge_assistant_result_t result;
+    const bridge_assistant_decode_t decoded = bridge_assistant_decode(
+        body, response.length, response.status, upload, id, &result, text, BRIDGE_ASSISTANT_MESSAGE_SIZE);
+    if (decoded != BRIDGE_ASSISTANT_DECODE_OK) {
+        ESP_LOGW(TAG, "reply rejected: decode %d HTTP %d", (int)decoded, response.status);
+        free(text);
+        return false;
+    }
+    const recording_reply_t reply = reply_of(result.status);
+    taskENTER_CRITICAL(&lock);
+    const recording_apply_t apply = recording_state_reply(&state, id, reply);
+    const uint64_t generation = state.generation;
+    taskEXIT_CRITICAL(&lock);
+    ESP_LOGI(TAG, "reply: status %d apply %d", (int)result.status, (int)apply);
+    if (apply == RECORDING_APPLY_STORE && recording_record_finish(id, record_phase_of(reply)) != ESP_OK) {
+        ESP_LOGE(TAG, "terminal phase not stored");
+        taskENTER_CRITICAL(&lock);
+        recording_state_store_failed(&state, id);
+        taskEXIT_CRITICAL(&lock);
+        free(text);
+        publish_current();
+        return true;
+    }
+    if (apply == RECORDING_APPLY_STORE || apply == RECORDING_APPLY_SHOW) {
+        show_terminal(id, reply, result.content_omitted, text);
+        return true;
+    }
+    free(text);
+    if (apply == RECORDING_APPLY_WAIT) {
+        arm_wait(generation);
+        publish_current();
+    }
+    return true;
+}
+
+static bool read_clip(size_t offset, void *buffer, size_t capacity, void *unused)
+{
+    (void)unused;
+    size_t count = 0;
+    return recording_clip_read(offset, buffer, capacity, &count) == ESP_OK && count == capacity;
+}
+
+/* Admission: the event stream is open and the origin is loaded and held for the whole attempt. */
+static bool admit(bridge_origin_t *origin)
+{
+    taskENTER_CRITICAL(&lock);
+    const bool online = stream_online;
+    taskEXIT_CRITICAL(&lock);
+    if (!online || !bridge_origin_hold()) {
+        return false;
+    }
+    if (!load_origin(origin)) {
+        bridge_origin_release();
+        return false;
+    }
+    origin_held = true;
+    return true;
+}
+
+/* Reserves a new identity durably; false when the attempt cannot continue. */
+static bool reserve(char id[BRIDGE_UUID_SIZE])
+{
+    uint8_t random_bytes[UUID_RANDOM_BYTES];
+    esp_fill_random(random_bytes, sizeof(random_bytes));
+    bridge_uuid_format(random_bytes, id);
+    bridge_watch_assistant(id);
+    const esp_err_t error = recording_record_begin(id);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "reservation not stored: %s", esp_err_to_name(error));
+    }
+    taskENTER_CRITICAL(&lock);
+    recording_state_reserved(&state, id, error == ESP_OK);
+    taskEXIT_CRITICAL(&lock);
+    publish_current();
+    return error == ESP_OK;
+}
+
+/* After an upload that did not return a valid reply. */
+static void upload_failed(const char *id, bool unsent)
+{
+    recording_upload_failure_t failure = RECORDING_UPLOAD_AMBIGUOUS;
+    if (unsent) {
+        const esp_err_t error = recording_record_clear();
+        if (error != ESP_OK) {
+            ESP_LOGE(TAG, "reservation not cleared: %s", esp_err_to_name(error));
+        }
+        failure = error == ESP_OK ? RECORDING_UPLOAD_UNSENT : RECORDING_UPLOAD_UNSENT_KEPT;
+    }
+    taskENTER_CRITICAL(&lock);
+    recording_state_upload_failed(&state, id, failure);
+    taskEXIT_CRITICAL(&lock);
+    if (failure == RECORDING_UPLOAD_UNSENT) {
+        attempt_ended();
+    }
+    publish_current();
+}
+
+/* The single PUT of the reserved attempt; the clip is cleared whatever the outcome. */
+static void send_clip(const bridge_origin_t *origin, const char *id)
+{
+    char path[BRIDGE_ASSISTANT_PATH_SIZE];
+    char *body = malloc(BRIDGE_ASSISTANT_JSON_MAX_BYTES);
+    bridge_http_upload_t upload = {.response.result = BRIDGE_HTTP_NO_MEMORY, .unsent = true};
+    if (body != NULL && bridge_assistant_path(id, path, sizeof(path))) {
+        const int64_t started = esp_timer_get_time();
+        upload = bridge_http_put_wav(origin, path, recording_clip_wav_size(), read_clip, NULL, body,
+                                     BRIDGE_ASSISTANT_JSON_MAX_BYTES);
+        ESP_LOGI(TAG, "upload: result %d HTTP %d unsent %d in %lld ms", (int)upload.response.result,
+                 upload.response.status, (int)upload.unsent,
+                 (long long)((esp_timer_get_time() - started) / US_PER_MS));
+    }
+    clean_after_upload();
+    if (upload.response.result != BRIDGE_HTTP_OK || !apply_reply(id, body, upload.response, true)) {
+        upload_failed(id, upload.unsent);
+    }
+    free(body);
+}
+
+static void run_upload(void)
+{
+    bridge_origin_t origin;
+    if (!admit(&origin)) {
+        taskENTER_CRITICAL(&lock);
+        recording_state_refused(&state);
+        taskEXIT_CRITICAL(&lock);
+        publish_current();
+        return;
+    }
+    char id[BRIDGE_UUID_SIZE];
+    if (reserve(id)) {
+        send_clip(&origin, id);
+    } else {
+        clean_after_upload();
+        publish_current();
+    }
+    clear_secret(&origin, sizeof(origin));
+}
+
+/* One GET of the attempt. Without the event stream the intent waits for its next opening, which queries again. */
+static void run_query(void)
+{
+    char id[BRIDGE_UUID_SIZE];
+    taskENTER_CRITICAL(&lock);
+    const bool online = stream_online;
+    memcpy(id, state.id, sizeof(id));
+    taskEXIT_CRITICAL(&lock);
+    char path[BRIDGE_ASSISTANT_PATH_SIZE];
+    bridge_origin_t origin;
+    if (!online || !bridge_assistant_path(id, path, sizeof(path)) || !load_origin(&origin)) {
+        return;
+    }
+    char *body = malloc(BRIDGE_ASSISTANT_JSON_MAX_BYTES);
+    if (body == NULL) {
+        ESP_LOGE(TAG, "no memory for the query");
+    } else {
+        const bridge_http_response_t response = bridge_http_get(&origin, path, BRIDGE_ASSISTANT_GET_GATE_MS,
+                                                                BRIDGE_ASSISTANT_GET_IO_MS, body,
+                                                                BRIDGE_ASSISTANT_JSON_MAX_BYTES);
+        ESP_LOGI(TAG, "query: result %d HTTP %d", (int)response.result, response.status);
+        if (response.result == BRIDGE_HTTP_OK) {
+            (void)apply_reply(id, body, response, false);
+        }
+        free(body);
+    }
+    clear_secret(&origin, sizeof(origin));
+}
+
+/* Close of a terminal or a confirmed discard: the audio goes first, then the durable identity. */
+static void run_forget(void)
+{
+    const bool cleaned = clear_clip();
+    esp_err_t error = ESP_FAIL;
+    if (cleaned) {
+        error = recording_record_clear();
+        if (error != ESP_OK) {
+            ESP_LOGE(TAG, "record not cleared: %s", esp_err_to_name(error));
+        }
+    }
+    taskENTER_CRITICAL(&lock);
+    recording_state_forgotten(&state, cleaned, error == ESP_OK);
+    taskEXIT_CRITICAL(&lock);
+    if (error == ESP_OK) {
+        attempt_ended();
+    }
     publish_current();
 }
 
@@ -258,6 +577,13 @@ static void run_job(recording_job_t job)
     case RECORDING_JOB_UPLOAD:
         run_upload();
         break;
+    case RECORDING_JOB_QUERY:
+        run_query();
+        break;
+    case RECORDING_JOB_FORGET:
+        run_forget();
+        break;
+    case RECORDING_JOB_NONE:
     default:
         break;
     }
@@ -293,6 +619,17 @@ static void start_job(void)
     publish_current();
 }
 
+static void apply_effect(recording_effect_t effect, const recording_view_t *view)
+{
+    if (effect == RECORDING_EFFECT_NONE) {
+        return;
+    }
+    publish(view);
+    if (effect == RECORDING_EFFECT_VIEW) {
+        start_job();
+    }
+}
+
 static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t), uint64_t generation)
 {
     recording_view_t view;
@@ -300,13 +637,7 @@ static void dispatch(recording_effect_t (*command)(recording_state_t *, uint64_t
     const recording_effect_t effect = command(&state, generation);
     snapshot(&view);
     taskEXIT_CRITICAL(&lock);
-    if (effect == RECORDING_EFFECT_NONE) {
-        return;
-    }
-    publish(&view);
-    if (effect == RECORDING_EFFECT_VIEW) {
-        start_job();
-    }
+    apply_effect(effect, &view);
 }
 
 void recording_record(uint64_t generation)
@@ -329,28 +660,106 @@ void recording_close(uint64_t generation)
     dispatch(recording_state_close, generation);
 }
 
-/* Upload, queries and discard arrive in the next steps of stage 5b. */
 void recording_check(uint64_t generation)
 {
-    (void)generation;
+    dispatch(recording_state_check, generation);
 }
 
 void recording_discard(uint64_t generation)
 {
-    (void)generation;
+    dispatch(recording_state_discard, generation);
+}
+
+/* From the esp_timer task. */
+static void wait_expired(void *unused)
+{
+    (void)unused;
+    taskENTER_CRITICAL(&lock);
+    const uint64_t generation = wait_generation;
+    taskEXIT_CRITICAL(&lock);
+    dispatch(recording_state_wait_expired, generation);
+}
+
+static void signal_attempt(const char *id)
+{
+    recording_view_t view;
+    taskENTER_CRITICAL(&lock);
+    const recording_effect_t effect = recording_state_signal(&state, id);
+    snapshot(&view);
+    taskEXIT_CRITICAL(&lock);
+    apply_effect(effect, &view);
+}
+
+void recording_bridge_online(bool online, uint64_t generation)
+{
+    taskENTER_CRITICAL(&lock);
+    /* A generation that went offline never comes back online: a new stream gets a new generation. */
+    const bool newer = generation > stream_generation ||
+                       (generation == stream_generation && !(online && !stream_online));
+    if (newer) {
+        stream_generation = generation;
+        stream_online = online;
+    }
+    taskEXIT_CRITICAL(&lock);
+    if (newer && online) {
+        signal_attempt(NULL);
+    }
+}
+
+/* The bridge only signals the attempt it watches. */
+void recording_assistant_result(void)
+{
+    signal_attempt(NULL);
 }
 
 bool recording_read_message(uint64_t generation, void (*reader)(const char *text, void *context), void *context)
 {
-    (void)generation;
-    (void)reader;
-    (void)context;
-    return false;
+    if (reader == NULL || message_lock == NULL) {
+        return false;
+    }
+    xSemaphoreTake(message_lock, portMAX_DELAY);
+    const bool available = message != NULL && message_generation == generation;
+    if (available) {
+        reader(message, context);
+    }
+    xSemaphoreGive(message_lock);
+    return available;
+}
+
+/* Resumes a stored attempt; an unreadable record blocks everything. Both keep the origin held. */
+static void restore_attempt(void)
+{
+    recording_record_t record;
+    const esp_err_t error = recording_record_load(&record);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "attempt record unusable: %s", esp_err_to_name(error));
+        recording_state_restore_failed(&state);
+        hold_origin();
+        return;
+    }
+    if (record.phase == RECORDING_RECORD_NONE) {
+        return;
+    }
+    const recording_reply_t stored = record.phase == RECORDING_RECORD_PENDING     ? RECORDING_REPLY_PROCESSING
+                                     : record.phase == RECORDING_RECORD_COMPLETED ? RECORDING_REPLY_COMPLETED
+                                     : record.phase == RECORDING_RECORD_FAILED    ? RECORDING_REPLY_FAILED
+                                                                                  : RECORDING_REPLY_UNKNOWN;
+    recording_state_restore(&state, record.id, stored);
+    ESP_LOGI(TAG, "attempt restored: phase %d", (int)record.phase);
+    hold_origin();
+    bridge_watch_assistant(record.id);
+    if (stored == RECORDING_REPLY_PROCESSING) {
+        arm_wait(state.generation);
+    }
 }
 
 esp_err_t recording_start(recording_view_fn on_view)
 {
     ESP_RETURN_ON_FALSE(on_view != NULL && view_callback == NULL, ESP_ERR_INVALID_STATE, TAG, "start");
+    message_lock = xSemaphoreCreateMutex();
+    ESP_RETURN_ON_FALSE(message_lock != NULL, ESP_ERR_NO_MEM, TAG, "message lock");
+    const esp_timer_create_args_t timer = {.callback = wait_expired, .name = "recording_wait"};
+    ESP_RETURN_ON_ERROR(esp_timer_create(&timer, &wait_timer), TAG, "wait timer");
     view_callback = on_view;
     recording_state_init(&state);
     const esp_err_t error = recording_clip_init();
@@ -359,6 +768,7 @@ esp_err_t recording_start(recording_view_fn on_view)
         report_failed(RECORDING_FAILURE_START, false);
         return error;
     }
+    restore_attempt();
     publish_current();
     start_job();
     return ESP_OK;

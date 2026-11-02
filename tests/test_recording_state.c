@@ -229,6 +229,7 @@ static void test_unsent_upload_is_not_sent_only_when_forgotten(void)
     start_reserved_upload();
     recording_state_upload_failed(&state, ID, RECORDING_UPLOAD_UNSENT_KEPT);
     TEST_ASSERT_EQUAL(RECORDING_UNCONFIRMED, state.phase);
+    TEST_ASSERT_EQUAL(RECORDING_FAILURE_RECORD, state.failure);
     TEST_ASSERT_TRUE(view().can_check);
     TEST_ASSERT_FALSE(view().can_discard);
     TEST_ASSERT_TRUE(view().close_keeps_attempt);
@@ -360,11 +361,16 @@ static void test_discard_only_an_uncertain_pending_attempt(void)
     TEST_ASSERT_EQUAL(RECORDING_EFFECT_VIEW, recording_state_discard(&state, unconfirmed));
     TEST_ASSERT_EQUAL(RECORDING_EFFECT_NONE, recording_state_discard(&state, unconfirmed));
     TEST_ASSERT_EQUAL(RECORDING_JOB_FORGET, recording_state_claim_job(&state));
-    recording_state_forgotten(&state, false, true);
-    TEST_ASSERT_EQUAL(RECORDING_FAILED, state.phase);
-    TEST_ASSERT_EQUAL(RECORDING_FAILURE_CLEANUP, state.failure);
-    TEST_ASSERT_EQUAL_STRING("", state.id);
+    recording_state_forgotten(&state, false, false);
+    TEST_ASSERT_EQUAL(RECORDING_UNCONFIRMED, state.phase);
+    TEST_ASSERT_EQUAL_STRING(ID, state.id);
     TEST_ASSERT_TRUE(state.cleanup_pending);
+    TEST_ASSERT_EQUAL(RECORDING_NOTICE_NOT_CLEARED, view().notice);
+    /* The query wanted when the wait ended runs after the forget job. */
+    TEST_ASSERT_EQUAL(RECORDING_JOB_QUERY, recording_state_next_job(&state));
+    TEST_ASSERT_EQUAL(RECORDING_JOB_NONE, recording_state_next_job(&state));
+    TEST_ASSERT_EQUAL(RECORDING_EFFECT_VIEW, recording_state_discard(&state, unconfirmed));
+    TEST_ASSERT_EQUAL(RECORDING_NOTICE_NONE, view().notice);
 
     /* A persisted terminal is no longer pending: only Close ends it. */
     start_processing();

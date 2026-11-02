@@ -210,12 +210,14 @@ static void capture_attempt_states(lv_display_t *display, const char *directory)
     capture(display, create_recording_view(&ready), directory, "recording-ready-not-connected");
     const recording_view_t uploading = {.phase = RECORDING_UPLOADING, .generation = 2, .close_keeps_attempt = true};
     capture(display, create_recording_view(&uploading), directory, "recording-uploading");
-    const recording_view_t processing = {.phase = RECORDING_PROCESSING, .generation = 2, .can_check = true,
-                                         .close_keeps_attempt = true};
+    const recording_view_t processing = {.phase = RECORDING_PROCESSING, .generation = 2, .close_keeps_attempt = true};
     capture(display, create_recording_view(&processing), directory, "recording-processing");
     const recording_view_t completed = {.phase = RECORDING_COMPLETED, .generation = 2, .has_message = true,
                                         .content_omitted = true};
     capture(display, create_recording_view(&completed), directory, "recording-completed");
+    recording_view_t not_cleared = completed;
+    not_cleared.notice = RECORDING_NOTICE_NOT_CLEARED;
+    capture(display, create_recording_view(&not_cleared), directory, "recording-not-cleared");
     const recording_view_t restored = {.phase = RECORDING_COMPLETED, .generation = 2, .can_check = true};
     capture(display, create_recording_view(&restored), directory, "recording-completed-unavailable");
     sample_reply = "The assistant could not understand the audio. Try recording again in a quieter place.";
@@ -234,7 +236,7 @@ static void capture_attempt_states(lv_display_t *display, const char *directory)
                                        .generation = 2};
     capture(display, create_recording_view(&not_sent), directory, "recording-not-sent");
     const recording_view_t record_failed = {.phase = RECORDING_UNCONFIRMED, .failure = RECORDING_FAILURE_RECORD,
-                                            .generation = 2, .close_keeps_attempt = true};
+                                            .generation = 2, .can_check = true, .close_keeps_attempt = true};
     capture(display, create_recording_view(&record_failed), directory, "recording-record-failed");
 }
 

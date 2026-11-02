@@ -39,6 +39,7 @@
 
 #define UI_TEXT_RECORDING_TITLE_DISCARD "Discard request?"
 #define UI_TEXT_RECORDING_MESSAGE_DISCARD "The device forgets this request. It may still run on the bridge."
+#define UI_TEXT_RECORDING_MESSAGE_NOT_CLEARED "The request could not be closed safely. Try again."
 
 #define UI_TEXT_RECORDING_TITLE_START_FAILED "Recording unavailable"
 #define UI_TEXT_RECORDING_MESSAGE_START_FAILED "The microphone could not start. Try again."

@@ -8,6 +8,7 @@
 #include "bridge_http.h"
 #include "bridge_origin_store.h"
 #include "bridge_stream.h"
+#include "bridge_uuid.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -21,6 +22,9 @@ static bridge_origin_t active_origin;
 static uint64_t input_revision;
 static TaskHandle_t stream_task;
 static bridge_online_fn online_callback;
+static void (*assistant_result_callback)(void);
+/* Guarded by state_lock; the stream task copies it into its parser. */
+static char watched_assistant[BRIDGE_UUID_SIZE];
 
 static const char *stream_failure_name(bridge_stream_reason_t reason)
 {
@@ -121,6 +125,31 @@ static bool stream_opened(void *context)
     return opened;
 }
 
+void bridge_watch_assistant(const char *id)
+{
+    taskENTER_CRITICAL(&state_lock);
+    if (id != NULL && bridge_uuid_valid(id)) {
+        memcpy(watched_assistant, id, sizeof(watched_assistant));
+    } else {
+        memset(watched_assistant, 0, sizeof(watched_assistant));
+    }
+    taskEXIT_CRITICAL(&state_lock);
+}
+
+/* Before a chunk the parser watches the current attempt; after it, a matching result reaches the owner. */
+static void stream_sync(bridge_sse_t *stream, void *unused)
+{
+    (void)unused;
+    char watched[BRIDGE_UUID_SIZE];
+    taskENTER_CRITICAL(&state_lock);
+    memcpy(watched, watched_assistant, sizeof(watched));
+    taskEXIT_CRITICAL(&state_lock);
+    bridge_sse_set_assistant(stream, watched[0] != '\0' ? watched : NULL);
+    if (bridge_sse_take_assistant_result(stream)) {
+        assistant_result_callback();
+    }
+}
+
 typedef struct {
     bool has_ip;
     bool has_origin;
@@ -191,7 +220,8 @@ static void run_stream(bridge_sse_t *stream, const stream_inputs_t *inputs, brid
         clear_secret(&origin, sizeof(origin));
         return;
     }
-    const bridge_stream_hooks_t hooks = {.opened = stream_opened, .current = stream_current, .context = &context};
+    const bridge_stream_hooks_t hooks = {
+        .opened = stream_opened, .current = stream_current, .sync = stream_sync, .context = &context};
     const bridge_stream_result_t result = bridge_stream_run(&origin, stream, &hooks);
     clear_secret(&origin, sizeof(origin));
     if (stream->connected) *previous_failure = (bridge_stream_result_t){0};
@@ -230,9 +260,11 @@ static void stream_worker(void *unused)
     }
 }
 
-esp_err_t bridge_start(bridge_online_fn online_changed)
+esp_err_t bridge_start(const bridge_hooks_t *hooks)
 {
-    if (online_changed == NULL || stream_task != NULL) return ESP_ERR_INVALID_ARG;
+    if (hooks == NULL || hooks->online_changed == NULL || hooks->assistant_result == NULL || stream_task != NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     esp_err_t error = bridge_http_init();
     if (error != ESP_OK) return error;
     bridge_origin_t origin;
@@ -243,7 +275,8 @@ esp_err_t bridge_start(bridge_online_fn online_changed)
         bridge_connection_origin_changed(&connection, true);
     }
     clear_secret(&origin, sizeof(origin));
-    online_callback = online_changed;
+    online_callback = hooks->online_changed;
+    assistant_result_callback = hooks->assistant_result;
     if (xTaskCreate(stream_worker, "bridge_sse", CONFIG_BRIDGE_STREAM_TASK_STACK_SIZE, NULL,
                     CONFIG_BRIDGE_STREAM_TASK_PRIORITY, &stream_task) != pdPASS) {
         clear_secret(&active_origin, sizeof(active_origin));

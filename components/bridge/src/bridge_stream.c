@@ -60,7 +60,9 @@ static bridge_stream_reason_t read_stream(bridge_tls_t *session, bridge_sse_t *s
         if (dead_us < session->deadline_us) session->deadline_us = dead_us;
         const int count = esp_http_client_read(session->client, bytes, sizeof(bytes));
         if (count > 0) {
+            if (hooks->sync != NULL) hooks->sync(state, hooks->context);
             if (!bridge_sse_feed(state, bytes, (size_t)count, now_ms())) return BRIDGE_STREAM_INVALID_FRAME;
+            if (hooks->sync != NULL) hooks->sync(state, hooks->context);
         } else if (count != -ESP_ERR_HTTP_EAGAIN) {
             return BRIDGE_STREAM_READ_FAILED;
         }

@@ -329,9 +329,11 @@ void ui_recording_show(const recording_view_t *view)
     const presentation_t text = confirming_discard
                                     ? (presentation_t){UI_TEXT_RECORDING_TITLE_DISCARD, UI_TEXT_RECORDING_MESSAGE_DISCARD}
                                     : presentation(view);
-    const char *status = text.message != NULL ? text.message
-                         : view->has_message  ? ""
-                                              : UI_TEXT_RECORDING_MESSAGE_UNAVAILABLE;
+    const char *status = view->notice == RECORDING_NOTICE_NOT_CLEARED && !confirming_discard
+                             ? UI_TEXT_RECORDING_MESSAGE_NOT_CLEARED
+                         : text.message != NULL ? text.message
+                         : view->has_message    ? ""
+                                                : UI_TEXT_RECORDING_MESSAGE_UNAVAILABLE;
     lv_label_set_text_static(title, text.title);
     lv_label_set_text_static(message, status);
     set_visible(message, status[0] != '\0');

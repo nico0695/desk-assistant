@@ -129,5 +129,5 @@ void recording_state_store_failed(recording_state_t *state, const char *id);
 recording_effect_t recording_state_wait_expired(recording_state_t *state, uint64_t generation);
 /* The event stream opened, or signaled a result for id (NULL for any attempt). */
 recording_effect_t recording_state_signal(recording_state_t *state, const char *id);
-/* Outcome of RECORDING_JOB_FORGET: the clip was cleaned and the record cleared. */
+/* Outcome of RECORDING_JOB_FORGET: the clip was cleaned and only then the record cleared. */
 void recording_state_forgotten(recording_state_t *state, bool cleaned, bool cleared);
