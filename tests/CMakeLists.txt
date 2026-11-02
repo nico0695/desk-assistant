@@ -42,6 +42,7 @@ set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/bridge/src/bridge_sse.c
     ${COMPONENTS_DIR}/bridge/src/bridge_text.c
     ${COMPONENTS_DIR}/bridge/src/bridge_assistant.c
+    ${COMPONENTS_DIR}/bridge/src/bridge_events.c
     ${COMPONENTS_DIR}/bridge/src/bridge_uuid.c)
 set(HOST_MODULE_INCLUDE_DIRS
     ${COMPONENTS_DIR}/board/include

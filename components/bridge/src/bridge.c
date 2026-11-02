@@ -23,6 +23,7 @@ static uint64_t input_revision;
 static TaskHandle_t stream_task;
 static bridge_online_fn online_callback;
 static void (*assistant_result_callback)(void);
+static void (*pending_events_callback)(void);
 /* Guarded by state_lock; the stream task copies it into its parser. */
 static char watched_assistant[BRIDGE_UUID_SIZE];
 
@@ -147,6 +148,9 @@ static void stream_sync(bridge_sse_t *stream, void *unused)
     bridge_sse_set_assistant(stream, watched[0] != '\0' ? watched : NULL);
     if (bridge_sse_take_assistant_result(stream)) {
         assistant_result_callback();
+    }
+    if (bridge_sse_take_pending_events(stream) && pending_events_callback != NULL) {
+        pending_events_callback();
     }
 }
 
@@ -277,6 +281,7 @@ esp_err_t bridge_start(const bridge_hooks_t *hooks)
     clear_secret(&origin, sizeof(origin));
     online_callback = hooks->online_changed;
     assistant_result_callback = hooks->assistant_result;
+    pending_events_callback = hooks->pending_events;
     if (xTaskCreate(stream_worker, "bridge_sse", CONFIG_BRIDGE_STREAM_TASK_STACK_SIZE, NULL,
                     CONFIG_BRIDGE_STREAM_TASK_PRIORITY, &stream_task) != pdPASS) {
         clear_secret(&active_origin, sizeof(active_origin));

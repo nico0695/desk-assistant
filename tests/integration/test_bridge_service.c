@@ -7,6 +7,8 @@ static bool shown_online;
 static unsigned publications;
 static bool drop_during_publication;
 static bool change_origin_during_publication;
+static unsigned pending_invitations;
+static void pending_invitation(void) { ++pending_invitations; }
 static ui_bridge_status_t visible_status;
 unsigned bridge_test_critical_depth;
 static void show_online(bool online, uint64_t generation)
@@ -47,6 +49,8 @@ void setUp(void)
     publications = 0;
     drop_during_publication = false;
     change_origin_during_publication = false;
+    pending_events_callback = pending_invitation;
+    pending_invitations = 0;
     bridge_test_critical_depth = 0;
     memset(&visible_status, 0, sizeof(visible_status));
 }
@@ -117,6 +121,21 @@ static void origin_change_during_open_publication_wins(void)
     TEST_ASSERT_FALSE(stream_current(&stream));
 }
 
+static void pending_events_are_delivered_after_open_and_a_frame(void)
+{
+    bridge_sse_t stream;
+    bridge_sse_init(&stream);
+    bridge_sse_connected(&stream, 0);
+    stream_sync(&stream, NULL);
+    TEST_ASSERT_EQUAL_UINT(1, pending_invitations);
+    stream_sync(&stream, NULL);
+    TEST_ASSERT_EQUAL_UINT(1, pending_invitations);
+    static const char frame[] = "event: pending_events\ndata: {}\n\n";
+    TEST_ASSERT_TRUE(bridge_sse_feed(&stream, frame, sizeof(frame) - 1U, 1));
+    stream_sync(&stream, NULL);
+    TEST_ASSERT_EQUAL_UINT(2, pending_invitations);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -125,5 +144,6 @@ int main(void)
     RUN_TEST(lost_ip_during_open_publication_is_retracted);
     RUN_TEST(ip_change_after_failed_start_has_no_callback);
     RUN_TEST(origin_change_during_open_publication_wins);
+    RUN_TEST(pending_events_are_delivered_after_open_and_a_frame);
     return UNITY_END();
 }

@@ -20,6 +20,12 @@
 
 static SemaphoreHandle_t finite_gate;
 static SemaphoreHandle_t handshake_gate;
+static void (*gate_released_callback)(void);
+
+void bridge_http_set_gate_released(void (*callback)(void))
+{
+    gate_released_callback = callback;
+}
 
 esp_err_t bridge_http_init(void)
 {
@@ -165,6 +171,7 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
     response.result = exchange_get(&session, origin, url, io_ms, body, capacity, &response);
     bridge_tls_destroy(&session);
     xSemaphoreGive(finite_gate);
+    if (gate_released_callback != NULL) gate_released_callback();
     if (response.result != BRIDGE_HTTP_OK) {
         memset(body, 0, capacity);
         response.length = 0;
@@ -264,6 +271,7 @@ bridge_http_upload_t bridge_http_put_wav(const bridge_origin_t *origin, const ch
         exchange_put(&session, origin, url, body_length, read_source, context, body, capacity, &upload);
     bridge_tls_destroy(&session);
     xSemaphoreGive(finite_gate);
+    if (gate_released_callback != NULL) gate_released_callback();
     if (upload.response.result != BRIDGE_HTTP_OK) {
         memset(body, 0, capacity);
         upload.response.length = 0;

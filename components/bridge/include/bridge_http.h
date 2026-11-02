@@ -5,13 +5,14 @@
 #include <stdint.h>
 
 #include "bridge_origin_store.h"
+#include "bridge_events.h"
 
 /* Receive limits are client budgets, not server guarantees. */
 #define BRIDGE_HTTP_HEADER_MAX_BYTES 16384U
 #define BRIDGE_HTTP_READ_CHUNK_BYTES 1024U
 /* Accommodates one-byte chunks and framing while bounding pathological wire data. */
 #define BRIDGE_HTTP_BODY_WIRE_MULTIPLIER 8U
-#define BRIDGE_HTTP_EVENT_BODY_MAX_BYTES 4096U
+#define BRIDGE_HTTP_EVENT_BODY_MAX_BYTES BRIDGE_EVENT_RESPONSE_MAX_BYTES
 #define BRIDGE_HTTP_BODY_MAX_BYTES 32768U
 #define BRIDGE_HTTP_EVENT_IO_MS 5000U
 #define BRIDGE_HTTP_EVENT_GATE_MS 5000U
@@ -39,6 +40,8 @@ typedef struct {
 
 /* Call once during serialized startup, before any HTTP operations. */
 esp_err_t bridge_http_init(void);
+/* Called after each finite request releases the gate; must not block. Set during startup. */
+void bridge_http_set_gate_released(void (*callback)(void));
 
 /* Shared with SSE. Acquire only for connect/handshake; do not hold metadata or UI locks. */
 bool bridge_http_handshake_acquire(uint32_t wait_ms);

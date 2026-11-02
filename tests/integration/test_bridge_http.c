@@ -29,6 +29,12 @@ static bridge_origin_t origin = {"https://example.test/prefix/", "01234567890123
 #define UPLOAD_BYTES 20000U
 static size_t uploaded, last_write_offset, source_reads, fail_source_at;
 static bool nodelay_set;
+static unsigned gate_releases;
+static void gate_released(void)
+{
+    TEST_ASSERT_FALSE(*(bool *)finite_gate);
+    ++gate_releases;
+}
 
 int fake_setsockopt(int socket, int level, int option, const void *value, unsigned length)
 {
@@ -214,6 +220,8 @@ void setUp(void)
     mode = NORMAL; clock_ready = true; now_us = 0; dispatches = created = destroyed = client_count = client_freed = 0;
     bundle_set = auth_set = finite_busy = handshake_busy = false;
     fail_transport_call = 0; fail_client = fail_header = false;
+    gate_releases = 0;
+    bridge_http_set_gate_released(NULL);
 }
 void tearDown(void)
 {
@@ -231,6 +239,19 @@ static void complete_get_with_prefix_and_auth(void)
     TEST_ASSERT_EQUAL_MEMORY(payload, body, result.length);
     TEST_ASSERT_EQUAL_STRING("https://example.test/prefix/v1/device/events?limit=1", captured_url);
     TEST_ASSERT_TRUE(auth_set); TEST_ASSERT_EQUAL_UINT(1, dispatches);
+}
+
+static void finite_gate_release_wakes_a_waiting_owner(void)
+{
+    char body[64];
+    bridge_http_set_gate_released(gate_released);
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_OK,
+                          bridge_http_get(&origin, BRIDGE_EVENT_GET_PATH, 5000, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(1, gate_releases);
+    finite_busy = true;
+    TEST_ASSERT_EQUAL_INT(BRIDGE_HTTP_BUSY,
+                          bridge_http_get(&origin, BRIDGE_EVENT_GET_PATH, 5000, 5000, body, sizeof(body)).result);
+    TEST_ASSERT_EQUAL_UINT(1, gate_releases);
 }
 
 static void clock_and_gate_fail_before_dispatch(void)
@@ -471,6 +492,7 @@ int main(void)
     UNITY_BEGIN();
     TEST_ASSERT_EQUAL_INT(ESP_OK, bridge_http_init());
     RUN_TEST(complete_get_with_prefix_and_auth);
+    RUN_TEST(finite_gate_release_wakes_a_waiting_owner);
     RUN_TEST(clock_and_gate_fail_before_dispatch);
     RUN_TEST(allocation_and_setup_failures_release_resources_and_gates);
     RUN_TEST(errors_are_bounded_and_never_redispatched);
