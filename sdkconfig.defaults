@@ -18,6 +18,11 @@ CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040
 
 # CONFIG_IEEE802154_ENABLED is not set
 
+# Power: light sleep while the panel is off; no light sleep while a USB host is connected (provisioning, log).
+CONFIG_PM_ENABLE=y
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
+
 # LVGL: one owner task, built-in pool and only the fonts in use
 CONFIG_LV_OS_NONE=y
 CONFIG_LV_USE_BUILTIN_MALLOC=y

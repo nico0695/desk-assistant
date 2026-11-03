@@ -23,6 +23,15 @@ menu "Desk Assistant board"
             Each descriptor holds one block of 256 samples (16 ms at 16 kHz). They absorb
             the moments when flash writes pause the reading task.
 
+    config BOARD_PM_MIN_CPU_FREQ_MHZ
+        int "Minimum CPU frequency with power management (MHz)"
+        depends on PM_ENABLE
+        range 40 160
+        default 40
+        help
+            Lowest frequency dynamic scaling uses while nothing holds full speed (panel off, no
+            finite request or TLS handshake). 40 MHz is the crystal frequency of the ESP32-C6.
+
     config BOARD_BATTERY_READ_PERIOD_S
         int "Battery reading period (seconds)"
         range 5 600

@@ -5,6 +5,7 @@
 #include "board_key_filter.h"
 #include "board_touch.h"
 #include "esp_check.h"
+#include "esp_pm.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -60,6 +61,9 @@ static settings_loaded_t initial_settings;
 static screen_power_t screen;
 static board_key_filter_t key_filter;
 static uint64_t key_settle_at_ms = NO_DEADLINE;
+/* Held while the panel is on: full CPU speed and no light sleep, as before power management. NULL without it. */
+static esp_pm_lock_handle_t panel_lock;
+static bool panel_lock_held;
 
 #if CONFIG_DESK_MEMORY_DIAGNOSTICS
 static uint32_t wakeups_since_report;
@@ -111,6 +115,17 @@ static void show_latest_bridge(void)
     ui_status_bar_set_bridge_online(online);
 }
 
+static void hold_full_speed(bool hold)
+{
+    if (panel_lock == NULL || panel_lock_held == hold) {
+        return;
+    }
+    const esp_err_t error = hold ? esp_pm_lock_acquire(panel_lock) : esp_pm_lock_release(panel_lock);
+    if (error == ESP_OK) {
+        panel_lock_held = hold;
+    }
+}
+
 static void apply_screen_action(screen_action_t action, const screen_power_t *previous, uint64_t now_ms)
 {
     if (action == SCREEN_ACTION_NONE) {
@@ -121,12 +136,16 @@ static void apply_screen_action(screen_action_t action, const screen_power_t *pr
         /* A gesture cut by the panel going off ends like a release. */
         ui_settings_control_end_gesture();
     }
+    if (action == SCREEN_ACTION_WAKE) {
+        hold_full_speed(true);
+    }
     const esp_err_t error = board_display_set_on(action == SCREEN_ACTION_WAKE);
     if (error != ESP_OK) {
         ESP_LOGW(TAG, "panel %s failed: %s", action == SCREEN_ACTION_WAKE ? "on" : "off", esp_err_to_name(error));
         screen_power_reject_action(&screen, previous, now_ms);
     }
     ui_display_port_set_input_enabled(!screen.asleep);
+    hold_full_speed(!screen.asleep);
 }
 
 static void apply_screen_timeout(uint8_t seconds)
@@ -221,6 +240,9 @@ static TickType_t ticks_until(uint64_t deadline_ms, uint64_t now_ms)
 
 static esp_err_t start_ui(void)
 {
+    const esp_err_t lock_error = esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "ui_panel", &panel_lock);
+    ESP_RETURN_ON_FALSE(lock_error == ESP_OK || lock_error == ESP_ERR_NOT_SUPPORTED, lock_error, TAG, "panel lock");
+    hold_full_speed(true);
     lv_init();
     lv_tick_set_cb(lvgl_tick_ms);
     ESP_RETURN_ON_ERROR(ui_display_port_init(notify_touch_from_isr, NULL, initial_settings.values[SETTINGS_BRIGHTNESS]), TAG, "display port");

@@ -16,6 +16,6 @@ idf_component_register(SRCS "src/board.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
                        REQUIRES esp_common
-                       PRIV_REQUIRES esp_driver_i2c esp_driver_i2s esp_driver_gpio esp_driver_spi esp_lcd esp_rom esp_timer freertos heap log)
+                       PRIV_REQUIRES esp_driver_i2c esp_driver_i2s esp_driver_gpio esp_driver_spi esp_hw_support esp_lcd esp_pm esp_rom esp_timer freertos heap log)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

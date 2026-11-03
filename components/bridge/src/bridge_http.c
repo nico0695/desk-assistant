@@ -9,6 +9,7 @@
 #include "bridge_http_common.h"
 #include "bridge_tls.h"
 #include "esp_http_client.h"
+#include "esp_pm.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -20,6 +21,7 @@
 
 static SemaphoreHandle_t finite_gate;
 static SemaphoreHandle_t handshake_gate;
+static esp_pm_lock_handle_t full_speed_lock;
 static void (*gate_released_callback)(void);
 
 void bridge_http_set_gate_released(void (*callback)(void))
@@ -31,6 +33,11 @@ esp_err_t bridge_http_init(void)
 {
     if (finite_gate != NULL && handshake_gate != NULL) {
         return ESP_OK;
+    }
+    /* Without power management there is nothing to hold, and the lock stays NULL. */
+    const esp_err_t lock_error = esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "bridge_http", &full_speed_lock);
+    if (lock_error != ESP_OK && lock_error != ESP_ERR_NOT_SUPPORTED) {
+        return lock_error;
     }
     finite_gate = xSemaphoreCreateMutex();
     if (finite_gate == NULL) {
@@ -45,13 +52,45 @@ esp_err_t bridge_http_init(void)
     return ESP_OK;
 }
 
+/* Finite requests and TLS handshakes run at full CPU speed and keep the system out of light sleep. */
+static void hold_full_speed(void)
+{
+    if (full_speed_lock != NULL) (void)esp_pm_lock_acquire(full_speed_lock);
+}
+
+static void release_full_speed(void)
+{
+    if (full_speed_lock != NULL) (void)esp_pm_lock_release(full_speed_lock);
+}
+
+static bool take_finite_gate(uint32_t wait_ms)
+{
+    if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
+        return false;
+    }
+    hold_full_speed();
+    return true;
+}
+
+static void give_finite_gate(void)
+{
+    release_full_speed();
+    xSemaphoreGive(finite_gate);
+    if (gate_released_callback != NULL) gate_released_callback();
+}
+
 bool bridge_http_handshake_acquire(uint32_t wait_ms)
 {
-    return handshake_gate != NULL && xSemaphoreTake(handshake_gate, pdMS_TO_TICKS(wait_ms)) == pdTRUE;
+    if (handshake_gate == NULL || xSemaphoreTake(handshake_gate, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
+        return false;
+    }
+    hold_full_speed();
+    return true;
 }
 
 void bridge_http_handshake_release(void)
 {
+    release_full_speed();
     xSemaphoreGive(handshake_gate);
 }
 
@@ -160,7 +199,7 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
         response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
         return response;
     }
-    if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(gate_wait_ms)) != pdTRUE) {
+    if (!take_finite_gate(gate_wait_ms)) {
         response.result = BRIDGE_HTTP_BUSY;
         return response;
     }
@@ -170,8 +209,7 @@ bridge_http_response_t bridge_http_get(const bridge_origin_t *origin, const char
     };
     response.result = exchange_get(&session, origin, url, io_ms, body, capacity, &response);
     bridge_tls_destroy(&session);
-    xSemaphoreGive(finite_gate);
-    if (gate_released_callback != NULL) gate_released_callback();
+    give_finite_gate();
     if (response.result != BRIDGE_HTTP_OK) {
         memset(body, 0, capacity);
         response.length = 0;
@@ -242,7 +280,7 @@ static bridge_http_mutation_t send_mutation(const bridge_origin_t *origin, const
         mutation.response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
         return mutation;
     }
-    if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(gate_wait_ms)) != pdTRUE) {
+    if (!take_finite_gate(gate_wait_ms)) {
         mutation.response.result = BRIDGE_HTTP_BUSY;
         return mutation;
     }
@@ -253,8 +291,7 @@ static bridge_http_mutation_t send_mutation(const bridge_origin_t *origin, const
     mutation.response.result =
         exchange_mutation(&session, origin, url, method, request, request_length, io_ms, body, capacity, &mutation);
     bridge_tls_destroy(&session);
-    xSemaphoreGive(finite_gate);
-    if (gate_released_callback != NULL) gate_released_callback();
+    give_finite_gate();
     if (mutation.response.result != BRIDGE_HTTP_OK) {
         memset(body, 0, capacity);
         mutation.response.length = 0;
@@ -365,7 +402,7 @@ bridge_http_mutation_t bridge_http_put_wav(const bridge_origin_t *origin, const 
         upload.response.result = BRIDGE_HTTP_CLOCK_NOT_READY;
         return upload;
     }
-    if (finite_gate == NULL || xSemaphoreTake(finite_gate, pdMS_TO_TICKS(BRIDGE_ASSISTANT_PUT_GATE_MS)) != pdTRUE) {
+    if (!take_finite_gate(BRIDGE_ASSISTANT_PUT_GATE_MS)) {
         upload.response.result = BRIDGE_HTTP_BUSY;
         return upload;
     }
@@ -376,8 +413,7 @@ bridge_http_mutation_t bridge_http_put_wav(const bridge_origin_t *origin, const 
     upload.response.result =
         exchange_put(&session, origin, url, body_length, read_source, context, body, capacity, &upload);
     bridge_tls_destroy(&session);
-    xSemaphoreGive(finite_gate);
-    if (gate_released_callback != NULL) gate_released_callback();
+    give_finite_gate();
     if (upload.response.result != BRIDGE_HTTP_OK) {
         memset(body, 0, capacity);
         upload.response.length = 0;

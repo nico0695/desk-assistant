@@ -32,6 +32,22 @@ static bridge_origin_t origin = {"https://example.test/prefix/", "01234567890123
 static size_t uploaded, last_write_offset, source_reads, fail_source_at;
 static bool nodelay_set;
 static unsigned gate_releases;
+static int full_speed_holds;
+esp_err_t esp_pm_lock_create(esp_pm_lock_type_t type, int arg, const char *name, esp_pm_lock_handle_t *handle)
+{
+    (void)type; (void)arg; (void)name;
+    static int lock;
+    *handle = (esp_pm_lock_handle_t)&lock;
+    return ESP_OK;
+}
+esp_err_t esp_pm_lock_acquire(esp_pm_lock_handle_t handle) { (void)handle; ++full_speed_holds; return ESP_OK; }
+esp_err_t esp_pm_lock_release(esp_pm_lock_handle_t handle)
+{
+    (void)handle;
+    TEST_ASSERT_GREATER_THAN_INT(0, full_speed_holds);
+    --full_speed_holds;
+    return ESP_OK;
+}
 static void gate_released(void)
 {
     TEST_ASSERT_FALSE(*(bool *)finite_gate);
@@ -126,6 +142,7 @@ esp_err_t esp_http_client_open(esp_http_client_handle_t c, int length)
                           mode == JSON_ACK ? (int)strlen(BRIDGE_EVENT_ACK_BODY) :
                           c->config.method == HTTP_METHOD_PUT ? (int)UPLOAD_BYTES : 0, length);
     ++dispatches;
+    TEST_ASSERT_GREATER_THAN_INT(0, full_speed_holds);
     if (fail_open) return ESP_FAIL;
     if (mode == PUT_SLOW) now_us += INT64_C(29000000);
     return c->config.transport->connect(c->config.transport, "example.test", 443, c->config.timeout_ms) == 0 ? ESP_OK : ESP_FAIL;
@@ -251,6 +268,7 @@ void tearDown(void)
 {
     TEST_ASSERT_EQUAL_UINT(created, destroyed);
     TEST_ASSERT_EQUAL_UINT(client_count, client_freed);
+    TEST_ASSERT_EQUAL_INT(0, full_speed_holds);
 }
 
 static void complete_get_with_prefix_and_auth(void)
