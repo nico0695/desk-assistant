@@ -5,7 +5,10 @@
 #include "board_battery.h"
 #include "esp_err.h"
 
-/* Verifies the AXP2101 identity and pulses ALDO3, which drives the panel reset. Touches only those bits. */
+/*
+ * Verifies the AXP2101 identity, logs the rail enables it finds, turns ALDO2 (amplifier enable) off and pulses
+ * ALDO3, which drives the panel reset. Touches only those bits.
+ */
 esp_err_t board_power_init(void);
 
 /* Read-only estimate: known only with a valid identity, battery detection enabled, presence and range. */
@@ -20,8 +23,8 @@ esp_err_t board_power_audio_rail_on(void);
  */
 esp_err_t board_power_audio_rail_restore(bool *powered_off);
 
-/* Prepare ES8311 analog power with PA disabled when originally off, then enable PA after codec setup. */
+/* Prepares ES8311 analog power (ALDO1) with the amplifier off; the amplifier is enabled after codec setup. */
 esp_err_t board_power_tone_prepare(void);
 esp_err_t board_power_tone_amplifier_on(void);
-/* Restore only ALDO1/ALDO2 bits and voltages changed for the tone; retry after failure. */
+/* Turns the amplifier off and restores the saved ALDO1 bit and voltage; retry after failure. */
 esp_err_t board_power_tone_restore(bool *codec_powered_off);

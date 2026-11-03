@@ -18,7 +18,9 @@ enum {
     REGISTER_STATUS = 0x00,
     REGISTER_CHIP_ID = 0x03,
     REGISTER_BATTERY_DETECT = 0x68,
+    REGISTER_DCDC_ENABLE = 0x80,
     REGISTER_LDO_ENABLE = 0x90,
+    REGISTER_LDO_ENABLE_1 = 0x91,
     REGISTER_ALDO1_VOLTAGE = 0x92,
     REGISTER_ALDO2_VOLTAGE = 0x93,
     REGISTER_ALDO3_VOLTAGE = 0x94,
@@ -43,7 +45,6 @@ static uint8_t saved_aldo1_voltage;
 static bool tone_rails_saved;
 static uint8_t saved_tone_enable;
 static uint8_t saved_tone_aldo1_voltage;
-static uint8_t saved_tone_aldo2_voltage;
 
 static esp_err_t read_register(uint8_t reg, uint8_t *value)
 {
@@ -88,6 +89,27 @@ static esp_err_t pulse_panel_reset(void)
     return error;
 }
 
+/* Rail enables as found, before the app writes any: the PMIC keeps them across chip resets. */
+static void log_rail_enables(void)
+{
+    uint8_t dcdc = 0, ldo = 0, ldo_1 = 0;
+    esp_err_t error = read_register(REGISTER_DCDC_ENABLE, &dcdc);
+    if (error == ESP_OK) error = read_register(REGISTER_LDO_ENABLE, &ldo);
+    if (error == ESP_OK) error = read_register(REGISTER_LDO_ENABLE_1, &ldo_1);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "rail enables unreadable: %s", esp_err_to_name(error));
+        return;
+    }
+    ESP_LOGI(TAG, "rail enables found: dcdc=0x%02x ldo=0x%02x ldo1=0x%02x", dcdc, ldo, ldo_1);
+}
+
+/* ALDO2 only drives the amplifier enable: it stays off at rest and the tone turns it on while it plays. */
+static esp_err_t turn_amplifier_off(void)
+{
+    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO2_ENABLE_MASK, 0U), TAG, "PA off");
+    return update_register_bits(REGISTER_ALDO2_VOLTAGE, ALDO_VOLTAGE_MASK, ALDO_VOLTAGE_3300MV);
+}
+
 esp_err_t board_power_init(void)
 {
     ESP_RETURN_ON_FALSE(pmic == NULL, ESP_ERR_INVALID_STATE, TAG, "already initialized");
@@ -98,6 +120,12 @@ esp_err_t board_power_init(void)
     };
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(board_bus(), &device, &pmic), TAG, "add device");
     ESP_RETURN_ON_ERROR(check_identity(), TAG, "identity");
+    log_rail_enables();
+    /* Not fatal: the tone turns the amplifier off again when it finishes. */
+    const esp_err_t amplifier_error = turn_amplifier_off();
+    if (amplifier_error != ESP_OK) {
+        ESP_LOGW(TAG, "amplifier off: %s", esp_err_to_name(amplifier_error));
+    }
     return pulse_panel_reset();
 }
 
@@ -169,14 +197,10 @@ esp_err_t board_power_tone_prepare(void)
     ESP_RETURN_ON_ERROR(check_identity(), TAG, "tone PMIC identity");
     ESP_RETURN_ON_ERROR(read_register(REGISTER_LDO_ENABLE, &saved_tone_enable), TAG, "tone LDO enable");
     ESP_RETURN_ON_ERROR(read_register(REGISTER_ALDO1_VOLTAGE, &saved_tone_aldo1_voltage), TAG, "tone ALDO1");
-    ESP_RETURN_ON_ERROR(read_register(REGISTER_ALDO2_VOLTAGE, &saved_tone_aldo2_voltage), TAG, "tone ALDO2");
     tone_rails_saved = true;
-    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO2_ENABLE_MASK, 0U),
-                        TAG, "tone PA off");
+    ESP_RETURN_ON_ERROR(turn_amplifier_off(), TAG, "tone PA off");
     ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO1_VOLTAGE, ALDO_VOLTAGE_MASK,
                                              ALDO_VOLTAGE_3300MV), TAG, "tone ALDO1 voltage");
-    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_ALDO2_VOLTAGE, ALDO_VOLTAGE_MASK,
-                                             ALDO_VOLTAGE_3300MV), TAG, "tone ALDO2 voltage");
     return update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO1_ENABLE_MASK, LDO_ALDO1_ENABLE_MASK);
 }
 
@@ -191,14 +215,12 @@ esp_err_t board_power_tone_restore(bool *codec_powered_off)
     ESP_RETURN_ON_FALSE(codec_powered_off != NULL, ESP_ERR_INVALID_ARG, TAG, "tone restore result");
     *codec_powered_off = false;
     if (!tone_rails_saved) return ESP_OK;
+    /* The amplifier goes off whatever it was before; ALDO1 returns to its saved state. */
     const esp_err_t enable_error = update_register_bits(REGISTER_LDO_ENABLE,
-        LDO_ALDO1_ENABLE_MASK | LDO_ALDO2_ENABLE_MASK, saved_tone_enable);
+        LDO_ALDO1_ENABLE_MASK | LDO_ALDO2_ENABLE_MASK, saved_tone_enable & LDO_ALDO1_ENABLE_MASK);
     if (enable_error != ESP_OK) return enable_error;
     *codec_powered_off = (saved_tone_enable & LDO_ALDO1_ENABLE_MASK) == 0U;
-    const esp_err_t first = update_register_bits(REGISTER_ALDO1_VOLTAGE, ALDO_VOLTAGE_MASK,
-                                                 saved_tone_aldo1_voltage);
-    const esp_err_t second = update_register_bits(REGISTER_ALDO2_VOLTAGE, ALDO_VOLTAGE_MASK,
-                                                  saved_tone_aldo2_voltage);
-    if (first == ESP_OK && second == ESP_OK) tone_rails_saved = false;
-    return first != ESP_OK ? first : second;
+    const esp_err_t error = update_register_bits(REGISTER_ALDO1_VOLTAGE, ALDO_VOLTAGE_MASK, saved_tone_aldo1_voltage);
+    if (error == ESP_OK) tone_rails_saved = false;
+    return error;
 }
