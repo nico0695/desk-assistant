@@ -21,6 +21,7 @@ set(COMPONENTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../components)
 set(HOST_MODULE_SOURCES
     ${COMPONENTS_DIR}/board/src/display_geometry.c
     ${COMPONENTS_DIR}/board/src/display_brightness.c
+    ${COMPONENTS_DIR}/board/src/display_sleep.c
     ${COMPONENTS_DIR}/board/src/touch_decode.c
     ${COMPONENTS_DIR}/board/src/key_filter.c
     ${COMPONENTS_DIR}/ui/src/screen_power.c

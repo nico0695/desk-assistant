@@ -6,12 +6,15 @@
  */
 #include "board_display.h"
 
+#include "board_wait.h"
 #include "display_brightness.h"
+#include "display_sleep.h"
 #include "driver/spi_master.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_io_spi.h"
 #include "esp_lcd_panel_io.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
@@ -31,6 +34,7 @@
 #define QSPI_OPCODE_WRITE_COLOR 0x32U
 
 enum {
+    COMMAND_SLEEP_IN = 0x10,
     COMMAND_SLEEP_OUT = 0x11,
     COMMAND_DISPLAY_OFF = 0x28,
     COMMAND_DISPLAY_ON = 0x29,
@@ -79,6 +83,9 @@ typedef struct {
 } transfer_listener_t;
 
 static esp_lcd_panel_io_handle_t panel_io;
+/* The init sequence leaves the panel awake; the sleep-out instant guards the next sleep-in. */
+static bool panel_asleep;
+static uint64_t sleep_out_at_ms;
 static transfer_listener_t transfer_listener;
 
 static int qspi_command(uint8_t opcode, uint8_t command)
@@ -213,10 +220,46 @@ esp_err_t board_display_draw(int32_t x1, int32_t y1, int32_t x2, int32_t y2, uin
                                      pixel_count * sizeof(uint16_t));
 }
 
+static uint64_t uptime_ms(void)
+{
+    return (uint64_t)esp_timer_get_time() / 1000U;
+}
+
+static esp_err_t turn_panel_off(void)
+{
+    ESP_RETURN_ON_ERROR(send_command(COMMAND_DISPLAY_OFF, NULL, 0), TAG, "display off");
+    if (panel_asleep) {
+        return ESP_OK;
+    }
+    const uint32_t wait_ms = display_sleep_in_wait_ms(uptime_ms(), sleep_out_at_ms);
+    if (wait_ms > 0U) {
+        board_wait_at_least_ms(wait_ms);
+    }
+    /* The panel is already dark; a failed sleep-in only costs power, so it is not reported as a failure. */
+    const esp_err_t error = send_command(COMMAND_SLEEP_IN, NULL, 0);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "sleep in: %s", esp_err_to_name(error));
+        return ESP_OK;
+    }
+    panel_asleep = true;
+    return ESP_OK;
+}
+
+static esp_err_t turn_panel_on(void)
+{
+    if (panel_asleep) {
+        ESP_RETURN_ON_ERROR(send_command(COMMAND_SLEEP_OUT, NULL, 0), TAG, "sleep out");
+        panel_asleep = false;
+        sleep_out_at_ms = uptime_ms();
+        board_wait_at_least_ms(DISPLAY_SLEEP_OUT_SETTLE_MS);
+    }
+    return send_command(COMMAND_DISPLAY_ON, NULL, 0);
+}
+
 esp_err_t board_display_set_on(bool on)
 {
     ESP_RETURN_ON_FALSE(panel_io != NULL, ESP_ERR_INVALID_STATE, TAG, "not initialized");
-    return send_command(on ? COMMAND_DISPLAY_ON : COMMAND_DISPLAY_OFF, NULL, 0);
+    return on ? turn_panel_on() : turn_panel_off();
 }
 
 esp_err_t board_display_set_brightness(unsigned percent)

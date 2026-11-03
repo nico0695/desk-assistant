@@ -8,11 +8,10 @@
 #include "board_touch.h"
 
 #include "board_bus.h"
+#include "board_wait.h"
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
 #include "esp_check.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "touch_decode.h"
 
 #define TOUCH_ADDRESS 0x5a
@@ -31,12 +30,6 @@ static const char *TAG = "board_touch";
 static i2c_master_dev_handle_t touch_device;
 static board_touch_sample_t last_sample;
 
-/* vTaskDelay(n) can return up to one tick early, so add a tick to guarantee the minimum. */
-static void wait_at_least_ms(uint32_t milliseconds)
-{
-    vTaskDelay(pdMS_TO_TICKS(milliseconds) + 1);
-}
-
 static esp_err_t reset_controller(void)
 {
     const gpio_config_t reset = {
@@ -45,9 +38,9 @@ static esp_err_t reset_controller(void)
     };
     ESP_RETURN_ON_ERROR(gpio_config(&reset), TAG, "reset GPIO");
     ESP_RETURN_ON_ERROR(gpio_set_level(TOUCH_RESET_GPIO, 0), TAG, "reset low");
-    wait_at_least_ms(TOUCH_RESET_LOW_MS);
+    board_wait_at_least_ms(TOUCH_RESET_LOW_MS);
     ESP_RETURN_ON_ERROR(gpio_set_level(TOUCH_RESET_GPIO, 1), TAG, "reset high");
-    wait_at_least_ms(TOUCH_RESET_SETTLE_MS);
+    board_wait_at_least_ms(TOUCH_RESET_SETTLE_MS);
     return ESP_OK;
 }
 

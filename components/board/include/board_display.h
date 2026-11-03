@@ -26,7 +26,10 @@ esp_err_t board_display_init(board_isr_cb_t on_transfer_done, void *context, boa
  */
 esp_err_t board_display_draw(int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint8_t *pixels);
 
-/* Display OFF/ON only; the panel keeps its configuration. */
+/*
+ * Off: display off, then sleep-in (no sooner than 120 ms after the last sleep-out). On: sleep-out, 120 ms for the
+ * booster, then display on. The panel keeps its configuration; the call blocks for those waits.
+ */
 esp_err_t board_display_set_on(bool on);
 
 esp_err_t board_display_set_brightness(unsigned percent);

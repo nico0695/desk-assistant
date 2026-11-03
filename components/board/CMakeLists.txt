@@ -9,11 +9,12 @@ idf_component_register(SRCS "src/board.c"
                             "src/board_touch.c"
                             "src/display_geometry.c"
                             "src/display_brightness.c"
+                            "src/display_sleep.c"
                             "src/touch_decode.c"
                             "src/key_filter.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
                        REQUIRES esp_common
-                       PRIV_REQUIRES esp_driver_i2c esp_driver_i2s esp_driver_gpio esp_driver_spi esp_lcd esp_rom freertos heap log)
+                       PRIV_REQUIRES esp_driver_i2c esp_driver_i2s esp_driver_gpio esp_driver_spi esp_lcd esp_rom esp_timer freertos heap log)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
