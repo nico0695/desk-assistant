@@ -11,3 +11,6 @@ esp_err_t board_touch_init(board_isr_cb_t on_interrupt, void *context);
  * keeping the last coordinates. Blocks for a few milliseconds; call from the input owner task.
  */
 esp_err_t board_touch_read(board_touch_sample_t *sample);
+
+/* Same contract as board_key_set_wake_armed, for the touch interrupt line. */
+esp_err_t board_touch_set_wake_armed(bool armed);

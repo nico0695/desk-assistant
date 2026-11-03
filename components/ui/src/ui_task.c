@@ -3,6 +3,7 @@
 #include "board_display.h"
 #include "board_key.h"
 #include "board_key_filter.h"
+#include "board_touch.h"
 #include "esp_check.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -142,6 +143,16 @@ static const ui_settings_control_hooks_t SETTINGS_HOOKS = {
     .apply_timeout = apply_screen_timeout,
     .notify_changed = notify_settings_changed,
 };
+
+/* Panel off: KEY and touch wake on their next level change, also from light sleep. Panel on: back on edges. */
+static void set_wake_inputs_armed(bool armed)
+{
+    const esp_err_t key_error = board_key_set_wake_armed(armed);
+    const esp_err_t touch_error = board_touch_set_wake_armed(armed);
+    if (key_error != ESP_OK || touch_error != ESP_OK) {
+        ESP_LOGW(TAG, "wake inputs: key %s, touch %s", esp_err_to_name(key_error), esp_err_to_name(touch_error));
+    }
+}
 
 static void update_screen(uint64_t now_ms, uint32_t screen_events)
 {
@@ -299,6 +310,8 @@ static void run(void *unused)
             screen_events |= SCREEN_EVENT_KEY;
         }
         update_screen(now_ms, screen_events);
+        /* Also re-arms an input that fired while the panel stayed off. */
+        set_wake_inputs_armed(screen.asleep);
 #if CONFIG_DESK_MEMORY_DIAGNOSTICS
         report_diagnostics(now_ms);
 #endif

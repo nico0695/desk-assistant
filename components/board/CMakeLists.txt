@@ -12,6 +12,7 @@ idf_component_register(SRCS "src/board.c"
                             "src/display_sleep.c"
                             "src/touch_decode.c"
                             "src/key_filter.c"
+                            "src/wake_pin.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "src"
                        REQUIRES esp_common

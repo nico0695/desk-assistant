@@ -13,6 +13,7 @@
 #include "esp_rom_sys.h"
 #include "esp_check.h"
 #include "touch_decode.h"
+#include "wake_pin.h"
 
 #define TOUCH_ADDRESS 0x5a
 #define TOUCH_SCL_SPEED_HZ 400000
@@ -29,6 +30,16 @@ static const uint8_t DATA_REGISTER[] = {0xd0, 0x00};
 static const char *TAG = "board_touch";
 static i2c_master_dev_handle_t touch_device;
 static board_touch_sample_t last_sample;
+static wake_pin_t touch_wake;
+static board_isr_cb_t touch_listener;
+static void *touch_listener_context;
+
+static void on_touch_interrupt(void *unused)
+{
+    (void)unused;
+    wake_pin_on_interrupt(&touch_wake);
+    touch_listener(touch_listener_context);
+}
 
 static esp_err_t reset_controller(void)
 {
@@ -51,8 +62,11 @@ static esp_err_t enable_interrupt(board_isr_cb_t on_interrupt, void *context)
         .mode = GPIO_MODE_INPUT,
         .intr_type = GPIO_INTR_NEGEDGE,
     };
+    touch_listener = on_interrupt;
+    touch_listener_context = context;
+    wake_pin_init(&touch_wake, TOUCH_INTERRUPT_GPIO, interrupt.intr_type);
     ESP_RETURN_ON_ERROR(gpio_config(&interrupt), TAG, "interrupt GPIO");
-    return gpio_isr_handler_add(TOUCH_INTERRUPT_GPIO, on_interrupt, context);
+    return gpio_isr_handler_add(TOUCH_INTERRUPT_GPIO, on_touch_interrupt, NULL);
 }
 
 esp_err_t board_touch_init(board_isr_cb_t on_interrupt, void *context)
@@ -103,4 +117,10 @@ esp_err_t board_touch_read(board_touch_sample_t *sample)
     }
     *sample = last_sample;
     return error;
+}
+
+esp_err_t board_touch_set_wake_armed(bool armed)
+{
+    ESP_RETURN_ON_FALSE(touch_device != NULL, ESP_ERR_INVALID_STATE, TAG, "not initialized");
+    return wake_pin_set_armed(&touch_wake, armed);
 }
