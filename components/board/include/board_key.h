@@ -4,8 +4,8 @@
 
 #include "board.h"
 
-/* Enables the KEY interrupt on both edges; debounce belongs to the caller. */
-esp_err_t board_key_init(board_isr_cb_t on_edge, void *context);
+/* Enables the KEY interrupt on both edges (on level while armed); debounce belongs to the caller. */
+esp_err_t board_key_init(board_isr_cb_t on_interrupt, void *context);
 
 bool board_key_pressed(void);
 

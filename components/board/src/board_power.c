@@ -103,7 +103,7 @@ static void log_rail_enables(void)
     ESP_LOGI(TAG, "rail enables found: dcdc=0x%02x ldo=0x%02x ldo1=0x%02x", dcdc, ldo, ldo_1);
 }
 
-/* ALDO2 only drives the amplifier enable: it stays off at rest and the tone turns it on while it plays. */
+/* ALDO2 only drives the amplifier enable: off at rest at 3.3 V, so the tone only has to turn it on. */
 static esp_err_t turn_amplifier_off(void)
 {
     ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_LDO_ENABLE, LDO_ALDO2_ENABLE_MASK, 0U), TAG, "PA off");

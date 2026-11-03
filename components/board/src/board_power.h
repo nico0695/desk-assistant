@@ -6,8 +6,8 @@
 #include "esp_err.h"
 
 /*
- * Verifies the AXP2101 identity, logs the rail enables it finds, turns ALDO2 (amplifier enable) off and pulses
- * ALDO3, which drives the panel reset. Touches only those bits.
+ * Verifies the AXP2101 identity, logs the rail enables it finds, turns ALDO2 (amplifier enable) off at 3.3 V and
+ * pulses ALDO3, which drives the panel reset. Touches only the enable and voltage bits of those two rails.
  */
 esp_err_t board_power_init(void);
 

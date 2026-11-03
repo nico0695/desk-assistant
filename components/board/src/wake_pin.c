@@ -21,11 +21,12 @@ static esp_err_t arm(wake_pin_t *wake)
 {
     ESP_RETURN_ON_ERROR(gpio_intr_disable(wake->pin), TAG, "disable");
     wake->armed = true;
-    /* Stays set until the interrupt is live, so a failed arm is retried by the next call. */
+    /* While set, the next call arms again: so a failed arm is retried. */
     wake->fired = true;
     /* A change between this read and enabling fires at once, so no transition is lost. */
     const gpio_int_type_t level = gpio_get_level(wake->pin) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL;
     ESP_RETURN_ON_ERROR(gpio_wakeup_enable(wake->pin, level), TAG, "wakeup");
+    /* Cleared before enabling: a fire right after enabling must be able to set it again. */
     wake->fired = false;
     const esp_err_t error = gpio_intr_enable(wake->pin);
     if (error != ESP_OK) {

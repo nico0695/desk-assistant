@@ -20,9 +20,9 @@ static void on_key_interrupt(void *unused)
     key_listener(key_listener_context);
 }
 
-esp_err_t board_key_init(board_isr_cb_t on_edge, void *context)
+esp_err_t board_key_init(board_isr_cb_t on_interrupt, void *context)
 {
-    ESP_RETURN_ON_FALSE(on_edge != NULL, ESP_ERR_INVALID_ARG, TAG, "callback");
+    ESP_RETURN_ON_FALSE(on_interrupt != NULL, ESP_ERR_INVALID_ARG, TAG, "callback");
     ESP_RETURN_ON_FALSE(!key_ready, ESP_ERR_INVALID_STATE, TAG, "already initialized");
     /* The board has an external pull-up on KEY. */
     const gpio_config_t config = {
@@ -32,7 +32,7 @@ esp_err_t board_key_init(board_isr_cb_t on_edge, void *context)
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_ANYEDGE,
     };
-    key_listener = on_edge;
+    key_listener = on_interrupt;
     key_listener_context = context;
     wake_pin_init(&key_wake, KEY_GPIO, config.intr_type);
     ESP_RETURN_ON_ERROR(gpio_config(&config), TAG, "GPIO");
