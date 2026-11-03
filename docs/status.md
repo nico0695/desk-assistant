@@ -14,16 +14,14 @@
 | 6 | Notifications and sound | Done (validated 2026-11-02) |
 | 7 | Modules: read | Done (validated 2026-11-02) |
 | 8 | Modules: actions | Done (validated 2026-11-02) |
-| 9 | Full acceptance | Checkpoint, awaiting validation |
-| 10 | Battery (optional) | Pending |
+| 9 | Full acceptance | Done (validated 2026-11-02) |
+| 10 | Battery (optional) | Next (optional) |
 
-## Active stage: 9 — Full acceptance
+## Active stage: 10 — Battery (optional)
 
-- **Status:** checkpoint at `bd267df`, awaiting the user's validation.
-- **Scope, reduced by the user:** no provoked board tests (wrong token, network cuts); network and upload failures audited in the code only (no crash, no stuck state); long-term use left to the user over time; only blocking fixes.
-- **Done:** robustness audit of the transport, upload, query, event stream, modules, ACK, persistence, workers and tone cleanup, with no new stuck state; an ACK refused with HTTP 400 or 404 is no longer retried; a journal save that wrote nothing no longer blocks notifications until reboot.
-- **Spec changes:** the tone sounds at a fixed level for any volume above 0; a 400 or 404 ACK is definitive.
-- **Out of scope:** the 8000-byte reply measurement and the optional fixes, listed in `.local/follow-up.md`.
+- **Status:** optional, not started.
+- **Goal:** automatic light sleep, Wi-Fi power save and panel sleep-in, only if a discharge test or a meter justifies them.
+- **Carry-overs:** long-term use, memory over time and the deferred cases are observed by the user in real use (`.local/follow-up.md`).
 
 ## Closed stages
 
@@ -38,6 +36,7 @@
 - **7 — Modules: read:** a codec for the Tasks, Notes and Alerts lists and details with exact fields and the error envelope; shared UTC-3 dates and JSON guard extracted from notifications and events; a browsing state machine with generation tickets and one retained list; a short-lived read worker that waits up to 5 s for the HTTP gate and refuses to start during capture or upload; list and detail screens with page in the title, Prev, Refresh and Next, replace-by-state loading and errors, and the host preview. Validated by the user on `esp32-02` at `4769531` (green CI on `a83b605`); a read during a Wi-Fi outage was not tested and the body budget is still unmeasured, both in `.local/follow-up.md`.
 
 - **8 — Modules: actions:** Delete (DELETE) and Complete (empty POST) without body or Content-Type and a `not sent` boundary before the request is written; one action outcome and error mapping shared with Snooze; actions from the detail with a frozen ticket, one dispatch and controls blocked until the result; a fresh origin page after Delete or Complete and a detail reread after Snooze; uncertain, missing or changed outcomes require a fresh detail; a persistent result line; Delete and Snooze dialogs on a modal shared with Wi-Fi; notifications held during a dialog or an action. Validated by the user on `esp32-02` at `7a2d452` (green CI on `6102922`).
+- **9 — Full acceptance:** a code audit of network, upload, persistence and worker failures with no new stuck state; an ACK refused with 400 or 404 is definitive; a journal save that wrote nothing no longer blocks notifications; spec set to a fixed tone level above volume 0. Validated by the user on `esp32-02` at `bd267df` (green CI on `9c5a1e9`); provoked failures, long-term use and the 8000-byte reply were left out by the user.
 
 ## Evidence
 
@@ -181,7 +180,9 @@ Each checkpoint records one entry per image:
 - **Revision:** `bd267df`, integrated profile (`sdkconfig.defaults`).
 - **ELF SHA-256:** `f70f256553501a19276a12421edde4a7d19856d8fde0c4cb6f8df0bf2dc98951` (the boot log prints its first 9 digits). Application image 1658208 bytes.
 - **build_verified:** yes. Documented integrated build from the committed revision without warnings; host tests 41/41 (new ACK and journal cases); `dependencies.lock` unchanged.
-- **hardware_verified:** boot only so far, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes. Boot log shows the version and ELF digits above; Wi-Fi connected 5 s and event stream open 13 s after boot; heap 166 KB free, minimum 153 KB at UI ready; no errors. The regression smoke is pending the user.
+- **hardware_verified:** yes, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), USB-C data cable on `/dev/cu.usbmodem101`; flashed with verified hashes. Boot log shows the version and ELF digits above; Wi-Fi connected 5 s and event stream open 13 s after boot; heap 166 KB free, minimum 153 KB at UI ready; no errors. The user ran the regression smoke (record and reply, notification with sound and Close, modules read, settings kept after reboot) and reported everything working.
+  - Log during real use of `bd267df`: module bodies up to 448 bytes for a list (Alerts) and 201 bytes for a detail, well below the 4096-byte budget, which stays; a Notes read during an upload was refused as busy and worked after it; one event read timed out and the drain recovered. Lowest free heap 51.9 KB (largest block 36 KB) with an upload and a refused read in flight; the LVGL pool peaked at 14.7 KB of 64 KB.
   - Not run by decision of the user: provoked failures (wrong token, network or bridge cuts during upload, reads and actions), full queue and interrupted ACK, long-term use, the 8000-byte reply. Network failures were audited in the code instead.
+- **Validation:** the user reported everything working (2026-11-02). CI on the checkpoint push `9c5a1e9` passed.
 - **Reviews:** `standard-code-review` on steps 2–3, clean. 4R at close: standard tier, resilience lens, 0 severe, 1 info (a header comment over-promising what an unwritten error guarantees), fixed in `bd267df`.
 
