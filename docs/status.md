@@ -15,12 +15,13 @@
 | 7 | Modules: read | Done (validated 2026-11-02) |
 | 8 | Modules: actions | Done (validated 2026-11-02) |
 | 9 | Full acceptance | Done (validated 2026-11-02) |
-| 10 | Battery (optional) | Next (optional) |
+| 10 | Battery (optional) | Checkpoint, user smoke pending |
 
 ## Active stage: 10 — Battery (optional)
 
-- **Status:** optional, not started.
-- **Goal:** automatic light sleep, Wi-Fi power save and panel sleep-in, only if a discharge test or a meter justifies them.
+- **Status:** checkpoint at `06e07d9`; the user runs the smoke (with and without the data cable) before validating.
+- **Scope, set by the user:** no current meter or discharge test, so only improvements that the code, schematic, datasheets or log can confirm. Current draw and battery life stay **not measured**; light sleep is validated only by function.
+- **Done:** the amplifier rail (ALDO2) is off except during a tone; PMIC rails with no load (DCDC2–4, BLDO1/2, CPUSLDO, DLDO1/2) are off; the panel enters sleep-in while the screen is off (120 ms longer wake); KEY and touch wake by level while the panel is off; power management with automatic light sleep and 160/40 MHz scaling while the panel is off and no finite request, TLS handshake or audio is running; no light sleep while a USB host is connected; touch reset and panel select stay driven during light sleep.
 - **Carry-overs:** long-term use, memory over time and the deferred cases are observed by the user in real use (`.local/follow-up.md`).
 
 ## Closed stages
@@ -185,4 +186,17 @@ Each checkpoint records one entry per image:
   - Not run by decision of the user: provoked failures (wrong token, network or bridge cuts during upload, reads and actions), full queue and interrupted ACK, long-term use, the 8000-byte reply. Network failures were audited in the code instead.
 - **Validation:** the user reported everything working (2026-11-02). CI on the checkpoint push `9c5a1e9` passed.
 - **Reviews:** `standard-code-review` on steps 2–3, clean. 4R at close: standard tier, resilience lens, 0 severe, 1 info (a header comment over-promising what an unwritten error guarantees), fixed in `bd267df`.
+
+### Stage 10 — 2026-11-02
+
+- **Revision:** `06e07d9`, integrated profile (`sdkconfig.defaults`, now with power management, tickless idle and no light sleep while a USB host is connected).
+- **ELF SHA-256:** `12f18c27b59bc0aa95755d28486f195d679a1a468680c6f75162f4dee150e766` (the boot log prints its first 9 digits). Application image 1683168 bytes, 60% of the 4 MB app partition free.
+- **build_verified:** yes. Documented integrated build reconfigured from the committed revision without warnings; host tests 42/42 (new sleep-in timing test; the HTTP test now checks the full-speed lock is held while a request is dispatched and released after every case); `dependencies.lock` unchanged.
+- **hardware_verified:** partial, on unit `esp32-02` (ESP32-C6 QFN40 v0.2, base MAC `d4:05:92:b6:ed:28`), USB-C data cable on `/dev/cu.usbmodem1101`.
+  - Final image: flashed with verified hashes. Its boot log was not read: the USB port stopped answering after the flash (also to the ROM bootloader), a known behavior of this unit that needs the cable reconnected.
+  - Same sources built before the final commit (ELF `0f70082f0…`, not this image): rail enables after a reset `dcdc=0x01 ldo=0x0d ldo1=0x00` (only DCDC1, ALDO1, ALDO3 and ALDO4 on), event stream open.
+  - Earlier stage images: `pm: CPU_MAX 160, APB_MIN 40, Light sleep: ENABLED`; event stream open and stable for 150 s with the cable attached (no light sleep in that setup); panel off by timeout without warnings; UI wakeups with the panel off unchanged (8 and 3 per minute).
+  - Memory: free heap at boot 140 KB against 154 KB without power management (sleep code moves to internal RAM; 3.6 KB of it is the CPU power-down in light sleep). Accepted by the user; the minimum with an upload is measured in the smoke.
+  - Not run yet (user smoke): wake by touch and KEY, image after sleep-in, tone and volume 0, recording, and everything without the data cable (light sleep, notification with the panel off, wake from light sleep). Not measured: current draw and battery life.
+- **Reviews:** `standard-code-review` on each step, clean. 4R at close: full tier (four lenses), 1 severe corroborated (tickless idle isolates every GPIO in light sleep, leaving the touch reset and panel select floating), fixed in `88b29bd`; 3 readability notes fixed in `0173700`; the touch interrupt pulse against light-sleep wake stays to be checked in the smoke.
 
