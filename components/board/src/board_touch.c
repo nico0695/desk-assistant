@@ -48,6 +48,8 @@ static esp_err_t reset_controller(void)
         .mode = GPIO_MODE_OUTPUT,
     };
     ESP_RETURN_ON_ERROR(gpio_config(&reset), TAG, "reset GPIO");
+    /* Light sleep isolates every GPIO by default; the reset line must stay driven high. */
+    ESP_RETURN_ON_ERROR(gpio_sleep_sel_dis(TOUCH_RESET_GPIO), TAG, "reset in sleep");
     ESP_RETURN_ON_ERROR(gpio_set_level(TOUCH_RESET_GPIO, 0), TAG, "reset low");
     board_wait_at_least_ms(TOUCH_RESET_LOW_MS);
     ESP_RETURN_ON_ERROR(gpio_set_level(TOUCH_RESET_GPIO, 1), TAG, "reset high");

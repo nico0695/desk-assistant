@@ -9,6 +9,7 @@
 #include "board_wait.h"
 #include "display_brightness.h"
 #include "display_sleep.h"
+#include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
@@ -167,6 +168,10 @@ esp_err_t board_display_init(board_isr_cb_t on_transfer_done, void *context, boa
     const bool bus_ready = error == ESP_OK;
     if (error == ESP_OK) {
         error = esp_lcd_new_panel_io_spi(PANEL_SPI_HOST, &io, &panel_io);
+    }
+    if (error == ESP_OK) {
+        /* Light sleep isolates every GPIO by default; chip select stays driven so the panel ignores the bus. */
+        error = gpio_sleep_sel_dis(PANEL_CS_GPIO);
     }
     if (error == ESP_OK) {
         error = run_init_sequence();
