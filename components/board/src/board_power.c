@@ -32,6 +32,10 @@ enum {
 #define LDO_ALDO1_ENABLE_MASK (1U << 0)
 #define LDO_ALDO2_ENABLE_MASK (1U << 1)
 #define LDO_ALDO3_ENABLE_MASK (1U << 2)
+/* Rails with no load on this board (schematic; the manufacturer's own firmware turns them off too). */
+#define DCDC_UNUSED_ENABLE_MASK ((1U << 1) | (1U << 2) | (1U << 3))                     /* DCDC2-4 */
+#define LDO_UNUSED_ENABLE_MASK ((1U << 4) | (1U << 5) | (1U << 6) | (1U << 7))          /* BLDO1-2, CPUSLDO, DLDO1 */
+#define LDO_1_UNUSED_ENABLE_MASK (1U << 0)                                               /* DLDO2 */
 #define ALDO_VOLTAGE_MASK 0x1fU
 /* ALDO outputs are 500 mV plus 100 mV per step. */
 #define ALDO_VOLTAGE_3300MV ((3300 - 500) / 100)
@@ -110,6 +114,13 @@ static esp_err_t turn_amplifier_off(void)
     return update_register_bits(REGISTER_ALDO2_VOLTAGE, ALDO_VOLTAGE_MASK, ALDO_VOLTAGE_3300MV);
 }
 
+static esp_err_t turn_unused_rails_off(void)
+{
+    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_DCDC_ENABLE, DCDC_UNUSED_ENABLE_MASK, 0U), TAG, "DCDC2-4");
+    ESP_RETURN_ON_ERROR(update_register_bits(REGISTER_LDO_ENABLE, LDO_UNUSED_ENABLE_MASK, 0U), TAG, "LDOs");
+    return update_register_bits(REGISTER_LDO_ENABLE_1, LDO_1_UNUSED_ENABLE_MASK, 0U);
+}
+
 esp_err_t board_power_init(void)
 {
     ESP_RETURN_ON_FALSE(pmic == NULL, ESP_ERR_INVALID_STATE, TAG, "already initialized");
@@ -125,6 +136,11 @@ esp_err_t board_power_init(void)
     const esp_err_t amplifier_error = turn_amplifier_off();
     if (amplifier_error != ESP_OK) {
         ESP_LOGW(TAG, "amplifier off: %s", esp_err_to_name(amplifier_error));
+    }
+    /* Not fatal either: they only cost quiescent current. */
+    const esp_err_t unused_error = turn_unused_rails_off();
+    if (unused_error != ESP_OK) {
+        ESP_LOGW(TAG, "unused rails off: %s", esp_err_to_name(unused_error));
     }
     return pulse_panel_reset();
 }
